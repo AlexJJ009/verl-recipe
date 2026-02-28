@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Joint Training with GRPO on GSM8K
+# Joint Training with GRPO on GSM8K (HuggingFace Rollout)
 # Usage: bash recipe/joint_training/run_joint_grpo_qwen3_1.7b.sh
 set -xeuo pipefail
 
@@ -35,7 +35,7 @@ NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # Paths
 # Joint model path (prepared by verl.models.joint_model.prepare_joint_weights)
-MODEL_PATH=${MODEL_PATH:-".cache/huggingface/QwenJoint-1.7B"}
+MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/QwenJoint-1.7B"}
 CKPTS_DIR=${CKPTS_DIR:-".cache/ckpts/${project_name}/${exp_name}"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/gsm8k/train.parquet"}
 TEST_FILE=${TEST_FILE:-"/data-1/dataset/gsm8k/test.parquet"}
@@ -52,8 +52,10 @@ use_dynamic_bsz=True
 actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
 offload=False
-gen_tp=1
 fsdp_size=-1
+
+# HF rollout settings
+micro_batch_size=4
 
 python3 -m verl.trainer.main_ppo \
     data.train_files="${TRAIN_FILE}" \
@@ -83,7 +85,18 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.name=vllm \
+    actor_rollout_ref.rollout.name=hf \
+    actor_rollout_ref.rollout.temperature=${temperature} \
+    actor_rollout_ref.rollout.top_p=${top_p} \
+    actor_rollout_ref.rollout.top_k=${top_k} \
+    actor_rollout_ref.rollout.response_length=${max_response_length} \
+    actor_rollout_ref.rollout.micro_batch_size=${micro_batch_size} \
+    actor_rollout_ref.rollout.do_sample=True \
+    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
+    actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
+    actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
+    actor_rollout_ref.rollout.val_kwargs.do_sample=True \
+    actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -94,18 +107,6 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
-    actor_rollout_ref.rollout.enable_chunked_prefill=True \
-    actor_rollout_ref.rollout.max_num_batched_tokens=$((max_prompt_length + max_response_length)) \
-    actor_rollout_ref.rollout.temperature=${temperature} \
-    actor_rollout_ref.rollout.top_p=${top_p} \
-    actor_rollout_ref.rollout.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
-    actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
-    actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
