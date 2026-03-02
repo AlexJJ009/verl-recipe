@@ -159,6 +159,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
+    actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -183,7 +184,7 @@ python3 -m verl.trainer.main_ppo \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     \
-    `# --- Rollout (HF engine) ---` \
+    `# --- Rollout (HF Transformer for joint training) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
@@ -192,7 +193,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
     actor_rollout_ref.rollout.response_length=${max_response_length} \
-    actor_rollout_ref.rollout.micro_batch_size=${micro_batch_size} \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=${micro_batch_size} \
+    +actor_rollout_ref.rollout.micro_batch_size=${micro_batch_size} \
     actor_rollout_ref.rollout.do_sample=True \
     actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
@@ -220,7 +222,7 @@ python3 -m verl.trainer.main_ppo \
     custom_reward_function.name="${CUSTOM_REWARD_FN_NAME}" \
     \
     `# --- Trainer ---` \
-    trainer.logger='["console","wandb"]' \
+    trainer.logger='["wandb"]' \
     trainer.project_name="${WANDB_PROJECT}" \
     trainer.experiment_name="${WANDB_RUN_NAME}" \
     trainer.n_gpus_per_node="${NGPUS_PER_NODE}" \
