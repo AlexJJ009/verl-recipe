@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Joint Training with GRPO on GSM8K (HuggingFace Rollout)
+# Joint Training with GRPO on GSM8K (vLLM rollout by default)
 # Model: Qwen3-1.7B Joint Model
 # Algorithm: GRPO with vanilla loss, token-mean aggregation
 #
@@ -22,20 +22,21 @@ export HF_HOME=/data-1/.cache/huggingface
 export RAY_TMPDIR=/data-1/ray_tmp
 mkdir -p "$RAY_TMPDIR"
 
-export LD_LIBRARY_PATH=/data-1/.cache/conda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
+export LD_LIBRARY_PATH=/data-1/.cache/conda/envs/verl07/lib/python3.10/site-packages/torch/lib:/data-1/.cache/conda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
 
 # NCCL / networking settings
 export NCCL_IBEXT_DISABLE=1
 export NCCL_NVLS_ENABLE=1
 export NCCL_TIMEOUT=3600
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
+export VLLM_USE_V1=${VLLM_USE_V1:-1}
 export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX="Joint-GRPO-Qwen3-1.7B-GSM8K"
-export WANDB_PROJECT="JointTraining"
-export WANDB_RUN_NAME="${RUN_PREFIX}_$(date +%s)"
+RUN_PREFIX=${RUN_PREFIX:-"Joint-GRPO-Qwen3-1.7B-GSM8K"}
+export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
+export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
 # Increase W&B timeout/retries for unreliable networks
 export WANDB_HTTP_TIMEOUT=60
@@ -43,7 +44,7 @@ export WANDB_API_TIMEOUT=60
 export WANDB_MAX_RETRIES=10
 
 # Set offline mode — run `wandb sync <run_dir>` after training to upload
-export WANDB_MODE=offline
+export WANDB_MODE=${WANDB_MODE:-offline}
 
 # ===================== Section 4: Hardware ====================================
 NNODES=${NNODES:-1}
@@ -72,7 +73,7 @@ if [ ! -d "$MODEL_PATH" ]; then
 fi
 
 # ===================== Section 6: Checkpoint Directory (on /data-2) ===========
-BASE_CKPT_DIR=/data-2/checkpoints/JointTraining/GRPO
+BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-2/checkpoints/JointTraining/GRPO}
 mkdir -p "$BASE_CKPT_DIR"
 
 # Auto-resume: reuse existing checkpoint directory if one matches this prefix
@@ -93,7 +94,7 @@ echo "Experiment Name : $WANDB_RUN_NAME"
 echo "Checkpoint Dir  : $CKPTS_DIR"
 
 # ===================== Section 7: Log File ====================================
-LOG_DIR=/data-1/verl07/verl/recipe/joint_training
+LOG_DIR=${LOG_DIR:-/data-1/verl07/verl/recipe/joint_training}
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
 echo "Log file: $LOG_FILE"
@@ -146,9 +147,29 @@ actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
 offload=False
 fsdp_size=-1
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
 
-# HF rollout settings
+# Rollout settings
 micro_batch_size=4
+ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
+ROLLOUT_MODE=${ROLLOUT_MODE:-async}
+ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
+ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.6}
+ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
+ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-8}
+ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
+ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
+
+if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
+    ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
+    ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=False
+else
+    ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=True
+    ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=True
+fi
+ROLLOUT_FREE_CACHE_ENGINE=${ROLLOUT_FREE_CACHE_ENGINE:-${ROLLOUT_FREE_CACHE_ENGINE_DEFAULT}}
+ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-${ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT}}
 
 # ===================== Section 13: Training Schedule ==========================
 test_freq=5
@@ -196,17 +217,27 @@ python3 -m verl.trainer.main_ppo \
     \
     `# --- Model ---` \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
-    actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \
     actor_rollout_ref.model.trust_remote_code=True \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     \
-    `# --- Rollout (HF Transformer for joint training) ---` \
+    `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
-    actor_rollout_ref.rollout.name=hf \
+    actor_rollout_ref.rollout.name=${ROLLOUT_ENGINE} \
+    actor_rollout_ref.rollout.mode=${ROLLOUT_MODE} \
+    actor_rollout_ref.rollout.enforce_eager=${ROLLOUT_ENFORCE_EAGER} \
+    actor_rollout_ref.rollout.max_model_len=${ROLLOUT_MAX_MODEL_LEN} \
+    actor_rollout_ref.rollout.gpu_memory_utilization=${ROLLOUT_GPU_MEMORY_UTILIZATION} \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=${ROLLOUT_TP_SIZE} \
+    actor_rollout_ref.rollout.free_cache_engine=${ROLLOUT_FREE_CACHE_ENGINE} \
+    +actor_rollout_ref.rollout.enable_sleep_mode=${ROLLOUT_ENABLE_SLEEP_MODE} \
+    actor_rollout_ref.rollout.agent.num_workers=${ROLLOUT_AGENT_NUM_WORKERS} \
+    actor_rollout_ref.rollout.enable_chunked_prefill=${ROLLOUT_ENABLE_CHUNKED_PREFILL} \
+    actor_rollout_ref.rollout.max_num_batched_tokens=${ROLLOUT_MAX_NUM_BATCHED_TOKENS} \
     actor_rollout_ref.rollout.temperature=${temperature} \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
@@ -224,6 +255,7 @@ python3 -m verl.trainer.main_ppo \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
     data.prompt_key=prompt \
+    data.filter_overlong_prompts=True \
     data.truncation='left' \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
