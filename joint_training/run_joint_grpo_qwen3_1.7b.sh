@@ -50,9 +50,26 @@ NNODES=${NNODES:-1}
 NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # ===================== Section 5: Model & Data Paths ==========================
+BASE_MODEL_PATH=${BASE_MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-1.7B-Base"}
 MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/QwenJoint-1.7B"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/gsm8k/train.parquet"}
 TEST_FILE=${TEST_FILE:-"/data-1/dataset/gsm8k/test.parquet"}
+
+# Auto-prepare joint model if it doesn't exist yet
+if [ ! -d "$MODEL_PATH" ]; then
+    echo "Joint model not found at $MODEL_PATH. Preparing from base model..."
+    if [ ! -d "$BASE_MODEL_PATH" ]; then
+        echo "ERROR: Base model not found at $BASE_MODEL_PATH"
+        echo "Please download Qwen3-1.7B-Base first, e.g.:"
+        echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-1.7B-Base', local_dir='$BASE_MODEL_PATH', local_dir_use_symlinks=False)\""
+        exit 1
+    fi
+    python3 -m verl.models.joint_model.prepare_joint_weights \
+        --base_model_path "$BASE_MODEL_PATH" \
+        --output_path "$MODEL_PATH" \
+        --fusion_lambda 0.5
+    echo "Joint model prepared at $MODEL_PATH"
+fi
 
 # ===================== Section 6: Checkpoint Directory (on /data-2) ===========
 BASE_CKPT_DIR=/data-2/checkpoints/JointTraining/GRPO
@@ -183,6 +200,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.trust_remote_code=True \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     \
     `# --- Rollout (HF Transformer for joint training) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
