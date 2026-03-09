@@ -22,7 +22,9 @@ export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:Tr
 export HF_HOME=/data-1/.cache/huggingface
 export RAY_TMPDIR=/data-1/ray_tmp
 export TMPDIR=${TMPDIR:-/data-1/tmp}
-mkdir -p "$RAY_TMPDIR" "$TMPDIR"
+export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
+export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-$TMPDIR}
+mkdir -p "$RAY_TMPDIR" "$TMPDIR" "$VLLM_CONFIG_ROOT" "$VERL_ZMQ_IPC_DIR"
 
 export LD_LIBRARY_PATH=/data-1/.cache/conda/envs/verl07/lib/python3.10/site-packages/torch/lib:/data-1/.cache/conda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
 
@@ -32,6 +34,8 @@ export NCCL_NVLS_ENABLE=1
 export NCCL_TIMEOUT=3600
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_V1=${VLLM_USE_V1:-1}
+export VLLM_NO_USAGE_STATS=${VLLM_NO_USAGE_STATS:-1}
+export VLLM_DO_NOT_TRACK=${VLLM_DO_NOT_TRACK:-1}
 export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
@@ -81,8 +85,7 @@ MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
 MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-2}
 MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-2}
 
-DEFAULT_CKPT_BASE_DIR_PRIMARY="/data-1/checkpoints/JointTraining/GRPO"
-DEFAULT_CKPT_BASE_DIR_FALLBACK="/data-2/checkpoints/JointTraining/GRPO"
+DEFAULT_CKPT_BASE_DIR="/data-1/checkpoints"
 
 get_df_target() {
     local path="$1"
@@ -98,16 +101,23 @@ get_free_kb() {
     df -Pk "$target" | awk 'NR==2 {print $4}'
 }
 
+get_mount_source() {
+    local target
+    target=$(get_df_target "$1")
+    df -Pk "$target" | awk 'NR==2 {print $1}'
+}
+
 if [ -z "${BASE_CKPT_DIR+x}" ]; then
-    PRIMARY_FREE_KB=$(get_free_kb "$DEFAULT_CKPT_BASE_DIR_PRIMARY")
-    if [ "$PRIMARY_FREE_KB" -ge "$MIN_FREE_KB_FOR_CKPT" ]; then
-        BASE_CKPT_DIR="$DEFAULT_CKPT_BASE_DIR_PRIMARY"
-    else
-        BASE_CKPT_DIR="$DEFAULT_CKPT_BASE_DIR_FALLBACK"
-        echo "[joint-grpo] WARNING: ${DEFAULT_CKPT_BASE_DIR_PRIMARY} has only $((PRIMARY_FREE_KB / 1024 / 1024)) GiB free; using ${BASE_CKPT_DIR} instead." >&2
-    fi
+    BASE_CKPT_DIR="$DEFAULT_CKPT_BASE_DIR"
 else
     BASE_CKPT_DIR="${BASE_CKPT_DIR}"
+fi
+
+ROOT_MOUNT_SOURCE=$(get_mount_source "/")
+BASE_CKPT_MOUNT_SOURCE=$(get_mount_source "$BASE_CKPT_DIR")
+if [ "$BASE_CKPT_MOUNT_SOURCE" = "$ROOT_MOUNT_SOURCE" ] && [[ "$BASE_CKPT_DIR" != /data-1/* ]]; then
+    echo "[joint-grpo] WARNING: ${BASE_CKPT_DIR} resolves to the root filesystem (${BASE_CKPT_MOUNT_SOURCE}), not the large /data-1 volume." >&2
+    echo "[joint-grpo] WARNING: On this host, prefer BASE_CKPT_DIR=/data-1/checkpoints." >&2
 fi
 
 BASE_CKPT_FREE_KB=$(get_free_kb "$BASE_CKPT_DIR")
