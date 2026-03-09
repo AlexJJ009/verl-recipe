@@ -16,11 +16,13 @@ conda deactivate
 conda activate verl07
 
 export PYTHONUNBUFFERED=1
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 2: Cache & Temp Directories ====================
 export HF_HOME=/data-1/.cache/huggingface
 export RAY_TMPDIR=/data-1/ray_tmp
-mkdir -p "$RAY_TMPDIR"
+export TMPDIR=${TMPDIR:-/data-1/tmp}
+mkdir -p "$RAY_TMPDIR" "$TMPDIR"
 
 export LD_LIBRARY_PATH=/data-1/.cache/conda/envs/verl07/lib/python3.10/site-packages/torch/lib:/data-1/.cache/conda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
 
@@ -32,6 +34,7 @@ export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_V1=${VLLM_USE_V1:-1}
 export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 3: W&B Configuration ===========================
 RUN_PREFIX=${RUN_PREFIX:-"Joint-GRPO-Qwen3-1.7B-GSM8K"}
@@ -72,8 +75,48 @@ if [ ! -d "$MODEL_PATH" ]; then
     echo "Joint model prepared at $MODEL_PATH"
 fi
 
-# ===================== Section 6: Checkpoint Directory (on /data-2) ===========
-BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-2/checkpoints/JointTraining/GRPO}
+# ===================== Section 6: Checkpoint Directory =========================
+MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
+MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
+MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-2}
+MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-2}
+
+DEFAULT_CKPT_BASE_DIR_PRIMARY="/data-1/checkpoints/JointTraining/GRPO"
+DEFAULT_CKPT_BASE_DIR_FALLBACK="/data-2/checkpoints/JointTraining/GRPO"
+
+get_df_target() {
+    local path="$1"
+    while [ ! -e "$path" ] && [ "$path" != "/" ]; do
+        path=$(dirname "$path")
+    done
+    printf '%s\n' "$path"
+}
+
+get_free_kb() {
+    local target
+    target=$(get_df_target "$1")
+    df -Pk "$target" | awk 'NR==2 {print $4}'
+}
+
+if [ -z "${BASE_CKPT_DIR+x}" ]; then
+    PRIMARY_FREE_KB=$(get_free_kb "$DEFAULT_CKPT_BASE_DIR_PRIMARY")
+    if [ "$PRIMARY_FREE_KB" -ge "$MIN_FREE_KB_FOR_CKPT" ]; then
+        BASE_CKPT_DIR="$DEFAULT_CKPT_BASE_DIR_PRIMARY"
+    else
+        BASE_CKPT_DIR="$DEFAULT_CKPT_BASE_DIR_FALLBACK"
+        echo "[joint-grpo] WARNING: ${DEFAULT_CKPT_BASE_DIR_PRIMARY} has only $((PRIMARY_FREE_KB / 1024 / 1024)) GiB free; using ${BASE_CKPT_DIR} instead." >&2
+    fi
+else
+    BASE_CKPT_DIR="${BASE_CKPT_DIR}"
+fi
+
+BASE_CKPT_FREE_KB=$(get_free_kb "$BASE_CKPT_DIR")
+if [ "$BASE_CKPT_FREE_KB" -lt "$MIN_FREE_KB_FOR_CKPT" ]; then
+    echo "ERROR: ${BASE_CKPT_DIR} has only $((BASE_CKPT_FREE_KB / 1024 / 1024)) GiB free, below MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT}." >&2
+    echo "Set BASE_CKPT_DIR to a larger filesystem or lower MIN_FREE_GB_FOR_CKPT if you know the checkpoint budget is safe." >&2
+    exit 1
+fi
+
 mkdir -p "$BASE_CKPT_DIR"
 
 # Auto-resume: reuse existing checkpoint directory if one matches this prefix
@@ -147,21 +190,30 @@ actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
 offload=False
 fsdp_size=-1
-USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
+USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
+LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
-micro_batch_size=4
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-4}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-2}
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
-ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.6}
+LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.75}
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-8}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
+# vLLM defaults to 1024, which is unnecessary here and inflates startup memory
+# in colocated rollout mode because warm-up buffers scale with max_num_seqs.
+ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-256}
 
 if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
+    # vLLM 0.8.5 can fail in the CUmem sleep/wake path under colocated rollout.
+    # Keep sleep disabled here and reduce actor-side log-prob memory instead.
     ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
     ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=False
 else
@@ -170,6 +222,18 @@ else
 fi
 ROLLOUT_FREE_CACHE_ENGINE=${ROLLOUT_FREE_CACHE_ENGINE:-${ROLLOUT_FREE_CACHE_ENGINE_DEFAULT}}
 ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-${ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT}}
+
+if [ "${USE_REMOVE_PADDING}" = "True" ]; then
+    if ! python3 -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('flash_attn') else 1)" \
+        >/dev/null 2>&1; then
+        echo "[joint-grpo] WARNING: flash_attn is not installed; disabling USE_REMOVE_PADDING to avoid a late actor crash." >&2
+        USE_REMOVE_PADDING=False
+        if [ -z "${LOG_PROB_MICRO_BATCH_SIZE_WAS_SET}" ]; then
+            LOG_PROB_MICRO_BATCH_SIZE=1
+            echo "[joint-grpo] WARNING: LOG_PROB_MICRO_BATCH_SIZE was not set explicitly; reducing it to 1 for the dense-logits fallback path." >&2
+        fi
+    fi
+fi
 
 # ===================== Section 13: Training Schedule ==========================
 test_freq=5
@@ -205,13 +269,15 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     \
     `# --- Reference model ---` \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
-    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     \
@@ -226,12 +292,13 @@ python3 -m verl.trainer.main_ppo \
     `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
-    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${infer_ppo_max_token_len} \
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
     actor_rollout_ref.rollout.name=${ROLLOUT_ENGINE} \
     actor_rollout_ref.rollout.mode=${ROLLOUT_MODE} \
     actor_rollout_ref.rollout.enforce_eager=${ROLLOUT_ENFORCE_EAGER} \
     actor_rollout_ref.rollout.max_model_len=${ROLLOUT_MAX_MODEL_LEN} \
     actor_rollout_ref.rollout.gpu_memory_utilization=${ROLLOUT_GPU_MEMORY_UTILIZATION} \
+    actor_rollout_ref.rollout.max_num_seqs=${ROLLOUT_MAX_NUM_SEQS} \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${ROLLOUT_TP_SIZE} \
     actor_rollout_ref.rollout.free_cache_engine=${ROLLOUT_FREE_CACHE_ENGINE} \
     +actor_rollout_ref.rollout.enable_sleep_mode=${ROLLOUT_ENABLE_SLEEP_MODE} \
@@ -242,8 +309,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.top_p=${top_p} \
     actor_rollout_ref.rollout.top_k=${top_k} \
     actor_rollout_ref.rollout.response_length=${max_response_length} \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size=${micro_batch_size} \
-    +actor_rollout_ref.rollout.micro_batch_size=${micro_batch_size} \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
+    +actor_rollout_ref.rollout.micro_batch_size=${GENERATION_MICRO_BATCH_SIZE} \
     actor_rollout_ref.rollout.do_sample=True \
     actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
@@ -283,6 +350,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.total_epochs=${total_epochs} \
     trainer.total_training_steps=${total_training_steps} \
     trainer.default_local_dir="${CKPTS_DIR}" \
+    trainer.max_actor_ckpt_to_keep=${MAX_ACTOR_CKPTS_TO_KEEP} \
+    trainer.max_critic_ckpt_to_keep=${MAX_CRITIC_CKPTS_TO_KEEP} \
     trainer.resume_mode=auto \
     \
     "$@" 2>&1 | tee "$LOG_FILE"
