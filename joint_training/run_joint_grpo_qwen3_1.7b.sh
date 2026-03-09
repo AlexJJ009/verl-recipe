@@ -150,6 +150,8 @@ echo "Checkpoint Dir  : $CKPTS_DIR"
 LOG_DIR=${LOG_DIR:-/data-1/verl07/verl/recipe/joint_training}
 mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
+export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${LOG_DIR}/metrics"}
+mkdir -p "$VERL_FILE_LOGGER_ROOT"
 echo "Log file: $LOG_FILE"
 
 # ===================== Section 8: GRPO Algorithm Config =======================
@@ -349,7 +351,7 @@ python3 -m verl.trainer.main_ppo \
     custom_reward_function.name="${CUSTOM_REWARD_FN_NAME}" \
     \
     `# --- Trainer ---` \
-    trainer.logger='["wandb"]' \
+    trainer.logger='["wandb","file"]' \
     trainer.project_name="${WANDB_PROJECT}" \
     trainer.experiment_name="${WANDB_RUN_NAME}" \
     trainer.n_gpus_per_node="${NGPUS_PER_NODE}" \
