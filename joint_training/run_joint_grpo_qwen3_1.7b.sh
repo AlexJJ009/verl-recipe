@@ -152,6 +152,10 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
 export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${LOG_DIR}/metrics"}
 mkdir -p "$VERL_FILE_LOGGER_ROOT"
+VAL_GENERATIONS_TO_LOG=${VAL_GENERATIONS_TO_LOG:-3}
+VAL_GENERATIONS_TO_TRACKING=${VAL_GENERATIONS_TO_TRACKING:--1}
+VALIDATION_DATA_DIR=${VALIDATION_DATA_DIR:-"${LOG_DIR}/validation/${WANDB_RUN_NAME}"}
+mkdir -p "$VALIDATION_DATA_DIR"
 echo "Log file: $LOG_FILE"
 
 # ===================== Section 8: GRPO Algorithm Config =======================
@@ -171,7 +175,7 @@ clip_ratio_high=0.28
 # ===================== Section 8b: Reward Manager Config =====================
 # Use DAPO reward manager with overlong buffer penalty
 reward_manager=dapo
-enable_overlong_buffer=true
+enable_overlong_buffer=false
 overlong_buffer_len=$((1024 * 1))   # 1024 tokens buffer zone
 overlong_penalty_factor=0.5
 
@@ -364,6 +368,9 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="${CKPTS_DIR}" \
     trainer.max_actor_ckpt_to_keep=${MAX_ACTOR_CKPTS_TO_KEEP} \
     trainer.max_critic_ckpt_to_keep=${MAX_CRITIC_CKPTS_TO_KEEP} \
+    trainer.log_val_generations=${VAL_GENERATIONS_TO_LOG} \
+    +trainer.log_val_generations_to_tracking=${VAL_GENERATIONS_TO_TRACKING} \
+    trainer.validation_data_dir="${VALIDATION_DATA_DIR}" \
     trainer.resume_mode=auto \
     \
     "$@" 2>&1 | tee "$LOG_FILE"
