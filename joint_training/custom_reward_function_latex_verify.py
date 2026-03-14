@@ -174,15 +174,21 @@ def compute_score_latex_verify(
             correct = (verl_score > 0)
             verification_method = "verl_math_verify"
         except Exception:
-            # Fallback 2: String matching on extracted boxed answer
-            if pred != '[NO_BOXED]':
-                normalized_pred = normalize_final_answer(pred)
-                normalized_gt = normalize_final_answer(ground_truth)
-                correct = (normalized_pred == normalized_gt)
+            correct = False
+            verification_method = "verl_math_verify_error"
+
+        # Fallback 2: If verl_math_verify said incorrect, try string matching
+        # on extracted boxed answer as a safety net
+        if not correct and pred != '[NO_BOXED]':
+            normalized_pred = normalize_final_answer(pred)
+            normalized_gt = normalize_final_answer(ground_truth)
+            if normalized_pred == normalized_gt:
+                correct = True
                 verification_method = "string_match"
-            else:
-                correct = False
-                verification_method = "no_answer"
+
+        # No answer extracted at all
+        if not correct and verification_method == "verl_math_verify_error" and pred == '[NO_BOXED]':
+            verification_method = "no_answer"
 
     # Reward Logic:
     # 1. No EOS → Always wrong (format error)
