@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Joint Training with GRPO on GSM8K (vLLM rollout by default)
-# Model: Qwen3-4B Joint Model
-# Algorithm: GRPO with rollout correction (importance sampling)
-#            Addresses train-inference mismatch via sequence-level IS weights
+# Baseline MiniRL on MATH (vLLM rollout by default)
+# Model: Qwen3-1.7B Base (single model, NO joint training)
+# Algorithm: MiniRL loss + Dr.GRPO advantage + token-level IS correction
 #
-# Usage: bash recipe/joint_training/run_joint_grpo_qwen3_4b_rollout_corr.sh
+# Based on: run_joint_minirl_qwen3_1.7b_math.sh
+# Purpose: Baseline comparison — identical setup except no joint model.
+#   - Same MiniRL loss, Dr.GRPO advantage, token-level IS correction
+#   - Same MATH dataset with MATH-500 + AIME-2025 validation
+#   - Same batch sizes (B=32, G=8) and hyperparameters
+#   - 4 GPUs (vs 8 for joint) — no impact on training semantics
+#
+# Usage: bash recipe/joint_training/run_baseline_minirl_qwen3_1.7b_math.sh
 # ==============================================================================
 
 set -xeuo pipefail
@@ -42,7 +48,7 @@ export HYDRA_FULL_ERROR=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"Joint-GRPO-Qwen3-4B-RolloutCorr-MATH-bsz16"}
+RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-1.7B-MATH"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -56,28 +62,19 @@ export WANDB_MODE=${WANDB_MODE:-offline}
 
 # ===================== Section 4: Hardware ====================================
 NNODES=${NNODES:-1}
-NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
+NGPUS_PER_NODE=${NGPUS_PER_NODE:-4}
 
 # ===================== Section 5: Model & Data Paths ==========================
-BASE_MODEL_PATH=${BASE_MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-4B-Base"}
-MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/QwenJoint-4B"}
+MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-1.7B-Base"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/Maxwell-Jia-MATH-Processed-no-system-prompt/train_with_system_prompt.parquet"}
-TEST_FILE=${TEST_FILE:-"/data-1/dataset/AIME-2025/aime-2025.parquet"}
+TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test.parquet','/data-1/dataset/AIME-2025/aime-2025.parquet']"}
 
-# Auto-prepare joint model if it doesn't exist yet
+# Verify base model exists
 if [ ! -d "$MODEL_PATH" ]; then
-    echo "Joint model not found at $MODEL_PATH. Preparing from base model..."
-    if [ ! -d "$BASE_MODEL_PATH" ]; then
-        echo "ERROR: Base model not found at $BASE_MODEL_PATH"
-        echo "Please download Qwen3-4B-Base first, e.g.:"
-        echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-Base', local_dir='$BASE_MODEL_PATH', local_dir_use_symlinks=False)\""
-        exit 1
-    fi
-    python3 -m verl.models.joint_model.prepare_joint_weights \
-        --base_model_path "$BASE_MODEL_PATH" \
-        --output_path "$MODEL_PATH" \
-        --fusion_lambda 0.5
-    echo "Joint model prepared at $MODEL_PATH"
+    echo "ERROR: Base model not found at $MODEL_PATH"
+    echo "Please download Qwen3-1.7B-Base first, e.g.:"
+    echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-1.7B-Base', local_dir='$MODEL_PATH', local_dir_use_symlinks=False)\""
+    exit 1
 fi
 
 # ===================== Section 6: Checkpoint Directory =========================
@@ -117,8 +114,8 @@ fi
 ROOT_MOUNT_SOURCE=$(get_mount_source "/")
 BASE_CKPT_MOUNT_SOURCE=$(get_mount_source "$BASE_CKPT_DIR")
 if [ "$BASE_CKPT_MOUNT_SOURCE" = "$ROOT_MOUNT_SOURCE" ] && [[ "$BASE_CKPT_DIR" != /data-1/* ]]; then
-    echo "[joint-grpo] WARNING: ${BASE_CKPT_DIR} resolves to the root filesystem (${BASE_CKPT_MOUNT_SOURCE}), not the large /data-1 volume." >&2
-    echo "[joint-grpo] WARNING: On this host, prefer BASE_CKPT_DIR=/data-1/checkpoints." >&2
+    echo "[baseline-minirl] WARNING: ${BASE_CKPT_DIR} resolves to the root filesystem (${BASE_CKPT_MOUNT_SOURCE}), not the large /data-1 volume." >&2
+    echo "[baseline-minirl] WARNING: On this host, prefer BASE_CKPT_DIR=/data-1/checkpoints." >&2
 fi
 
 BASE_CKPT_FREE_KB=$(get_free_kb "$BASE_CKPT_DIR")
@@ -159,34 +156,36 @@ VALIDATION_DATA_DIR=${VALIDATION_DATA_DIR:-"${LOG_DIR}/validation/${WANDB_RUN_NA
 mkdir -p "$VALIDATION_DATA_DIR"
 echo "Log file: $LOG_FILE"
 
-# ===================== Section 8: GRPO Algorithm Config =======================
+# ===================== Section 8: MiniRL Algorithm Config =====================
 adv_estimator=grpo
-loss_agg_mode="token-mean"
+loss_agg_mode="seq-mean-token-sum"    # MiniRL: no per-token length normalization
 
-# KL settings: no KL for pure GRPO
+# KL settings: no KL for MiniRL
 use_kl_in_reward=False
 kl_coef=0.0
 use_kl_loss=False
 kl_loss_coef=0.0
 
-# Clipping
+# MiniRL clipping parameters (paper-recommended values)
 clip_ratio_low=0.2
-clip_ratio_high=0.28
+clip_ratio_high=0.27
 
-# ===================== Section 8a: Rollout Correction (Importance Sampling) ===
-# Addresses train-inference mismatch (vLLM BF16 rollout vs FSDP FP32 training)
-# Uses sequence-level importance sampling with truncated IS weights
-rollout_is="sequence"                    # Sequence-level IS weights
-rollout_is_threshold=2.0                 # Upper threshold for IS weight truncation
-rollout_is_batch_normalize="false"       # Raw truncated weights (no batch normalization)
-rollout_rs="null"                        # No rejection sampling
+# MiniRL loss mode
+loss_mode="minirl"
+
+# ===================== Section 8a: Rollout Correction (MiniRL) ================
+# Token-level IS (MiniRL core: corrects vLLM/FSDP numerical differences)
+rollout_is="token"
+rollout_is_threshold=5.0              # MiniRL paper recommended value
+rollout_is_batch_normalize="false"
+rollout_rs="null"
 rollout_rs_threshold="null"
 
 # ===================== Section 8b: Reward Manager Config =====================
 # Use DAPO reward manager with overlong buffer penalty
 reward_manager=dapo
 enable_overlong_buffer=false
-overlong_buffer_len=$((1024 * 1))   # 1024 tokens buffer zone
+overlong_buffer_len=$((1024 * 1))     # 1024 tokens buffer zone
 overlong_penalty_factor=0.5
 
 # Custom reward function (LaTeX semantic verification with 3-tier fallback)
@@ -195,15 +194,13 @@ CUSTOM_REWARD_FN_PATH="${SCRIPT_DIR}/custom_reward_function_latex_verify.py"
 CUSTOM_REWARD_FN_NAME="compute_score_latex_verify"
 
 # ===================== Section 9: Sequence Lengths ============================
-max_prompt_length=500
-max_response_length=4096
+max_prompt_length=500                 # MATH problems are longer
+max_response_length=4096              # MATH needs longer reasoning chains
 
-# ===================== Section 10: Batch Sizes (tuned for 4B model + 4k response) =
-# Increased from 8/2/4 to 16/4/8 to reduce zero-advantage batch frequency
-# (see docs/joint_training/plans/active/zero_advantage_batch.md)
-train_prompt_bsz=16
-n_resp_per_prompt=8
-train_prompt_mini_bsz=4
+# ===================== Section 10: Batch Sizes (tuned for 1.7B + 4096 resp) ===
+train_prompt_bsz=32                   # B=32 (conservative start)
+n_resp_per_prompt=8                   # G=8 (1.7B + 4096 response memory tight)
+train_prompt_mini_bsz=4               # mini batch
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=1.0
@@ -214,34 +211,35 @@ val_top_p=0.95
 # ===================== Section 12: Performance & Memory =======================
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 1))
-infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
-offload=True
+actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
+infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
+offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
-GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-1}
-LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-1}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-8}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-2}
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
-ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.50}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.55}
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
-ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-8}
+ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
 # vLLM defaults to 1024, which is unnecessary here and inflates startup memory
 # in colocated rollout mode because warm-up buffers scale with max_num_seqs.
-ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-64}
+ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-256}
 
 if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
-    # vLLM 0.8.5 can fail in the CUmem sleep/wake path under colocated rollout.
-    # Keep sleep disabled here and reduce actor-side log-prob memory instead.
+    # vLLM 0.8.5 CuMemAllocator.sleep() asserts against expandable_segments:True
+    # (PYTORCH_CUDA_ALLOC_CONF), so free_cache_engine and sleep_mode must stay off.
+    # Memory is managed by lowering gpu_memory_utilization instead.
     ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
     ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=False
 else
@@ -254,11 +252,11 @@ ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-${ROLLOUT_ENABLE_SLEEP_MO
 if [ "${USE_REMOVE_PADDING}" = "True" ]; then
     if ! python3 -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('flash_attn') else 1)" \
         >/dev/null 2>&1; then
-        echo "[joint-grpo] WARNING: flash_attn is not installed; disabling USE_REMOVE_PADDING to avoid a late actor crash." >&2
+        echo "[baseline-minirl] WARNING: flash_attn is not installed; disabling USE_REMOVE_PADDING to avoid a late actor crash." >&2
         USE_REMOVE_PADDING=False
         if [ -z "${LOG_PROB_MICRO_BATCH_SIZE_WAS_SET}" ]; then
             LOG_PROB_MICRO_BATCH_SIZE=1
-            echo "[joint-grpo] WARNING: LOG_PROB_MICRO_BATCH_SIZE was not set explicitly; reducing it to 1 for the dense-logits fallback path." >&2
+            echo "[baseline-minirl] WARNING: LOG_PROB_MICRO_BATCH_SIZE was not set explicitly; reducing it to 1 for the dense-logits fallback path." >&2
         fi
     fi
 fi
@@ -279,6 +277,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     algorithm.use_kl_in_reward=${use_kl_in_reward} \
     algorithm.kl_ctrl.kl_coef=${kl_coef} \
+    algorithm.norm_adv_by_std_in_grpo=False \
     algorithm.rollout_correction.rollout_is=${rollout_is} \
     algorithm.rollout_correction.rollout_is_threshold=${rollout_is_threshold} \
     algorithm.rollout_correction.rollout_is_batch_normalize=${rollout_is_batch_normalize} \
@@ -305,6 +304,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
+    actor_rollout_ref.actor.policy_loss.loss_mode=${loss_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     \
     `# --- Reference model ---` \
@@ -318,7 +318,6 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \
     actor_rollout_ref.model.trust_remote_code=True \
-    +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     \
@@ -353,7 +352,7 @@ python3 -m verl.trainer.main_ppo \
     \
     `# --- Data ---` \
     data.train_files="${TRAIN_FILE}" \
-    data.val_files="${TEST_FILE}" \
+    data.val_files="${TEST_FILES}" \
     data.prompt_key=prompt \
     data.filter_overlong_prompts=True \
     data.truncation='left' \
