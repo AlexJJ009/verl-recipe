@@ -135,10 +135,12 @@ if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
     echo "Resuming from existing checkpoint: $LATEST_CKPT_DIR"
     export WANDB_RUN_NAME="$EXPERIMENT_NAME"
     CKPTS_DIR="$LATEST_CKPT_DIR"
+    IS_RESUME=true
 else
     echo "No matching checkpoint found. Starting new training..."
     CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
     mkdir -p "$CKPTS_DIR"
+    IS_RESUME=false
 fi
 
 echo "Experiment Name : $WANDB_RUN_NAME"
@@ -147,7 +149,11 @@ echo "Checkpoint Dir  : $CKPTS_DIR"
 # ===================== Section 7: Log File ====================================
 LOG_DIR=${LOG_DIR:-/data-1/verl07/verl/recipe/joint_training}
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
+if [ "$IS_RESUME" = true ]; then
+    LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}_resumed_$(date +%s).log"
+else
+    LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
+fi
 export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${LOG_DIR}/metrics"}
 mkdir -p "$VERL_FILE_LOGGER_ROOT"
 VAL_GENERATIONS_TO_LOG=${VAL_GENERATIONS_TO_LOG:-3}
@@ -265,7 +271,7 @@ fi
 test_freq=5
 save_freq=20
 total_epochs=3
-total_training_steps=200
+total_training_steps=700
 val_before_train=True
 
 # ==============================================================================
