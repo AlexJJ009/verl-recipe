@@ -120,13 +120,43 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 | **Algorithm** | MiniRL + Dr.GRPO advantage + token-level IS (threshold=5.0), seq-mean-token-sum aggregation |
 | **Model** | Qwen3-1.7B-Base (NO joint training) |
 | **Dataset** | MATH (train) / MATH-500 + AIME-2025 (test) |
-| **Key Params** | lr=1e-6, warmup=5, batch=32, n_resp=8, max_resp_len=4096, clip=[0.2,0.27], **grad_clip=500.0**, steps=200, gpu_mem=0.55, **4 GPUs** |
-| **Logs** | (pending launch) |
-| **Checkpoint** | (pending launch) |
-| **Best Metric** | (pending) |
-| **Model Weights** | (not yet merged) |
-| **W&B** | (pending launch) |
-| **Status** | Planned
+| **Key Params** | lr=1e-6, warmup=5, batch=32, n_resp=8, max_resp_len=4096, clip=[0.2,0.27], **grad_clip=500.0**, steps=200→700, gpu_mem=0.55, **4 GPUs** |
+| **Logs** | `Baseline-MiniRL-Qwen3-1.7B-MATH-GC500_1773643860.log` (completed: 200/200 steps, ~3h20m) |
+| | `Baseline-MiniRL-Qwen3-1.7B-MATH-GC500_1773643860_resumed_1773659279.log` (resumed from step 200, ran to ~696/700, ~8h51m) |
+| **Checkpoint** | `/data-1/checkpoints/Baseline-MiniRL-Qwen3-1.7B-MATH-GC500_1773643860/` (steps 20-680 every 20) |
+| **Best Metric** | MATH-500 acc@1: **67.2%** (step 460); AIME-2025 acc@1: **11.5%** (steps 280, 610) |
+| **MATH-500 Progression** | (steps 20-200) 54.5% → 57.7% → 60.2% → 59.2% → 58.6% → 60.4% → 60.8% → **64.2%** → 62.0% → 60.0% |
+| | (resumed, step 680) 63.8% at step 680; peak **67.2%** at step 460; **67.0%** at step 305 |
+| **Model Weights** | `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_200` (3.8 GB) |
+| | `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680` (3.8 GB) |
+| **Inference** | EVAL-03 in `INFERENCE_RESULTS.md` (step 200, 5 benchmarks) |
+| | EVAL-04 in `INFERENCE_RESULTS.md` (step 680, 5 benchmarks) |
+| **W&B** | Project: `JointTraining`, Run: [`iitan6if`](https://wandb.ai/gongxunli-beihang-universally/JointTraining/runs/iitan6if) (initial 200 steps, synced 2026-03-16) |
+| | Project: `JointTraining`, Run: [`eij2sxit`](https://wandb.ai/gongxunli-beihang-universally/JointTraining/runs/eij2sxit) (resumed 201-696, synced 2026-03-17) |
+| **Status** | Completed (resumed run stopped at ~696/700 due to wandb teardown error)
+
+---
+
+### EXP-07: Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680
+
+| Field | Value |
+|---|---|
+| **Script** | `run_joint_minirl_qwen3_1.7b_math.sh` (default `RUN_PREFIX` / `MODEL2_PATH` for GC500 dual-model init) |
+| **Goal** | Test whether joint MiniRL with `grad_clip=500.0` and dual-model init from EXP-06 step 680 can surpass both EXP-04 and the strong EXP-06 baseline |
+| **Algorithm** | MiniRL + Dr.GRPO advantage + token-level IS (threshold=5.0), seq-mean-token-sum aggregation |
+| **Model** | QwenJoint-1.7B (fusion_lambda=0.50; model2 initialized from EXP-06 step 680) |
+| **Dataset** | MATH (train) / MATH-500 + AIME-2025 (test) |
+| **Key Params** | lr=1e-6, warmup=5, batch=32, n_resp=8, max_resp_len=4096, clip=[0.2,0.27], **grad_clip=500.0**, steps=200, gpu_mem=0.60, 8 GPUs |
+| **Logs** | `Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680_1773714465.log` (completed: 200/200 steps, ~6h22m) |
+| **Checkpoint** | `/data-1/checkpoints/Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680_1773714465/` (228 GB, steps 20-200 every 20) |
+| **Best Metric** | MATH-500 acc@1: **67.8%** (step 105, unsaved peak), **66.8%** (best saved checkpoint step 60), final **63.0%** (step 200); AIME-2025 acc@1: **11.5%** (step 90), final **3.8%** |
+| **MATH-500 Progression** | (saved ckpts) 63.6% → 64.0% → 64.8% → **66.8%** → 63.6% → 65.0% → 65.0% → 65.8% → 64.2% → 66.2% → 63.0% |
+| | (all validations) unsaved peak **67.8%** at step 105 |
+| **Model Weights** | `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200` (joint), `step_200_model2` (model2 extracted) |
+| **Inference** | EVAL-05 in `INFERENCE_RESULTS.md` (step 200 model2, 5 benchmarks, n=8 multi-k) |
+| **Known Issue** | Late-stage answer extraction failure rose from <1% early in training to **18.2%** at step 200, coinciding with regression from the step-105 peak. |
+| **W&B** | Project: `JointTraining`, Run: [`yw13tua4`](https://wandb.ai/gongxunli-beihang-universally/JointTraining/runs/yw13tua4) (synced 2026-03-18) |
+| **Status** | Completed (post-run W&B teardown raised a non-fatal `BrokenPipeError`) |
 
 ---
 
@@ -147,24 +177,24 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 
 ## Parameter Comparison Matrix
 
-| Parameter | EXP-01 (GRPO 1.7B GSM8K) | EXP-02 (GRPO 4B MATH) | EXP-03 (GRPO 4B bsz16) | EXP-04 (MiniRL 1.7B) | EXP-05 (Baseline) | EXP-06 (Baseline GC500) |
-|---|---|---|---|---|---|---|
-| Model Size | 1.7B | 4B | 4B | 1.7B | 1.7B | 1.7B |
-| Joint Training | Yes (λ=0.5) | Yes (λ=0.5) | Yes (λ=0.5) | Yes (λ=0.55) | **No** | **No** |
-| Loss Mode | vanilla | vanilla | vanilla | minirl | minirl | minirl |
-| Loss Agg | token-mean | token-mean | token-mean | seq-mean-token-sum | seq-mean-token-sum | seq-mean-token-sum |
-| Dataset | GSM8K | MATH | MATH | MATH | MATH | MATH |
-| Batch Size | 32 | 8 | **16** | 32 | 32 | 32 |
-| Responses/Prompt | 4 | 8 | 8 | 8 | 8 | 8 |
-| Max Resp Len | 1024 | 4096 | 4096 | 4096 | 4096 | 4096 |
-| Clip Ratio | [0.2, 0.28] | [0.2, 0.28] | [0.2, 0.28] | [0.2, 0.27] | [0.2, 0.27] | [0.2, 0.27] |
-| Grad Clip | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | **500.0** |
-| Total Steps | 100 | 200 | 200 | 100 | 200 | 200 |
-| Rollout IS | None | sequence (2.0) | sequence (2.0) | token (5.0) | token (5.0) | token (5.0) |
-| Dr.GRPO | N/A | N/A | N/A | Yes | Yes | Yes |
-| Offload | No | Yes | Yes | No | No | No |
-| GPU Mem | 0.75 | 0.50 | 0.50 | 0.60 | 0.55 | 0.55 |
-| GPUs | 8 | 8 | 8 | 8 | **4** | **4** |
+| Parameter | EXP-01 (GRPO 1.7B GSM8K) | EXP-02 (GRPO 4B MATH) | EXP-03 (GRPO 4B bsz16) | EXP-04 (MiniRL 1.7B) | EXP-05 (Baseline) | EXP-06 (Baseline GC500) | EXP-07 (Joint GC500 Dual) |
+|---|---|---|---|---|---|---|---|
+| Model Size | 1.7B | 4B | 4B | 1.7B | 1.7B | 1.7B | 1.7B |
+| Joint Training | Yes (λ=0.5) | Yes (λ=0.5) | Yes (λ=0.5) | Yes (λ=0.55) | **No** | **No** | Yes (λ=0.50) |
+| Loss Mode | vanilla | vanilla | vanilla | minirl | minirl | minirl | minirl |
+| Loss Agg | token-mean | token-mean | token-mean | seq-mean-token-sum | seq-mean-token-sum | seq-mean-token-sum | seq-mean-token-sum |
+| Dataset | GSM8K | MATH | MATH | MATH | MATH | MATH | MATH |
+| Batch Size | 32 | 8 | **16** | 32 | 32 | 32 | 32 |
+| Responses/Prompt | 4 | 8 | 8 | 8 | 8 | 8 | 8 |
+| Max Resp Len | 1024 | 4096 | 4096 | 4096 | 4096 | 4096 | 4096 |
+| Clip Ratio | [0.2, 0.28] | [0.2, 0.28] | [0.2, 0.28] | [0.2, 0.27] | [0.2, 0.27] | [0.2, 0.27] | [0.2, 0.27] |
+| Grad Clip | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | **500.0** | **500.0** |
+| Total Steps | 100 | 200 | 200 | 100 | 200 | 700 (~696) | 200 |
+| Rollout IS | None | sequence (2.0) | sequence (2.0) | token (5.0) | token (5.0) | token (5.0) | token (5.0) |
+| Dr.GRPO | N/A | N/A | N/A | Yes | Yes | Yes | Yes |
+| Offload | No | Yes | Yes | No | No | No | No |
+| GPU Mem | 0.75 | 0.50 | 0.50 | 0.60 | 0.55 | 0.55 | 0.60 |
+| GPUs | 8 | 8 | 8 | 8 | **4** | **4** | 8 |
 
 ---
 
@@ -177,8 +207,10 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 | `/data-1/checkpoints/Joint-GRPO-Qwen3-4B-RolloutCorr-MATH-bsz16_1773548609/` | EXP-03 | 198 GB | 20-140 (every 20) | Interrupted |
 | `/data-1/checkpoints/Joint-MiniRL-Qwen3-1.7B-MATH_1773581076/` | EXP-04 | 91 GB | 20-100 (every 20) | Completed |
 | `/data-1/checkpoints/Baseline-MiniRL-Qwen3-1.7B-MATH_1773625595/` | EXP-05 | 41 GB | 20-200 (every 20) | Completed |
+| `/data-1/checkpoints/Baseline-MiniRL-Qwen3-1.7B-MATH-GC500_1773643860/` | EXP-06 | ~75 GB | 20-680 (every 20) | Completed (resumed) |
+| `/data-1/checkpoints/Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680_1773714465/` | EXP-07 | 228 GB | 20-200 (every 20) | Completed |
 
-**Total checkpoint disk usage: ~665 GB**
+**Total checkpoint disk usage: ~934 GB**
 
 ---
 
@@ -198,9 +230,13 @@ Recommended folder structure:
 │   ├── step_100/        # final
 │   └── step_80/         # best MATH-500 acc (63%)
 ├── EXP-05_Baseline-MiniRL-1.7B-MATH/
-│   └── (pending merge)
-└── EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/
-    └── (pending completion)
+│   └── step_200/        # final
+├── EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/
+    ├── step_200/        # early final
+    └── step_680/        # resumed last checkpoint
+└── EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/
+    ├── step_200/        # final joint weights
+    └── step_200_model2/ # extracted model2 for offline eval
 ```
 
 | Weight Path | Source Experiment | Checkpoint Step | Merge Status |
@@ -208,6 +244,10 @@ Recommended folder structure:
 | `/data-1/model_weights/EXP-04_Joint-MiniRL-1.7B-MATH/step_100` | EXP-04 | 100 (final) | Merged (joint, 7.6 GB) |
 | `/data-1/model_weights/EXP-04_Joint-MiniRL-1.7B-MATH/step_100_model2` | EXP-04 | 100 (final) | Extracted model2 (3.8 GB) |
 | `/data-1/model_weights/EXP-05_Baseline-MiniRL-1.7B-MATH/step_200` | EXP-05 | 200 (final) | Merged (single model, 3.8 GB) |
+| `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_200` | EXP-06 | 200 | Merged (single model, 3.8 GB) |
+| `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680` | EXP-06 | 680 (last ckpt) | Merged (single model, 3.8 GB) |
+| `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200` | EXP-07 | 200 (final) | Merged (joint, 7.6 GB) |
+| `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200_model2` | EXP-07 | 200 (final) | Extracted model2 (3.8 GB) |
 
 ---
 

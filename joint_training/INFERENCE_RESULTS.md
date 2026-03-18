@@ -72,17 +72,126 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ---
 
-## Cross-Experiment Comparison (EVAL-01 vs EVAL-02)
+## EVAL-03: EXP-06 Baseline-MiniRL-1.7B-GC500 step 200
 
-| Benchmark | EXP-04 Joint (mean@3) | EXP-05 Baseline (mean@3) | Delta |
-|---|---|---|---|
-| **MATH-500** | **64.2%** | 61.4% | +2.8% |
-| **AIME-2025** | 4.4% | **5.6%** | -1.2% |
-| **AMC-2023** | 36.7% | **41.7%** | -5.0% |
-| **MinervaMAth** | 24.4% | **27.6%** | -3.2% |
-| **OlympiadBench** | **28.3%** | 28.1% | +0.2% |
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-06 (Baseline-MiniRL-Qwen3-1.7B-MATH-GC500) |
+| **Model Weights** | `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_200` |
+| **Checkpoint Step** | 200 (final) |
+| **Sub-Model** | N/A (single model, no joint training) |
+| **Inference Engine** | vLLM 0.8.5 (FLASH_ATTN backend, V1 engine, tp=4) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, MinervaMAth, OlympiadBench |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-03-16 |
 
-**Observations**: Joint training (EXP-04, 100 steps) vs baseline (EXP-05, 200 steps). Joint model is better on MATH-500 (+2.8%) — its training dataset. Baseline outperforms on out-of-distribution benchmarks: AMC-2023 (-5.0%), MinervaMAth (-3.2%), AIME (-1.2%). Note that the baseline ran 2x more steps but with severely clipped gradients (effective lr ~2.8e-9 vs intended 1e-6).
+### Results
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **MATH-500** | 500 | **64.1%** | 76.2% | 69.2% | 0.1% |
+| **AIME-2025** | 30 | **2.2%** | 3.3% | 3.3% | 0.0% |
+| **AMC-2023** | 40 | **35.0%** | 52.5% | 40.0% | 0.0% |
+| **MinervaMAth** | 272 | **24.8%** | 34.6% | 25.0% | 0.0% |
+| **OlympiadBench** | 674 | **28.1%** | 42.6% | 30.6% | 0.5% |
+
+### Notes
+
+- This is the grad_clip=500.0 fix for EXP-05 (which used grad_clip=1.0). Same algorithm, same model, same steps.
+- Training validation reported MATH-500 acc@1 = 60.0% at step 200, best = 64.2% at step 160. Offline mean@3 = 64.1% at step 200 is consistent.
+- Detailed per-response results saved to: `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_200/inference/`
+
+---
+
+## EVAL-04: EXP-06 Baseline-MiniRL-1.7B-GC500 step 680 (resumed)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-06 (Baseline-MiniRL-Qwen3-1.7B-MATH-GC500, resumed to 700 steps) |
+| **Model Weights** | `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680` |
+| **Checkpoint Step** | 680 (last checkpoint of resumed run, ~696/700 steps completed) |
+| **Sub-Model** | N/A (single model, no joint training) |
+| **Inference Engine** | vLLM 0.8.5 (FLASH_ATTN backend, V1 engine, tp=4) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, MinervaMAth, OlympiadBench |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, max_tokens=4096 |
+| **Date** | 2026-03-17 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **MATH-500** | 500 | **66.4%** | 77.8% | 70.2% | 0.1% |
+| **AIME-2025** | 30 | **3.3%** | 6.7% | 3.3% | 0.0% |
+| **AMC-2023** | 40 | **37.5%** | 55.0% | 47.5% | 0.0% |
+| **MinervaMAth** | 272 | **26.1%** | 34.6% | 27.6% | 0.2% |
+| **OlympiadBench** | 674 | **30.1%** | 42.0% | 33.5% | 1.0% |
+
+### Results (n=8, multi-k)
+
+| Benchmark | Samples | mean@8 | pass@1 | maj@1 | pass@2 | maj@2 | pass@4 | maj@4 | pass@8 | maj@8 | extraction_fail |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **MATH-500** | 500 | **66.9%** | 66.9% | 66.8% | 74.6% | 66.8% | 80.1% | 71.4% | 84.6% | 73.7% | 0.1% |
+| **AIME-2025** | 30 | **3.3%** | 3.3% | 3.2% | 5.8% | 3.2% | 8.8% | 5.1% | 10.0% | 10.0% | 0.4% |
+| **AMC-2023** | 40 | **43.1%** | 43.1% | 43.1% | 54.1% | 43.5% | 64.9% | 49.1% | 75.0% | 51.8% | 0.6% |
+| **MinervaMAth** | 272 | **25.7%** | 25.7% | 25.8% | 31.8% | 25.9% | 37.4% | 27.9% | 43.0% | 29.6% | 0.3% |
+| **OlympiadBench** | 674 | **30.3%** | 30.3% | 30.2% | 38.6% | 30.4% | 46.3% | 34.5% | 52.8% | 37.4% | 1.2% |
+
+### Notes
+
+- This is the same EXP-06 experiment resumed from step 200 to 700 (stopped at ~696 due to wandb teardown error). Last checkpoint at step 680.
+- Training validation at step 680: MATH-500 acc@1 = 63.8%, AIME-2025 acc@1 = 3.8%. Offline mean@8 = 66.9% (n=8 run) is higher, likely due to sampling variance and different random seeds.
+- Compared to EVAL-03 (same experiment, step 200): MATH-500 improved from 64.1% to **66.4%** (+2.3%), OlympiadBench from 28.1% to **30.1%** (+2.0%), AMC from 35.0% to **37.5%** (+2.5%). AIME-2025 improved from 2.2% to 3.3%.
+- Best training validation MATH-500 was **67.2%** at step 460 (peak), suggesting step 680 is slightly past the MATH-500 optimum.
+- n=3 results saved to: `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680/inference/`
+- n=8 results saved to: `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680/inference_n8/`
+
+---
+
+## EVAL-05: EXP-07 Joint-MiniRL-1.7B-GC500-Dual step 200 (model2 only)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-07 (Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680) |
+| **Model Weights** | `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200_model2` |
+| **Checkpoint Step** | 200 (final) |
+| **Sub-Model** | model2 (trainable, extracted from joint model) |
+| **Inference Engine** | vLLM 0.8.5 (FLASH_ATTN backend, V1 engine, tp=4) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, MinervaMAth, OlympiadBench |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=8, max_tokens=4096 |
+| **Date** | 2026-03-18 |
+
+### Results (n=8, multi-k)
+
+| Benchmark | Samples | mean@8 | pass@1 | maj@1 | pass@2 | maj@2 | pass@4 | maj@4 | pass@8 | maj@8 | extraction_fail |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **MATH-500** | 500 | **66.1%** | 66.1% | 66.1% | 73.7% | 69.0% | 79.6% | 73.4% | 84.2% | 75.8% | 16.2% |
+| **AIME-2025** | 30 | **3.8%** | 3.8% | 3.7% | 5.4% | 4.3% | 6.4% | 5.4% | 6.7% | 6.7% | 61.3% |
+| **AMC-2023** | 40 | **36.2%** | 36.2% | 36.3% | 43.5% | 39.8% | 50.3% | 44.1% | 57.5% | 45.0% | 34.1% |
+| **MinervaMAth** | 272 | **24.6%** | 24.6% | 24.7% | 31.0% | 25.8% | 37.7% | 27.1% | 44.9% | 29.4% | 11.4% |
+| **OlympiadBench** | 674 | **29.1%** | 29.1% | 29.2% | 36.4% | 32.1% | 43.4% | 35.9% | 50.1% | 38.9% | 38.1% |
+
+### Notes
+
+- Weights were extracted from the EXP-07 joint checkpoint and evaluated on model2 only.
+- Training validation at step 200 was most likely already `model2-only` rather than fused joint logits: in the current code path, `_validate()` switches joint checkpoints to `eval_only=True`, and that logic predates the 2026-03-17 EXP-07 run. The archived run does not record an exact git commit / working-tree snapshot, so this cannot be proven with absolute certainty from the log alone. This offline run still differs because it evaluates extracted HF `step_200_model2` weights through vLLM rather than the trainer-integrated validation path.
+- Compared to EVAL-04 (EXP-06 step 680, n=8 mean@8), EXP-07 final model2 is lower on MATH-500 (66.1% vs 66.9%), AMC-2023 (36.2% vs 43.1%), MinervaMAth (24.6% vs 25.7%), and OlympiadBench (29.1% vs 30.3%), with only a small AIME-2025 gain (3.8% vs 3.3%).
+- Extraction failures are substantially higher than prior runs, especially on AIME-2025 (61.3%), AMC-2023 (34.1%), and OlympiadBench (38.1%), which likely suppressed pass/maj metrics.
+- Total: 1516 prompts × 8 = 12128 generations, completed in 1631s.
+- Raw results saved to: `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200_model2/inference_n8/`
+
+---
+
+## Cross-Experiment Comparison (EVAL-01 vs EVAL-02 vs EVAL-03 vs EVAL-04 vs EVAL-05)
+
+| Benchmark | EXP-04 Joint 100s (mean@3) | EXP-05 Baseline gc=1.0 200s (mean@3) | EXP-06 Baseline gc=500 200s (mean@3) | EXP-06 Baseline gc=500 680s (mean@8, n=8) | EXP-07 Joint gc=500 dual 200s (mean@8, n=8) |
+|---|---|---|---|---|---|
+| **MATH-500** | 64.2% | 61.4% | 64.1% | **66.9%** | 66.1% |
+| **AIME-2025** | 4.4% | **5.6%** | 2.2% | 3.3% | 3.8% |
+| **AMC-2023** | 36.7% | 41.7% | 35.0% | **43.1%** | 36.2% |
+| **MinervaMAth** | 24.4% | **27.6%** | 24.8% | 25.7% | 24.6% |
+| **OlympiadBench** | 28.3% | 28.1% | 28.1% | **30.3%** | 29.1% |
+
+**Observations**: For EVAL-04 and EVAL-05, this table uses `mean@8` from the n=8 runs; earlier entries retain their original `mean@3` from the n=3 evaluations. EVAL-04 (EXP-06 step 680) remains the strongest offline checkpoint overall, still leading on MATH-500 (**66.9%**), AMC-2023 (**43.1%**), MinervaMAth (**25.7%**), and OlympiadBench (**30.3%**). EVAL-05 (EXP-07 final model2) improves over EXP-04's earlier 100-step joint run on MATH-500 (+1.9%) and OlympiadBench (+0.8%), but it does not set a new best and underperforms EVAL-04 on every benchmark except a small AIME-2025 gain (+0.5%). The clearest failure mode is extraction robustness: EXP-07's extraction_fail is dramatically higher than prior runs, especially on AIME-2025 (61.3%), which likely masks any raw reasoning gains in the final checkpoint.
 
 ---
 
