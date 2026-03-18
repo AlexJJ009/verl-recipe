@@ -49,7 +49,7 @@ export HYDRA_FULL_ERROR=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"Joint-MiniRL-Qwen3-1.7B-MATH"}
+RUN_PREFIX=${RUN_PREFIX:-"Joint-MiniRL-Qwen3-1.7B-MATH-GC500-Dual-Step680"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -67,7 +67,17 @@ NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # ===================== Section 5: Model & Data Paths ==========================
 BASE_MODEL_PATH=${BASE_MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-1.7B-Base"}
-MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/QwenJoint-1.7B"}
+# MODEL2_PATH: optional second model for sub_models.1 (e.g. a merged checkpoint).
+# If unset, base model is cloned to both sub-models (original behavior).
+MODEL2_PATH=${MODEL2_PATH:-"/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680"}
+if [ -n "$MODEL2_PATH" ]; then
+    MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
+    MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
+    DEFAULT_MODEL_PATH="/data-1/.cache/huggingface/QwenJoint-1.7B-dual-${MODEL2_CACHE_TAG}"
+else
+    DEFAULT_MODEL_PATH="/data-1/.cache/huggingface/QwenJoint-1.7B"
+fi
+MODEL_PATH=${MODEL_PATH:-"$DEFAULT_MODEL_PATH"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/Maxwell-Jia-MATH-Processed-no-system-prompt/train_with_system_prompt.parquet"}
 TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test.parquet','/data-1/dataset/AIME-2025/aime-2025.parquet']"}
 
@@ -80,17 +90,27 @@ if [ ! -d "$MODEL_PATH" ]; then
         echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-1.7B-Base', local_dir='$BASE_MODEL_PATH', local_dir_use_symlinks=False)\""
         exit 1
     fi
-    python3 -m verl.models.joint_model.prepare_joint_weights \
-        --base_model_path "$BASE_MODEL_PATH" \
-        --output_path "$MODEL_PATH" \
-        --fusion_lambda 0.55
+    PREPARE_ARGS=(
+        --base_model_path "$BASE_MODEL_PATH"
+        --output_path "$MODEL_PATH"
+        --fusion_lambda 0.50
+    )
+    if [ -n "$MODEL2_PATH" ]; then
+        if [ ! -d "$MODEL2_PATH" ]; then
+            echo "ERROR: Model2 not found at $MODEL2_PATH"
+            exit 1
+        fi
+        PREPARE_ARGS+=(--model2_path "$MODEL2_PATH")
+        echo "Using dual-model mode: model1=$BASE_MODEL_PATH, model2=$MODEL2_PATH"
+    fi
+    python3 -m verl.models.joint_model.prepare_joint_weights "${PREPARE_ARGS[@]}"
     echo "Joint model prepared at $MODEL_PATH"
 fi
 
 # ===================== Section 6: Checkpoint Directory =========================
 MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
 MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
-MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-2}
+MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-5}
 MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-2}
 
 DEFAULT_CKPT_BASE_DIR="/data-1/checkpoints"
@@ -145,10 +165,12 @@ if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
     echo "Resuming from existing checkpoint: $LATEST_CKPT_DIR"
     export WANDB_RUN_NAME="$EXPERIMENT_NAME"
     CKPTS_DIR="$LATEST_CKPT_DIR"
+    IS_RESUME=true
 else
     echo "No matching checkpoint found. Starting new training..."
     CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
     mkdir -p "$CKPTS_DIR"
+    IS_RESUME=false
 fi
 
 echo "Experiment Name : $WANDB_RUN_NAME"
@@ -157,7 +179,11 @@ echo "Checkpoint Dir  : $CKPTS_DIR"
 # ===================== Section 7: Log File ====================================
 LOG_DIR=${LOG_DIR:-/data-1/verl07/verl/recipe/joint_training}
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
+if [ "$IS_RESUME" = true ]; then
+    LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}_resumed_$(date +%s).log"
+else
+    LOG_FILE="${LOG_DIR}/${WANDB_RUN_NAME}.log"
+fi
 export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${LOG_DIR}/metrics"}
 mkdir -p "$VERL_FILE_LOGGER_ROOT"
 VAL_GENERATIONS_TO_LOG=${VAL_GENERATIONS_TO_LOG:-3}
@@ -221,7 +247,7 @@ val_top_p=0.95
 # ===================== Section 12: Performance & Memory =======================
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 1))
+actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
 offload=False
 fsdp_size=-1
@@ -230,8 +256,8 @@ LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
-GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-2}
-LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-1}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-8}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-2}
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
@@ -274,7 +300,7 @@ fi
 test_freq=5
 save_freq=20
 total_epochs=3
-total_training_steps=100
+total_training_steps=200
 val_before_train=True
 
 # ==============================================================================
@@ -311,7 +337,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
-    actor_rollout_ref.actor.grad_clip=1.0 \
+    actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.policy_loss.loss_mode=${loss_mode} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
