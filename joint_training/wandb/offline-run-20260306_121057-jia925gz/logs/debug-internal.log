@@ -1,0 +1,13 @@
+{"time":"2026-03-06T12:10:57.705324795+08:00","level":"INFO","msg":"stream: starting","core version":"0.25.0"}
+{"time":"2026-03-06T12:10:57.95157448+08:00","level":"WARN","msg":"featurechecker: GraphQL client is nil, skipping feature loading"}
+{"time":"2026-03-06T12:10:57.951635848+08:00","level":"INFO","msg":"stream: created new stream","id":"jia925gz"}
+{"time":"2026-03-06T12:10:57.95169126+08:00","level":"INFO","msg":"handler: started","stream_id":"jia925gz"}
+{"time":"2026-03-06T12:10:57.951784488+08:00","level":"INFO","msg":"writer: started","stream_id":"jia925gz"}
+{"time":"2026-03-06T12:10:57.951760474+08:00","level":"INFO","msg":"stream: started","id":"jia925gz"}
+{"time":"2026-03-06T12:10:57.951787374+08:00","level":"INFO","msg":"sender: started","stream_id":"jia925gz"}
+{"time":"2026-03-06T12:10:57.952843106+08:00","level":"WARN","msg":"runupserter: server does not expand metric globs but the x_server_side_expand_glob_metrics setting is set; ignoring"}
+{"time":"2026-03-06T13:01:50.725622313+08:00","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2026-03-06T13:01:50.727595329+08:00","level":"INFO","msg":"stream: closing","id":"jia925gz"}
+{"time":"2026-03-06T13:01:50.727608178+08:00","level":"INFO","msg":"handler: closed","stream_id":"jia925gz"}
+{"time":"2026-03-06T13:01:50.72767534+08:00","level":"INFO","msg":"sender: closed","stream_id":"jia925gz"}
+{"time":"2026-03-06T13:01:50.727689755+08:00","level":"INFO","msg":"stream: closed","id":"jia925gz"}

@@ -1,0 +1,107 @@
+wandb: Detected [openai] in use.
+wandb: Use W&B Weave for improved LLM call tracing. Install Weave with `pip install weave` then add `import weave` to the top of your script.
+wandb: For more information, check out the docs at: https://weave-docs.wandb.ai/
+Training Progress: 100%|██████████| 100/100 [27:45<00:00, 16.65s/it]
+Checkpoint tracker file does not exist: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/latest_checkpointed_iteration.txt
+Training from scratch
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 0}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+("Initial validation metrics: {'val-aux/openai/gsm8k/reward/mean@1': "
+ "-1.166783029875853, 'val-aux/openai/gsm8k/score/mean@1': -1.0, "
+ "'val-core/openai/gsm8k/acc/mean@1': 0.0, "
+ "'val-aux/openai/gsm8k/has_eos/mean@1': 1.0, "
+ "'val-aux/openai/gsm8k/answer_correct/mean@1': 0.0, 'val-aux/num_turns/min': "
+ "2, 'val-aux/num_turns/max': 2, 'val-aux/num_turns/mean': 2.0}")
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 5}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 10}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 15}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+local_global_step_folder: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/global_step_20
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 20}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 25}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 30}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 35}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+local_global_step_folder: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/global_step_40
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 40}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 45}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 50}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 55}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+local_global_step_folder: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/global_step_60
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 60}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 65}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 70}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 75}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+local_global_step_folder: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/global_step_80
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 80}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 85}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 90}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 95}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+local_global_step_folder: /data-1/checkpoints/Joint-GRPO-Qwen3-1.7B-GSM8K_1773026491/global_step_100
+validation batch 1/1 start: prompts=1319, repeat_times=1, rollout_workers=8
+test_gen_batch meta info: {'eos_token_id': 151643, 'pad_token_id': 151643, 'recompute_log_prob': False, 'do_sample': True, 'validate': True, 'global_steps': 100}
+validation batch 1/1 dispatch: prompts=1320, pad_size=1, size_divisor=8
+validation batch 1/1 generation end
+("Final validation metrics: {'val-aux/openai/gsm8k/reward/mean@1': "
+ "-1.0009765625, 'val-aux/openai/gsm8k/score/mean@1': -1.0, "
+ "'val-core/openai/gsm8k/acc/mean@1': 0.0, "
+ "'val-aux/openai/gsm8k/has_eos/mean@1': 1.0, "
+ "'val-aux/openai/gsm8k/answer_correct/mean@1': 0.0, 'val-aux/num_turns/min': "
+ "2, 'val-aux/num_turns/max': 2, 'val-aux/num_turns/mean': 2.0}")
