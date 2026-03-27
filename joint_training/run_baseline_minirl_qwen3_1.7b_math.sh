@@ -17,10 +17,8 @@
 set -xeuo pipefail
 
 # ===================== Section 1: Environment Activation ======================
-echo "Activating verl07 conda environment..."
-eval "$(conda shell.bash hook)"
-conda deactivate
-conda activate verl07
+# Docker/uv: environment is already active in the container; skip conda.
+echo "Environment ready (Docker/uv mode)."
 
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
@@ -33,7 +31,8 @@ export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
 export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-$TMPDIR}
 mkdir -p "$RAY_TMPDIR" "$TMPDIR" "$VLLM_CONFIG_ROOT" "$VERL_ZMQ_IPC_DIR"
 
-export LD_LIBRARY_PATH=/data-1/.cache/conda/envs/verl07/lib/python3.10/site-packages/torch/lib:/data-1/.cache/conda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
+# LD_LIBRARY_PATH: auto-detect from the active Python environment
+export LD_LIBRARY_PATH="$(python3 -c 'import torch,os; print(os.path.join(os.path.dirname(torch.__file__),"lib"))'):${LD_LIBRARY_PATH:-}"
 
 # NCCL / networking settings
 export NCCL_IBEXT_DISABLE=1

@@ -24,10 +24,8 @@
 set -xeuo pipefail
 
 # activate the venv
-echo "Activating verl environment..."
-eval "$(conda shell.bash hook)"
-conda deactivate
-conda activate verl07
+# Docker/uv: environment is already active in the container; skip conda.
+echo "Environment ready (Docker/uv mode)."
 
 # 设置模型缓存路径
 export HF_HOME=/data-1/huggingface_cache
@@ -74,7 +72,8 @@ export WANDB_MAX_RETRIES=10
 export WANDB_MODE=offline
 
 
-export LD_LIBRARY_PATH=/data-1/miniconda/envs/verl07/lib:${LD_LIBRARY_PATH:-}
+# LD_LIBRARY_PATH: auto-detect from the active Python environment
+export LD_LIBRARY_PATH="$(python3 -c 'import torch,os; print(os.path.join(os.path.dirname(torch.__file__),"lib"))'):${LD_LIBRARY_PATH:-}"
 
 # can make training faster, depends on your infrastructure
 export NCCL_IBEXT_DISABLE=1
