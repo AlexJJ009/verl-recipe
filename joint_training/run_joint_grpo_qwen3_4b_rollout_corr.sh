@@ -32,7 +32,6 @@ export LD_LIBRARY_PATH="$(python3 -c 'import torch,os; print(os.path.join(os.pat
 export NCCL_IBEXT_DISABLE=1
 export NCCL_NVLS_ENABLE=1
 export NCCL_TIMEOUT=3600
-export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_V1=${VLLM_USE_V1:-1}
 export VLLM_NO_USAGE_STATS=${VLLM_NO_USAGE_STATS:-1}
 export VLLM_DO_NOT_TRACK=${VLLM_DO_NOT_TRACK:-1}

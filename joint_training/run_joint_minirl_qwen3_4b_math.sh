@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Baseline MiniRL on MATH (vLLM rollout by default)
-# Model: Qwen3-1.7B Base (single model, NO joint training)
+# Joint Training with MiniRL on MATH (vLLM rollout by default)
+# Model: Qwen3-4B Joint Model (dual sub-models, ~8B total parameters)
 # Algorithm: MiniRL loss + Dr.GRPO advantage + token-level IS correction
 #
 # Based on: run_joint_minirl_qwen3_1.7b_math.sh
-# Purpose: Baseline comparison — identical setup except no joint model.
+# Key changes:
+#   - Scaled from 1.7B to 4B (2× sub-models → ~8B total)
+#   - Larger batch sizes (B=64, G=8) tuned for 4B on 8× H800
+#   - Conservative vLLM memory (0.55) for dual-model KV cache
 #   - Same MiniRL loss, Dr.GRPO advantage, token-level IS correction
 #   - Same MATH dataset with MATH-500 + AIME-2025 validation
-#   - Same batch sizes (B=32, G=8) and hyperparameters
-#   - 4 GPUs (vs 8 for joint) — no impact on training semantics
 #
-# Usage: bash recipe/joint_training/run_baseline_minirl_qwen3_1.7b_math.sh
+# Hardware target: 8× H800 (80 GB each, 640 GB total)
+# Batch-size rationale:
+#   - train_prompt_bsz 32→64: 2× per-prompt compute, offset by 4B efficiency
+#   - actor_ppo_max_token_len 9192→18384: 2× GPU token budget
+#   - ROLLOUT_GPU_MEMORY_UTILIZATION 0.60→0.55: dual-model KV cache needs headroom
+#   - ROLLOUT_MAX_NUM_SEQS 256: kept conservative (dual KV ≈ 180 KB/tok)
+#
+# Usage:
+#   # Both sub-models from same base (default):
+#   bash recipe/joint_training/run_joint_minirl_qwen3_4b_math.sh
+#
+#   # Specify different model for sub_models.1:
+#   MODEL2_PATH=/data-1/checkpoints/some_4b_ckpt/step_N \
+#     bash recipe/joint_training/run_joint_minirl_qwen3_4b_math.sh
 # ==============================================================================
 
 set -xeuo pipefail
@@ -46,7 +60,7 @@ export HYDRA_FULL_ERROR=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-1.7B-MATH-GC500"}
+RUN_PREFIX=${RUN_PREFIX:-"Joint-MiniRL-Qwen3-4B-MATH-GC500"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -60,19 +74,49 @@ export WANDB_MODE=${WANDB_MODE:-offline}
 
 # ===================== Section 4: Hardware ====================================
 NNODES=${NNODES:-1}
-NGPUS_PER_NODE=${NGPUS_PER_NODE:-4}
+NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # ===================== Section 5: Model & Data Paths ==========================
-MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-1.7B-Base"}
+BASE_MODEL_PATH=${BASE_MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-4B-Base"}
+# MODEL2_PATH: optional second model for sub_models.1 (e.g. a merged checkpoint).
+# If unset or empty, base model is cloned to both sub-models.
+# e.g. MODEL2_PATH=/data-1/checkpoints/EXP-XX_.../step_N
+MODEL2_PATH=${MODEL2_PATH:-""}
+if [ -n "$MODEL2_PATH" ]; then
+    MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
+    MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
+    DEFAULT_MODEL_PATH="/data-1/.cache/huggingface/QwenJoint-4B-dual-${MODEL2_CACHE_TAG}"
+else
+    DEFAULT_MODEL_PATH="/data-1/.cache/huggingface/QwenJoint-4B"
+fi
+MODEL_PATH=${MODEL_PATH:-"$DEFAULT_MODEL_PATH"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/Maxwell-Jia-MATH-Processed-no-system-prompt/train_with_system_prompt.parquet"}
 TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test.parquet','/data-1/dataset/AIME-2025/aime-2025.parquet']"}
 
-# Verify base model exists
+# Auto-prepare joint model if it doesn't exist yet
 if [ ! -d "$MODEL_PATH" ]; then
-    echo "ERROR: Base model not found at $MODEL_PATH"
-    echo "Please download Qwen3-1.7B-Base first, e.g.:"
-    echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-1.7B-Base', local_dir='$MODEL_PATH', local_dir_use_symlinks=False)\""
-    exit 1
+    echo "Joint model not found at $MODEL_PATH. Preparing from base model..."
+    if [ ! -d "$BASE_MODEL_PATH" ]; then
+        echo "ERROR: Base model not found at $BASE_MODEL_PATH"
+        echo "Please download Qwen3-4B-Base first, e.g.:"
+        echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-Base', local_dir='$BASE_MODEL_PATH', local_dir_use_symlinks=False)\""
+        exit 1
+    fi
+    PREPARE_ARGS=(
+        --base_model_path "$BASE_MODEL_PATH"
+        --output_path "$MODEL_PATH"
+        --fusion_lambda 0.50
+    )
+    if [ -n "$MODEL2_PATH" ]; then
+        if [ ! -d "$MODEL2_PATH" ]; then
+            echo "ERROR: Model2 not found at $MODEL2_PATH"
+            exit 1
+        fi
+        PREPARE_ARGS+=(--model2_path "$MODEL2_PATH")
+        echo "Using dual-model mode: model1=$BASE_MODEL_PATH, model2=$MODEL2_PATH"
+    fi
+    python3 -m verl.models.joint_model.prepare_joint_weights "${PREPARE_ARGS[@]}"
+    echo "Joint model prepared at $MODEL_PATH"
 fi
 
 # ===================== Section 6: Checkpoint Directory =========================
@@ -112,8 +156,8 @@ fi
 ROOT_MOUNT_SOURCE=$(get_mount_source "/")
 BASE_CKPT_MOUNT_SOURCE=$(get_mount_source "$BASE_CKPT_DIR")
 if [ "$BASE_CKPT_MOUNT_SOURCE" = "$ROOT_MOUNT_SOURCE" ] && [[ "$BASE_CKPT_DIR" != /data-1/* ]]; then
-    echo "[baseline-minirl] WARNING: ${BASE_CKPT_DIR} resolves to the root filesystem (${BASE_CKPT_MOUNT_SOURCE}), not the large /data-1 volume." >&2
-    echo "[baseline-minirl] WARNING: On this host, prefer BASE_CKPT_DIR=/data-1/checkpoints." >&2
+    echo "[joint-minirl-4b] WARNING: ${BASE_CKPT_DIR} resolves to the root filesystem (${BASE_CKPT_MOUNT_SOURCE}), not the large /data-1 volume." >&2
+    echo "[joint-minirl-4b] WARNING: On this host, prefer BASE_CKPT_DIR=/data-1/checkpoints." >&2
 fi
 
 BASE_CKPT_FREE_KB=$(get_free_kb "$BASE_CKPT_DIR")
@@ -201,10 +245,12 @@ CUSTOM_REWARD_FN_NAME="compute_score_latex_verify"
 max_prompt_length=500                 # MATH problems are longer
 max_response_length=4096              # MATH needs longer reasoning chains
 
-# ===================== Section 10: Batch Sizes (tuned for 1.7B + 4096 resp) ===
-train_prompt_bsz=32                   # B=32 (conservative start)
-n_resp_per_prompt=8                   # G=8 (1.7B + 4096 response memory tight)
-train_prompt_mini_bsz=4               # mini batch
+# ===================== Section 10: Batch Sizes (tuned for 4B joint + 8× H800) =
+# Joint 4B = ~8B total params. 8 GPUs, same per-GPU prompt load as 1.7B joint.
+# 512 sequences/step (64 prompts × G=8), each up to 4596 tokens.
+train_prompt_bsz=64                   # B=64 (2× from 1.7B joint)
+n_resp_per_prompt=8                   # G=8
+train_prompt_mini_bsz=8              # mini batch (2× from 1.7B joint)
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=1.0
@@ -213,10 +259,19 @@ top_k=-1
 val_top_p=0.95
 
 # ===================== Section 12: Performance & Memory =======================
+# H800 80 GB per GPU; joint 4B = ~16 GB bf16 total weights.
+# FSDP shards across 8 GPUs: ~2 GB weights + ~8 GB optimizer + ~2 GB grad = ~12 GB/GPU.
+# Leaves ~68 GB per GPU for activations + rollout KV cache.
+#
+# vLLM KV cache per token (4B, GQA 8 heads, head_dim=80, 36 layers, bf16):
+#   single sub-model: 2 × 8 × 80 × 2 bytes × 36 = 92 160 bytes ≈ 90 KB/token
+#   joint (2 sub-models): ~180 KB/token
+# At gpu_memory_utilization=0.55: 44 GB budget − 16 GB weights = 28 GB KV cache
+#   → ~155 K tokens in cache pool; comfortable for 256 concurrent sequences.
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
-infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 3))
+actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 4))   # 18 384 (2× from 1.7B joint)
+infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 6))   # 27 576
 offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
@@ -224,24 +279,22 @@ LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
-GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-8}
-LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-2}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}    # 2× from 1.7B joint
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}         # 2× from 1.7B joint
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
-ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.55}
-ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.55}   # conservative for dual-model KV
+ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}                                     # 4B fits on 1 GPU
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
-# vLLM defaults to 1024, which is unnecessary here and inflates startup memory
-# in colocated rollout mode because warm-up buffers scale with max_num_seqs.
 ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-256}
 
 if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
-    # vLLM 0.8.5 CuMemAllocator.sleep() asserts against expandable_segments:True
+    # vLLM CuMemAllocator.sleep() asserts against expandable_segments:True
     # (PYTORCH_CUDA_ALLOC_CONF), so free_cache_engine and sleep_mode must stay off.
     # Memory is managed by lowering gpu_memory_utilization instead.
     ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
@@ -256,11 +309,11 @@ ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-${ROLLOUT_ENABLE_SLEEP_MO
 if [ "${USE_REMOVE_PADDING}" = "True" ]; then
     if ! python3 -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('flash_attn') else 1)" \
         >/dev/null 2>&1; then
-        echo "[baseline-minirl] WARNING: flash_attn is not installed; disabling USE_REMOVE_PADDING to avoid a late actor crash." >&2
+        echo "[joint-minirl-4b] WARNING: flash_attn is not installed; disabling USE_REMOVE_PADDING to avoid a late actor crash." >&2
         USE_REMOVE_PADDING=False
         if [ -z "${LOG_PROB_MICRO_BATCH_SIZE_WAS_SET}" ]; then
             LOG_PROB_MICRO_BATCH_SIZE=1
-            echo "[baseline-minirl] WARNING: LOG_PROB_MICRO_BATCH_SIZE was not set explicitly; reducing it to 1 for the dense-logits fallback path." >&2
+            echo "[joint-minirl-4b] WARNING: LOG_PROB_MICRO_BATCH_SIZE was not set explicitly; reducing it to 1 for the dense-logits fallback path." >&2
         fi
     fi
 fi
@@ -269,7 +322,7 @@ fi
 test_freq=5
 save_freq=20
 total_epochs=3
-total_training_steps=700
+total_training_steps=200
 val_before_train=True
 
 # ==============================================================================
@@ -322,10 +375,11 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \
     actor_rollout_ref.model.trust_remote_code=True \
+    +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
     \
-    `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
+    `# --- Rollout (vLLM with FlashInfer backend) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
