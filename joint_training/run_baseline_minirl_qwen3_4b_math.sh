@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Baseline MiniRL on MATH (vLLM rollout by default)
-# Model: Qwen3-4B Base (single model, NO joint training)
+# Model: Qwen3-4B SFT-Stage-1 (single model, NO joint training)
 # Algorithm: MiniRL loss + Dr.GRPO advantage + token-level IS correction
 #
 # Based on: run_baseline_minirl_qwen3_1.7b_math.sh
@@ -15,8 +15,14 @@
 # Batch-size rationale:
 #   - train_prompt_bsz 32→64: 2× GPUs → same per-GPU sequence load
 #   - actor_ppo_max_token_len 9192→18384: 2× GPU token budget (6 GB overhead)
-#   - ROLLOUT_GPU_MEMORY_UTILIZATION 0.55→0.70: 80 GB H800 vs ~40 GB A100
-#   - ROLLOUT_MAX_NUM_SEQS 256→512: 4B GQA KV cache ~92 KB/tok; 48 GB pool
+#   - ROLLOUT_GPU_MEMORY_UTILIZATION 0.85: free_cache_engine releases KV cache during training
+#   - ROLLOUT_ENFORCE_EAGER false: CUDA graphs reduce generation time by ~18%
+#   - ROLLOUT_FREE_CACHE_ENGINE True: release KV cache between rollout/training phases
+#   - ROLLOUT_MAX_NUM_SEQS 512: 4B GQA KV cache ~144 KB/tok
+#
+# Performance (8×H800, 5-step benchmark):
+#   - 139.8s/step: gen 45.2s (32%) + train 78.2s (56%) + other 16.4s (12%)
+#   - 1233 tok/s throughput, MFU 6.59%
 #
 # Usage: bash recipe/joint_training/run_baseline_minirl_qwen3_4b_math.sh
 # ==============================================================================
@@ -28,7 +34,20 @@ set -xeuo pipefail
 echo "Environment ready (Docker/uv mode)."
 
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+
+# Determine free_cache_engine early — needed before setting PYTORCH_CUDA_ALLOC_CONF.
+# Default is True for vLLM engine (set formally in Section 12, but we need the value now).
+ROLLOUT_FREE_CACHE_ENGINE=${ROLLOUT_FREE_CACHE_ENGINE:-True}
+
+# expandable_segments:True improves FSDP training memory, but is incompatible with
+# vLLM memory pool when free_cache_engine=True (PyTorch issue #147851).
+# When free_cache_engine is enabled, verl manages expandable_segments dynamically
+# at runtime via set_expandable_segments(). So we only set it here when off.
+if [ "${ROLLOUT_FREE_CACHE_ENGINE}" = "True" ]; then
+    export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-""}
+else
+    export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+fi
 
 # ===================== Section 2: Cache & Temp Directories ====================
 export HF_HOME=/data-1/.cache/huggingface
@@ -50,10 +69,10 @@ export VLLM_NO_USAGE_STATS=${VLLM_NO_USAGE_STATS:-1}
 export VLLM_DO_NOT_TRACK=${VLLM_DO_NOT_TRACK:-1}
 export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
-export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+# PYTORCH_CUDA_ALLOC_CONF is set in Section 1 (conditional on free_cache_engine)
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-4B-MATH-GC500"}
+RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-4B-SFT-MATH-GC500"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -70,15 +89,14 @@ NNODES=${NNODES:-1}
 NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # ===================== Section 5: Model & Data Paths ==========================
-MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/Qwen3-4B-Base"}
+MODEL_PATH=${MODEL_PATH:-"/data-1/model_weights/external/SFT-Stage-1"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/Maxwell-Jia-MATH-Processed-no-system-prompt/train_with_system_prompt.parquet"}
 TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test.parquet','/data-1/dataset/AIME-2025/aime-2025.parquet']"}
 
 # Verify base model exists
 if [ ! -d "$MODEL_PATH" ]; then
-    echo "ERROR: Base model not found at $MODEL_PATH"
-    echo "Please download Qwen3-4B-Base first, e.g.:"
-    echo "  python -c \"from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen3-4B-Base', local_dir='$MODEL_PATH', local_dir_use_symlinks=False)\""
+    echo "ERROR: SFT model not found at $MODEL_PATH"
+    echo "Please ensure the SFT-Stage-1 model weights are available at the specified path."
     exit 1
 fi
 
@@ -223,18 +241,23 @@ val_top_p=0.95
 
 # ===================== Section 12: Performance & Memory =======================
 # H800 80 GB per GPU; 4B model = 8 GB bf16.
-# FSDP overhead per GPU: ~6 GB (weights 1 GB + optimizer 4 GB + grad 1 GB).
-# Leaves ~74 GB per GPU for activations + rollout KV cache.
+# FSDP overhead per GPU (sharded across 8): ~4 GB (shard 1 GB + optim 2 GB + grad 1 GB).
+# Training peak per GPU: ~31 GB (FSDP base 4 GB + activations/logits 27 GB).
 #
-# vLLM KV cache per token (4B, GQA 8 heads, head_dim=80, 36 layers, bf16):
-#   2 × 8 × 80 × 2 bytes × 36 = 92 160 bytes ≈ 90 KB/token
-# At gpu_memory_utilization=0.70: 56 GB budget − 8 GB weights = 48 GB KV cache
-#   → ~524 K tokens in cache pool per GPU instance; very comfortable for 4096-
-#     token responses with ROLLOUT_MAX_NUM_SEQS=512.
+# vLLM KV cache per token (4B, GQA 8 heads, head_dim=128, 36 layers, bf16):
+#   2 × 8 × 128 × 2 bytes × 36 = 147 456 bytes ≈ 144 KB/token
+# At gpu_memory_utilization=0.85: 68 GB budget − 8 GB weights = 60 GB KV cache
+#   → ~417 K tokens in cache pool; free_cache_engine releases this during training.
+#
+# Memory timeline per step:
+#   Rollout:  vLLM 68 GB (model 8 + KV cache 60) — training idle
+#   sleep():  vLLM releases KV cache → 8 GB retained
+#   Training: FSDP 31 GB + vLLM weights 8 GB = 39 GB peak
+#   wake_up(): vLLM rebuilds KV cache from scratch
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 4))   # 18 384 (2× from 1.7B)
-infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 6))   # 27 576
+actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 4))}   # default 18384
+infer_ppo_max_token_len=${INFER_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 6))}   # default 27576
 offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
@@ -246,23 +269,22 @@ GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}    # 2× from 1.7
 LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}         # 2× from 1.7B
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
-ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
+ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-false}   # CUDA graphs: -18% generation time (iter4)
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
-ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.70}   # 0.55→0.70 (H800 headroom)
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.85}   # 0.85: free_cache_engine releases KV cache during training (iter3/4)
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}                                     # 4B fits on 1 GPU
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
-# 48 GB KV cache pool per GPU → 512 concurrent sequences is conservative
 ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-512}
 
 if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
-    # vLLM 0.8.5 CuMemAllocator.sleep() asserts against expandable_segments:True
-    # (PYTORCH_CUDA_ALLOC_CONF), so free_cache_engine and sleep_mode must stay off.
-    # Memory is managed by lowering gpu_memory_utilization instead.
-    ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
-    ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=False
+    # vLLM 0.12: free_cache_engine releases KV cache between rollout and training.
+    # Requires PYTORCH_CUDA_ALLOC_CONF without expandable_segments at startup
+    # (verl manages expandable_segments dynamically via set_expandable_segments()).
+    ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=True
+    ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=True
 else
     ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=True
     ROLLOUT_ENABLE_SLEEP_MODE_DEFAULT=True
@@ -283,11 +305,13 @@ if [ "${USE_REMOVE_PADDING}" = "True" ]; then
 fi
 
 # ===================== Section 13: Training Schedule ==========================
-test_freq=5
-save_freq=20
-total_epochs=3
-total_training_steps=700
-val_before_train=True
+# Dataset: 7500 prompts. At train_prompt_bsz=64: 1 epoch ≈ 117 steps.
+# Default 175 steps ≈ 1.5 epochs. total_epochs=3 is the hard ceiling.
+test_freq=${TEST_FREQ:-10}
+save_freq=${SAVE_FREQ:-25}
+total_epochs=${TOTAL_EPOCHS:-3}
+total_training_steps=${TOTAL_TRAINING_STEPS:-175}
+val_before_train=${VAL_BEFORE_TRAIN:-True}
 
 # ==============================================================================
 # Section 14: Launch Training
