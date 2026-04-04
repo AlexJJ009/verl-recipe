@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Baseline MiniRL on MATH (vLLM rollout by default)
-# Model: Qwen3-4B SFT-Stage-1 (single model, NO joint training)
+# Model: Qwen3-4B Base (single model, NO joint training)
 # Algorithm: MiniRL loss + Dr.GRPO advantage + token-level IS correction
 #
 # Based on: run_baseline_minirl_qwen3_1.7b_math.sh
@@ -73,7 +73,7 @@ export HYDRA_FULL_ERROR=1
 # PYTORCH_CUDA_ALLOC_CONF is set in Section 1 (conditional on free_cache_engine)
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-4B-SFT-MATH-GC500"}
+RUN_PREFIX=${RUN_PREFIX:-"Baseline-MiniRL-Qwen3-4B-Base-MATH-GC500"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"JointTraining"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -90,14 +90,14 @@ NNODES=${NNODES:-1}
 NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
 # ===================== Section 5: Model & Data Paths ==========================
-MODEL_PATH=${MODEL_PATH:-"/data-1/model_weights/external/SFT-Stage-1"}
+MODEL_PATH=${MODEL_PATH:-"/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539"}
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/Maxwell-Jia-MATH-Processed-no-system-prompt/train_with_system_prompt.parquet"}
-TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test.parquet','/data-1/dataset/AIME-2025/aime-2025.parquet']"}
+TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test_with_system_prompt.parquet','/data-1/dataset/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 # Verify base model exists
 if [ ! -d "$MODEL_PATH" ]; then
-    echo "ERROR: SFT model not found at $MODEL_PATH"
-    echo "Please ensure the SFT-Stage-1 model weights are available at the specified path."
+    echo "ERROR: Base model not found at $MODEL_PATH"
+    echo "Please ensure the Qwen3-4B-Base model weights are available at the specified path."
     exit 1
 fi
 
