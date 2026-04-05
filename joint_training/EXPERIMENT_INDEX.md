@@ -160,6 +160,40 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 
 ---
 
+### EXP-08: Qwen3-4B-Base (Pretrained Baseline)
+
+| Field | Value |
+|---|---|
+| **Script** | N/A (pretrained, no training) |
+| **Goal** | Pretrained baseline for Qwen3-4B — establishes zero-training reference for DPO and RL comparisons |
+| **Algorithm** | Pretrained (no training) |
+| **Model** | Qwen3-4B-Base (`Qwen/Qwen3-4B-Base`) |
+| **Dataset** | N/A |
+| **Key Params** | N/A |
+| **Model Weights** | `/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539` |
+| **Inference** | EVAL-06 in `INFERENCE_RESULTS.md` (7 benchmarks: MATH-500, AIME-2025, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP) |
+| **Status** | Pretrained |
+
+---
+
+### EXP-09: Qwen3-4B-DPO (External DPO Training)
+
+| Field | Value |
+|---|---|
+| **Script** | N/A (external: HuggingFace TRL DPO) |
+| **Goal** | DPO-trained Qwen3-4B-Base using preference pairs generated from Base model |
+| **Algorithm** | DPO (TRL, beta=0.1) |
+| **Model** | Qwen3-4B-Base → DPO |
+| **Dataset** | `/data-1/dataset/dpo-4b-pairs.jsonl` (6,013 pairs from EnsembleLLM distillation data) |
+| **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, 376 steps |
+| **Logs** | `/data-1/checkpoints/qwen3-4b-dpo/training_logs/training_summary.json` |
+| **Model Weights** | `/data-1/checkpoints/qwen3-4b-dpo` (final), `checkpoint-200`, `checkpoint-376` |
+| **Inference** | EVAL-07 in `INFERENCE_RESULTS.md` (7 benchmarks) |
+| **Known Issue** | Preference pairs generated from Base model (not SFT); chosen/rejected quality gap may be too large (final margins=3.99). Extraction failure ~28-66% suggests DPO may have degraded format compliance vs Base. |
+| **Status** | External (completed) |
+
+---
+
 ### EXP-00: GRPO-Example-Script (Reference Only)
 
 | Field | Value |
@@ -248,6 +282,8 @@ Recommended folder structure:
 | `/data-1/model_weights/EXP-06_Baseline-MiniRL-1.7B-MATH-GC500/step_680` | EXP-06 | 680 (last ckpt) | Merged (single model, 3.8 GB) |
 | `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200` | EXP-07 | 200 (final) | Merged (joint, 7.6 GB) |
 | `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200_model2` | EXP-07 | 200 (final) | Extracted model2 (3.8 GB) |
+| `/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd...` | EXP-08 | N/A (pretrained) | HuggingFace cache (8.2 GB) |
+| `/data-1/checkpoints/qwen3-4b-dpo` | EXP-09 | 376 (final) | External DPO (8.2 GB) |
 
 ---
 

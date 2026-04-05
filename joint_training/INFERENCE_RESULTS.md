@@ -181,9 +181,83 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ---
 
-## Cross-Experiment Comparison (EVAL-01 vs EVAL-02 vs EVAL-03 vs EVAL-04 vs EVAL-05)
+## EVAL-06: EXP-08 Qwen3-4B-Base (Pretrained Baseline)
 
-| Benchmark | EXP-04 Joint 100s (mean@3) | EXP-05 Baseline gc=1.0 200s (mean@3) | EXP-06 Baseline gc=500 200s (mean@3) | EXP-06 Baseline gc=500 680s (mean@8, n=8) | EXP-07 Joint gc=500 dual 200s (mean@8, n=8) |
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-08 (Qwen3-4B-Base, Pretrained Baseline) |
+| **Model Weights** | `/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539` |
+| **Checkpoint Step** | N/A (pretrained) |
+| **Sub-Model** | N/A (single model) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-05 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@1 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|---|
+| **MATH-500** | 500 | **32.5%** | 32.5% | 60.8% | 50.6% | 39.8% |
+| **AIME-2025** | 30 | **3.3%** | 3.3% | 10.0% | 3.3% | 40.0% |
+| **AMC-2023** | 40 | **15.0%** | 15.0% | 30.0% | 22.5% | 37.5% |
+| **AQUA** | 254 | **6.8%** | 6.8% | 18.1% | 13.4% | 69.0% |
+| **GSM8K** | 1319 | **27.8%** | 27.8% | 60.0% | 52.8% | 59.3% |
+| **MAWPS** | 355 | **21.7%** | 21.7% | 51.0% | 46.8% | 70.1% |
+| **SVAMP** | 300 | **25.9%** | 25.9% | 58.0% | 53.0% | 66.0% |
+
+### Notes
+
+- This is the raw pretrained Qwen3-4B-Base with no training at all — serves as the zero-training baseline.
+- All datasets use `_with_system_prompt` variants with unified `\boxed{}` instruction in user prompt.
+- Extraction failure is high (38-70%) because the pretrained base model has not been trained to follow the `\boxed{}` format consistently.
+- Total: 2798 prompts × 3 = 8394 generations, completed in 1414s.
+- Raw results saved to: `/data-1/eval_results/qwen3-4b-base_n3_sysprompt/`
+
+---
+
+## EVAL-07: EXP-09 Qwen3-4B-DPO (Base-Sourced Preference Pairs)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-09 (Qwen3-4B-DPO, External DPO Training) |
+| **Model Weights** | `/data-1/checkpoints/qwen3-4b-dpo` |
+| **Checkpoint Step** | 376 (final) |
+| **Sub-Model** | N/A (single model) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-05 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@1 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|---|
+| **MATH-500** | 500 | **34.1%** | 34.1% | 66.0% | 51.6% | 35.5% |
+| **AIME-2025** | 30 | **2.2%** | 2.2% | 6.7% | 6.7% | 41.1% |
+| **AMC-2023** | 40 | **20.0%** | 20.0% | 47.5% | 27.5% | 27.5% |
+| **AQUA** | 254 | **7.3%** | 7.3% | 20.5% | 13.0% | 59.1% |
+| **GSM8K** | 1319 | **35.0%** | 35.0% | 69.1% | 60.7% | 50.1% |
+| **MAWPS** | 355 | **24.9%** | 24.9% | 56.1% | 50.1% | 66.0% |
+| **SVAMP** | 300 | **27.9%** | 27.9% | 61.0% | 54.3% | 59.9% |
+
+### Notes
+
+- DPO trained from Qwen3-4B-Base using preference pairs generated from the Base model itself (not SFT).
+- Compared to EVAL-06 (Base): DPO shows modest gains on most benchmarks (MATH-500 +1.6%, GSM8K +7.2%, AMC +5.0%, MAWPS +3.2%, SVAMP +2.0%), but AIME-2025 dropped from 3.3% to 2.2%.
+- Extraction failure improved slightly vs Base (35.5% vs 39.8% on MATH-500, 50.1% vs 59.3% on GSM8K), suggesting DPO partially learned to follow `\boxed{}` format.
+- Both extraction failure rates remain much higher than verl-trained 1.7B models (EVAL-01 through EVAL-05 had <5% on MATH-500), indicating 4B base→DPO pipeline has significant format compliance issues.
+- DPO training summary: final_loss=0.138, final_margins=3.99, 376 steps, 1 epoch over 6013 pairs.
+- Total: 2798 prompts × 3 = 8394 generations, completed in 1218s.
+- Raw results saved to: `/data-1/eval_results/qwen3-4b-dpo_n3_sysprompt_v2/`
+
+---
+
+## Cross-Experiment Comparison (EVAL-01 through EVAL-07)
+
+### 1.7B Models (verl-trained, mean@3 or mean@8)
+
+| Benchmark | EXP-04 Joint 100s (mean@3) | EXP-05 Baseline gc=1.0 200s (mean@3) | EXP-06 Baseline gc=500 200s (mean@3) | EXP-06 Baseline gc=500 680s (mean@8) | EXP-07 Joint gc=500 dual 200s (mean@8) |
 |---|---|---|---|---|---|
 | **MATH-500** | 64.2% | 61.4% | 64.1% | **66.9%** | 66.1% |
 | **AIME-2025** | 4.4% | **5.6%** | 2.2% | 3.3% | 3.8% |
@@ -191,7 +265,23 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 | **MinervaMAth** | 24.4% | **27.6%** | 24.8% | 25.7% | 24.6% |
 | **OlympiadBench** | 28.3% | 28.1% | 28.1% | **30.3%** | 29.1% |
 
-**Observations**: For EVAL-04 and EVAL-05, this table uses `mean@8` from the n=8 runs; earlier entries retain their original `mean@3` from the n=3 evaluations. EVAL-04 (EXP-06 step 680) remains the strongest offline checkpoint overall, still leading on MATH-500 (**66.9%**), AMC-2023 (**43.1%**), MinervaMAth (**25.7%**), and OlympiadBench (**30.3%**). EVAL-05 (EXP-07 final model2) improves over EXP-04's earlier 100-step joint run on MATH-500 (+1.9%) and OlympiadBench (+0.8%), but it does not set a new best and underperforms EVAL-04 on every benchmark except a small AIME-2025 gain (+0.5%). The clearest failure mode is extraction robustness: EXP-07's extraction_fail is dramatically higher than prior runs, especially on AIME-2025 (61.3%), which likely masks any raw reasoning gains in the final checkpoint.
+### 4B Models: Base vs DPO (mean@3, n=3, system prompt + boxed instruction)
+
+| Benchmark | EXP-08 Qwen3-4B-Base (pretrained) | EXP-09 Qwen3-4B-DPO | Delta |
+|---|---|---|---|
+| **MATH-500** | 32.5% | **34.1%** | +1.6% |
+| **AIME-2025** | **3.3%** | 2.2% | -1.1% |
+| **AMC-2023** | 15.0% | **20.0%** | +5.0% |
+| **AQUA** | 6.8% | **7.3%** | +0.5% |
+| **GSM8K** | 27.8% | **35.0%** | +7.2% |
+| **MAWPS** | 21.7% | **24.9%** | +3.2% |
+| **SVAMP** | 25.9% | **27.9%** | +2.0% |
+
+**Observations**:
+
+*1.7B verl-trained models*: EVAL-04 (EXP-06 step 680) remains the strongest 1.7B checkpoint overall, leading on MATH-500 (66.9%), AMC-2023 (43.1%), and OlympiadBench (30.3%).
+
+*4B Base vs DPO*: DPO provides modest improvements over the pretrained Base on most benchmarks (+1.6% to +7.2%), with the largest gain on GSM8K (+7.2%). However, AIME-2025 drops from 3.3% to 2.2%, and extraction failure remains high for both models (35-70%), far worse than the 1.7B verl-trained models (<5%). This suggests the Base→DPO pipeline (using Base-generated preference pairs) provides limited benefit compared to RL training, and the 4B models have not learned robust `\boxed{}` format compliance. The DPO preference pairs were generated from the Base model itself (not SFT), which may explain the limited improvement — the quality gap between chosen and rejected may not provide a strong enough learning signal for format compliance.
 
 ---
 
