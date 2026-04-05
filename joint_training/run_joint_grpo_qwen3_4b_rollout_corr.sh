@@ -202,7 +202,7 @@ max_response_length=4096
 # (see docs/joint_training/plans/active/zero_advantage_batch.md)
 train_prompt_bsz=16
 n_resp_per_prompt=8
-train_prompt_mini_bsz=4
+train_prompt_mini_bsz=16              # 2× larger with remove_padding (no padding overhead)
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=1.0
@@ -213,13 +213,13 @@ val_top_p=0.95
 # ===================== Section 12: Performance & Memory =======================
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 1))
+actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 8))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 2))
 offload=True
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
-USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-1}
@@ -319,7 +319,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.trust_remote_code=True \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     \
     `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \

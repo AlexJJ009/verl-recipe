@@ -8,19 +8,27 @@
 # Purpose: Baseline comparison — identical algorithm setup except larger model.
 #   - Same MiniRL loss, Dr.GRPO advantage, token-level IS correction
 #   - Same MATH dataset with MATH-500 + AIME-2025 validation
-#   - Larger batch sizes (B=64, G=8) tuned for 4B on 8× H800
-#   - 8 GPUs (all H800s) — doubled from 1.7B baseline
+#   - Larger batch sizes (B=64, G=8) tuned for 4B on 8× A800
+#   - 8 GPUs (all A800s) — doubled from 1.7B baseline
 #
-# Hardware target: 8× H800 (80 GB each, 640 GB total)
+# Hardware target: 8× A800-SXM4-80GB (80 GB each, 640 GB total)
 # Batch-size rationale:
 #   - train_prompt_bsz 32→64: 2× GPUs → same per-GPU sequence load
 #   - actor_ppo_max_token_len 9192→18384: 2× GPU token budget (6 GB overhead)
-#   - ROLLOUT_GPU_MEMORY_UTILIZATION 0.85: free_cache_engine releases KV cache during training
+#   - ROLLOUT_GPU_MEMORY_UTILIZATION 0.7: balanced for A800 FlashInfer backend
 #   - ROLLOUT_ENFORCE_EAGER false: CUDA graphs reduce generation time by ~18%
 #   - ROLLOUT_FREE_CACHE_ENGINE True: release KV cache between rollout/training phases
 #   - ROLLOUT_MAX_NUM_SEQS 512: 4B GQA KV cache ~144 KB/tok
+#   - LOG_PROB_MAX_TOKEN_LEN_PER_GPU 18384: 4x budget reduces old_log_prob FSDP rounds
+#   - LOG_PROB_MICRO_BATCH_SIZE 16: match higher token budget for log-prob
 #
-# Performance (8×H800, 5-step benchmark):
+# Performance (8×A800, 5-step benchmark, 2026-04-04, flash_attn + flash_attention_2):
+#   - 69.4s/step: gen 45.7s (66%) + train 14.1s (20%) + logprob 3.7s (5%) + other 6.0s (9%)
+#   - ~850 tok/s throughput, MFU ~37.0%
+#   - flash_attn 2.8.1 + USE_REMOVE_PADDING=True + attn_implementation=flash_attention_2
+#   - Previous (no flash_attn): 190.0s/step, MFU 4.6% — 2.7× slower
+#
+# Previous H800 performance (for reference):
 #   - 139.8s/step: gen 45.2s (32%) + train 78.2s (56%) + other 16.4s (12%)
 #   - 1233 tok/s throughput, MFU 6.59%
 #
@@ -227,12 +235,12 @@ CUSTOM_REWARD_FN_NAME="compute_score_latex_verify"
 max_prompt_length=500                 # MATH problems are longer
 max_response_length=4096              # MATH needs longer reasoning chains
 
-# ===================== Section 10: Batch Sizes (tuned for 4B + 8× H800) ======
+# ===================== Section 10: Batch Sizes (tuned for 4B + 8× A800) ======
 # 2× prompts vs 1.7B: 8 GPUs vs 4 GPUs, same per-GPU sequence load.
 # 512 sequences/step (64 prompts × G=8), each up to 4596 tokens.
 train_prompt_bsz=64                   # B=64 (2× from 1.7B)
 n_resp_per_prompt=8                   # G=8
-train_prompt_mini_bsz=8              # mini batch (2× from 1.7B)
+train_prompt_mini_bsz=16             # 2× larger with remove_padding (no padding overhead)
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=1.0
@@ -241,9 +249,10 @@ top_k=-1
 val_top_p=0.95
 
 # ===================== Section 12: Performance & Memory =======================
-# H800 80 GB per GPU; 4B model = 8 GB bf16.
+# A800-SXM4 80 GB per GPU; 4B model = 8 GB bf16.
 # FSDP overhead per GPU (sharded across 8): ~4 GB (shard 1 GB + optim 2 GB + grad 1 GB).
-# Training peak per GPU: ~31 GB (FSDP base 4 GB + activations/logits 27 GB).
+# Training peak per GPU: ~44.8 GB (FSDP base 4 GB + padded activations/logits ~40 GB).
+# Note: higher than H800 (31 GB) because USE_REMOVE_PADDING=False → sequences padded.
 #
 # vLLM KV cache per token (4B, GQA 8 heads, head_dim=128, 36 layers, bf16):
 #   2 × 8 × 128 × 2 bytes × 36 = 147 456 bytes ≈ 144 KB/token
@@ -257,23 +266,23 @@ val_top_p=0.95
 #   wake_up(): vLLM rebuilds KV cache from scratch
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 4))}   # default 18384
+actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 8))}   # default 36768
 infer_ppo_max_token_len=${INFER_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 6))}   # default 27576
 offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
-USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}    # 2× from 1.7B
-LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}         # 2× from 1.7B
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-16}        # 4× larger for fewer FSDP rounds on A800
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-false}   # CUDA graphs: -18% generation time (iter4)
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
-LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
-ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.4}   # 0.4: FlashInfer default (lower to avoid OOM with new attention backend)
+LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((( max_prompt_length + max_response_length ) * 4))}  # 4x seq len → fewer FSDP all-gather rounds during log-prob
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.7}   # 0.7: A800 optimized (free_cache_engine releases KV during training)
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}                                     # 4B fits on 1 GPU
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
@@ -365,7 +374,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \
     actor_rollout_ref.model.trust_remote_code=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     \
     `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \

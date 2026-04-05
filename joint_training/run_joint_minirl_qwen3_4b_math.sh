@@ -251,7 +251,7 @@ max_response_length=4096              # MATH needs longer reasoning chains
 # 512 sequences/step (64 prompts × G=8), each up to 4596 tokens.
 train_prompt_bsz=64                   # B=64 (2× from 1.7B joint)
 n_resp_per_prompt=8                   # G=8
-train_prompt_mini_bsz=8              # mini batch (2× from 1.7B joint)
+train_prompt_mini_bsz=16              # 2× larger with remove_padding (no padding overhead)
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=1.0
@@ -271,13 +271,13 @@ val_top_p=0.95
 #   → ~155 K tokens in cache pool; comfortable for 256 concurrent sequences.
 sp_size=1
 use_dynamic_bsz=True
-actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 4))   # 18 384 (2× from 1.7B joint)
+actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 8))   # 18 384 (2× from 1.7B joint)
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 6))   # 27 576
 offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
-USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}    # 2× from 1.7B joint
@@ -378,7 +378,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.trust_remote_code=True \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     \
     `# --- Rollout (vLLM with FlashInfer backend) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \

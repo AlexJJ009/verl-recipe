@@ -255,7 +255,7 @@ offload=False
 fsdp_size=-1
 USE_REMOVE_PADDING_WAS_SET=${USE_REMOVE_PADDING+x}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
-USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-False}
+USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 # Rollout settings
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-8}
@@ -357,7 +357,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.model.trust_remote_code=True \
     +actor_rollout_ref.model.joint_training=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
-    +actor_rollout_ref.model.override_config.attn_implementation=sdpa \
+    +actor_rollout_ref.model.override_config.attn_implementation=flash_attention_2 \
     \
     `# --- Rollout (default vLLM; set ROLLOUT_ENGINE=hf to switch) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \

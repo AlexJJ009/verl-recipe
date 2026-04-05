@@ -194,6 +194,24 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 
 ---
 
+### EXP-10: Qwen3-8B-DPO (External DPO Training)
+
+| Field | Value |
+|---|---|
+| **Script** | N/A (external: HuggingFace TRL DPO) |
+| **Goal** | DPO-trained Qwen3-8B-Base using preference pairs — larger-scale DPO baseline for comparison |
+| **Algorithm** | DPO (TRL, beta=0.1) |
+| **Model** | Qwen3-8B-Base → DPO |
+| **Dataset** | `/data-1/dataset/dpo-8b-pairs.jsonl` (7,934 pairs) |
+| **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, ~496 steps |
+| **Logs** | `/data-1/checkpoints/qwen3-8b-dpo/training_logs/training_summary.json` |
+| **Model Weights** | `/data-1/checkpoints/qwen3-8b-dpo` (final), `checkpoint-400`, `checkpoint-496` |
+| **Inference** | EVAL-08 in `INFERENCE_RESULTS.md` (7 benchmarks) |
+| **Known Issue** | Extraction failure 13-32% across benchmarks; AQUA particularly poor (31.9%), likely due to multiple-choice format mismatch. |
+| **Status** | External (completed) |
+
+---
+
 ### EXP-00: GRPO-Example-Script (Reference Only)
 
 | Field | Value |
@@ -284,6 +302,7 @@ Recommended folder structure:
 | `/data-1/model_weights/EXP-07_Joint-MiniRL-1.7B-MATH-GC500-Dual/step_200_model2` | EXP-07 | 200 (final) | Extracted model2 (3.8 GB) |
 | `/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd...` | EXP-08 | N/A (pretrained) | HuggingFace cache (8.2 GB) |
 | `/data-1/checkpoints/qwen3-4b-dpo` | EXP-09 | 376 (final) | External DPO (8.2 GB) |
+| `/data-1/checkpoints/qwen3-8b-dpo` | EXP-10 | 496 (final) | External DPO (~16 GB) |
 
 ---
 
