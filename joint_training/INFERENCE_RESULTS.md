@@ -280,7 +280,7 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ### Notes
 
-- DPO trained from Qwen3-8B-Base using TRL (beta=0.1), 7,934 preference pairs from `/data-1/dataset/dpo-8b-pairs.jsonl`.
+- DPO trained from Qwen3-8B-Base using TRL (beta=0.1), 7,934 preference pairs from `/data-1/dataset/dpo/dpo-8b/dpo-8b-pairs.jsonl`.
 - Training: lr=5e-7, 1 epoch (~496 steps), effective batch=16, max_length=2048, cosine scheduler.
 - Final metrics: loss=0.130, margins=4.51, rewards_chosen=3.11, rewards_rejected=-1.41.
 - Compared to EVAL-07 (4B DPO): 8B DPO is substantially stronger across all benchmarks — MATH-500 51.1% vs 34.1% (+17.0%), GSM8K 57.2% vs 35.0% (+22.2%), MAWPS 72.8% vs 24.9% (+47.9%), SVAMP 70.2% vs 27.9% (+42.3%).
@@ -317,7 +317,7 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ### Notes
 
-- DPO trained from Qwen3-4B-Base-SFT-stage-1 (SFT checkpoint, not original base) using TRL (beta=0.1), 5,860 preference pairs from `/data-1/dataset/dpo-4b-sft-pairs.jsonl`.
+- DPO trained from Qwen3-4B-Base-SFT-stage-1 (SFT checkpoint, not original base) using TRL (beta=0.1), 5,860 preference pairs from `/data-1/dataset/dpo/dpo-4b-sft/dpo-4b-sft-pairs.jsonl`.
 - Training: lr=5e-7, 1 epoch (~365 steps), effective batch=16, max_length=2048, cosine scheduler.
 - Final metrics: loss=0.460, margins=0.57, rewards_chosen=-0.014, rewards_rejected=-0.582.
 - Compared to EVAL-07 (4B Base→DPO): SFT→DPO dramatically improves across all benchmarks — MATH-500 67.7% vs 34.1% (+33.6%), GSM8K 89.8% vs 35.0% (+54.8%), MAWPS 94.4% vs 24.9% (+69.5%), SVAMP 90.7% vs 27.9% (+62.8%), AQUA 65.0% vs 7.3% (+57.7%), AMC 40.8% vs 20.0% (+20.8%), AIME 7.8% vs 2.2% (+5.6%).

@@ -184,7 +184,7 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 | **Goal** | DPO-trained Qwen3-4B-Base using preference pairs generated from Base model |
 | **Algorithm** | DPO (TRL, beta=0.1) |
 | **Model** | Qwen3-4B-Base → DPO |
-| **Dataset** | `/data-1/dataset/dpo-4b-pairs.jsonl` (6,013 pairs from EnsembleLLM distillation data) |
+| **Dataset** | `/data-1/dataset/dpo/dpo-4b/dpo-4b-pairs.jsonl` (6,013 pairs from EnsembleLLM distillation data) |
 | **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, 376 steps |
 | **Logs** | `/data-1/checkpoints/qwen3-4b-dpo/training_logs/training_summary.json` |
 | **Model Weights** | `/data-1/checkpoints/qwen3-4b-dpo` (final), `checkpoint-200`, `checkpoint-376` |
@@ -202,7 +202,7 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 | **Goal** | DPO-trained Qwen3-8B-Base using preference pairs — larger-scale DPO baseline for comparison |
 | **Algorithm** | DPO (TRL, beta=0.1) |
 | **Model** | Qwen3-8B-Base → DPO |
-| **Dataset** | `/data-1/dataset/dpo-8b-pairs.jsonl` (7,934 pairs) |
+| **Dataset** | `/data-1/dataset/dpo/dpo-8b/dpo-8b-pairs.jsonl` (7,934 pairs) |
 | **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, ~496 steps |
 | **Logs** | `/data-1/checkpoints/qwen3-8b-dpo/training_logs/training_summary.json` |
 | **Model Weights** | `/data-1/checkpoints/qwen3-8b-dpo` (final), `checkpoint-400`, `checkpoint-496` |
@@ -220,7 +220,7 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 | **Goal** | DPO-trained Qwen3-4B-SFT checkpoint — tests whether SFT→DPO pipeline outperforms Base→DPO |
 | **Algorithm** | DPO (TRL, beta=0.1) |
 | **Model** | Qwen3-4B-Base-SFT-stage-1 → DPO |
-| **Dataset** | `/data-1/dataset/dpo-4b-sft-pairs.jsonl` (5,860 pairs from EnsembleLLM distillation data, SFT-sourced rejected) |
+| **Dataset** | `/data-1/dataset/dpo/dpo-4b-sft/dpo-4b-sft-pairs.jsonl` (5,860 pairs from EnsembleLLM distillation data, SFT-sourced rejected) |
 | **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, 365 steps |
 | **Logs** | `/data-1/checkpoints/qwen3-4b-sft-dpo/training_logs/training_summary.json` |
 | **Model Weights** | `/data-1/checkpoints/qwen3-4b-sft-dpo` (final), `checkpoint-200`, `checkpoint-367` |
