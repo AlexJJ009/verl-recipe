@@ -212,6 +212,23 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 
 ---
 
+### EXP-11: Qwen3-4B-SFT-DPO (External DPO on SFT Checkpoint)
+
+| Field | Value |
+|---|---|
+| **Script** | N/A (external: HuggingFace TRL DPO) |
+| **Goal** | DPO-trained Qwen3-4B-SFT checkpoint — tests whether SFT→DPO pipeline outperforms Base→DPO |
+| **Algorithm** | DPO (TRL, beta=0.1) |
+| **Model** | Qwen3-4B-Base-SFT-stage-1 → DPO |
+| **Dataset** | `/data-1/dataset/dpo-4b-sft-pairs.jsonl` (5,860 pairs from EnsembleLLM distillation data, SFT-sourced rejected) |
+| **Key Params** | lr=5e-7, epochs=1, batch=16 (effective), max_length=2048, warmup=0.1, cosine scheduler, 365 steps |
+| **Logs** | `/data-1/checkpoints/qwen3-4b-sft-dpo/training_logs/training_summary.json` |
+| **Model Weights** | `/data-1/checkpoints/qwen3-4b-sft-dpo` (final), `checkpoint-200`, `checkpoint-367` |
+| **Inference** | EVAL-09 in `INFERENCE_RESULTS.md` (7 benchmarks) |
+| **Status** | External (completed) |
+
+---
+
 ### EXP-00: GRPO-Example-Script (Reference Only)
 
 | Field | Value |
@@ -303,6 +320,7 @@ Recommended folder structure:
 | `/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd...` | EXP-08 | N/A (pretrained) | HuggingFace cache (8.2 GB) |
 | `/data-1/checkpoints/qwen3-4b-dpo` | EXP-09 | 376 (final) | External DPO (8.2 GB) |
 | `/data-1/checkpoints/qwen3-8b-dpo` | EXP-10 | 496 (final) | External DPO (~16 GB) |
+| `/data-1/checkpoints/qwen3-4b-sft-dpo` | EXP-11 | 365 (final) | External SFT→DPO (8.2 GB) |
 
 ---
 

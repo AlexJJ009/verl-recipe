@@ -290,7 +290,45 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ---
 
-## Cross-Experiment Comparison (EVAL-01 through EVAL-08)
+## EVAL-09: EXP-11 Qwen3-4B-SFT-DPO (SFT→DPO Pipeline)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-11 (Qwen3-4B-SFT-DPO, External DPO on SFT Checkpoint) |
+| **Model Weights** | `/data-1/checkpoints/qwen3-4b-sft-dpo` |
+| **Checkpoint Step** | 365 (final) |
+| **Sub-Model** | N/A (single model) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-06 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@1 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|---|
+| **MATH-500** | 500 | **67.7%** | 67.7% | 80.2% | 78.4% | 29.9% |
+| **AIME-2025** | 30 | **7.8%** | 7.8% | 13.3% | 13.3% | 87.8% |
+| **AMC-2023** | 40 | **40.8%** | 40.8% | 52.5% | 52.5% | 57.5% |
+| **AQUA** | 254 | **65.0%** | 65.0% | 80.7% | 76.4% | 23.2% |
+| **GSM8K** | 1319 | **89.8%** | 89.8% | 94.8% | 92.5% | 3.7% |
+| **MAWPS** | 355 | **94.4%** | 94.4% | 96.3% | 96.3% | 1.6% |
+| **SVAMP** | 300 | **90.7%** | 90.7% | 95.0% | 93.3% | 4.0% |
+
+### Notes
+
+- DPO trained from Qwen3-4B-Base-SFT-stage-1 (SFT checkpoint, not original base) using TRL (beta=0.1), 5,860 preference pairs from `/data-1/dataset/dpo-4b-sft-pairs.jsonl`.
+- Training: lr=5e-7, 1 epoch (~365 steps), effective batch=16, max_length=2048, cosine scheduler.
+- Final metrics: loss=0.460, margins=0.57, rewards_chosen=-0.014, rewards_rejected=-0.582.
+- Compared to EVAL-07 (4B Base→DPO): SFT→DPO dramatically improves across all benchmarks — MATH-500 67.7% vs 34.1% (+33.6%), GSM8K 89.8% vs 35.0% (+54.8%), MAWPS 94.4% vs 24.9% (+69.5%), SVAMP 90.7% vs 27.9% (+62.8%), AQUA 65.0% vs 7.3% (+57.7%), AMC 40.8% vs 20.0% (+20.8%), AIME 7.8% vs 2.2% (+5.6%).
+- Compared to EVAL-08 (8B Base→DPO): SFT→DPO 4B surpasses 8B DPO on MATH-500 (67.7% vs 51.1%), GSM8K (89.8% vs 57.2%), MAWPS (94.4% vs 72.8%), SVAMP (90.7% vs 70.2%), AQUA (65.0% vs 5.1%), AMC (40.8% vs 30.0%). Only trails on AIME (7.8% vs 8.9%).
+- Extraction failure is mixed: low on GSM8K/MAWPS/SVAMP (1.6-4.0%), moderate on MATH-500/AQUA (23-30%), high on AMC/AIME (58-88%). The SFT base improves format compliance vs Base→DPO on easy benchmarks but not on competition-level ones.
+- Total: 2798 prompts × 3 = 8394 generations, completed in 1286s.
+- Raw results saved to: `/data-1/checkpoints/qwen3-4b-sft-dpo/inference_n3/`
+
+---
+
+## Cross-Experiment Comparison (EVAL-01 through EVAL-09)
 
 ### 1.7B Models (verl-trained, mean@3 or mean@8)
 
@@ -302,23 +340,23 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 | **MinervaMAth** | 24.4% | **27.6%** | 24.8% | 25.7% | 24.6% |
 | **OlympiadBench** | 28.3% | 28.1% | 28.1% | **30.3%** | 29.1% |
 
-### 4B/8B Models: Base vs DPO (mean@3, n=3, system prompt + boxed instruction)
+### 4B/8B Models: Base vs DPO vs SFT→DPO (mean@3, n=3, system prompt + boxed instruction)
 
-| Benchmark | EXP-08 Qwen3-4B-Base | EXP-09 Qwen3-4B-DPO | EXP-10 Qwen3-8B-DPO |
-|---|---|---|---|
-| **MATH-500** | 32.5% | 34.1% | **51.1%** |
-| **AIME-2025** | 3.3% | 2.2% | **8.9%** |
-| **AMC-2023** | 15.0% | 20.0% | **30.0%** |
-| **AQUA** | 6.8% | 7.3% | **5.1%** |
-| **GSM8K** | 27.8% | 35.0% | **57.2%** |
-| **MAWPS** | 21.7% | 24.9% | **72.8%** |
-| **SVAMP** | 25.9% | 27.9% | **70.2%** |
+| Benchmark | EXP-08 Qwen3-4B-Base | EXP-09 Qwen3-4B-DPO | EXP-10 Qwen3-8B-DPO | EXP-11 Qwen3-4B-SFT-DPO |
+|---|---|---|---|---|
+| **MATH-500** | 32.5% | 34.1% | 51.1% | **67.7%** |
+| **AIME-2025** | 3.3% | 2.2% | **8.9%** | 7.8% |
+| **AMC-2023** | 15.0% | 20.0% | 30.0% | **40.8%** |
+| **AQUA** | 6.8% | 7.3% | 5.1% | **65.0%** |
+| **GSM8K** | 27.8% | 35.0% | 57.2% | **89.8%** |
+| **MAWPS** | 21.7% | 24.9% | 72.8% | **94.4%** |
+| **SVAMP** | 25.9% | 27.9% | 70.2% | **90.7%** |
 
 **Observations**:
 
 *1.7B verl-trained models*: EVAL-04 (EXP-06 step 680) remains the strongest 1.7B checkpoint overall, leading on MATH-500 (66.9%), AMC-2023 (43.1%), and OlympiadBench (30.3%).
 
-*4B/8B Base vs DPO*: The 8B DPO model (EXP-10) is dramatically stronger than the 4B DPO (EXP-09) across nearly all benchmarks — MATH-500 51.1% vs 34.1%, GSM8K 57.2% vs 35.0%, MAWPS 72.8% vs 24.9%, SVAMP 70.2% vs 27.9%. The lone exception is AQUA where 8B DPO (5.1%) slightly trails 4B DPO (7.3%), though both are near random. Extraction failure improved significantly at 8B scale (13-32% vs 28-66% for 4B DPO), indicating the larger model learns `\boxed{}` format compliance more readily from DPO. However, the 8B DPO still underperforms verl-trained 1.7B models on MATH-500 (51.1% vs 66.9%) despite being 4.7× larger, reinforcing that RL training provides far stronger gains than DPO alone.
+*4B/8B DPO pipeline comparison*: The SFT→DPO pipeline (EXP-11) is dramatically stronger than both Base→DPO approaches. The 4B SFT→DPO model surpasses even the 8B Base→DPO on 6 of 7 benchmarks: MATH-500 67.7% vs 51.1% (+16.6%), GSM8K 89.8% vs 57.2% (+32.6%), MAWPS 94.4% vs 72.8% (+21.6%), SVAMP 90.7% vs 70.2% (+20.5%), AQUA 65.0% vs 5.1% (+59.9%), AMC 40.8% vs 30.0% (+10.8%). Only AIME-2025 (7.8% vs 8.9%) slightly trails the 8B DPO. This confirms the critical importance of SFT pre-training before DPO: the SFT checkpoint provides format compliance and reasoning capability that DPO alone cannot instill. Notably, the 4B SFT→DPO now matches verl-trained 1.7B models on MATH-500 (67.7% vs 66.9%).
 
 ---
 
