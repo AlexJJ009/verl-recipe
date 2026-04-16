@@ -1,31 +1,23 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# On-Policy Weak-Driven SFT (WDL-SFT) Training on MATH
+# Milestone 5.6 (M5.6): On-Policy WDL-SFT Training on MATH
 # Model: Qwen3-4B Joint Model (Weak=Base + Strong=SFT-stage-1, ~8B total)
-# Algorithm: WDL-SFT loss (forward L+ on correct rollouts, reverse L- on incorrect)
+# Algorithm: Bidirectional WDL-SFT (forward L+ on correct rollouts, reverse L- on incorrect)
 #
-# Based on: recipe/joint_training/run_joint_minirl_qwen3_4b_math.sh
-# Key changes from MiniRL:
-#   - loss_mode="wdl_sft" (replaces MiniRL loss with bidirectional WD-SFT)
-#   - No clipping, no IS correction (pure SFT-style loss)
-#   - No KL penalty (not needed for SFT-style training)
-#   - β=0.1 (reverse SFT weight, configurable via WDL_SFT_BETA)
-#   - λ=0.5 (logit mixing weight for fused rollout)
-#   - N=8 rollouts per prompt, B=64 prompts per batch
-#   - Weak model: Qwen3-4B-Base (pretrained)
-#   - Strong model: Qwen3-4B-Base-SFT-stage-1 (SFT-finetuned)
+# Based on: run_on_policy_wdl_sft_qwen3_4b_math_m5_5.sh (M5.5 script)
+# Key changes from M5.5:
+#   - β=0.1 (reverse SFT re-enabled)
+#   - lr=5e-7 (same as M5.5)
+#   - total_training_steps=300
+#   - save_freq=25, test_freq=25
+#   - max_actor_ckpt_to_keep=13
+#   - calculate_entropy=True
+#   - Updated RUN_PREFIX / logs / checkpoints to M5.6
 #
 # Hardware target: 8× A800-SXM4-80GB (640 GB total)
 #
 # Usage:
-#   bash recipe/on_policy_wdl_sft/run_on_policy_wdl_sft_qwen3_4b_math.sh
-#
-# Environment variables (override defaults):
-#   WDL_SFT_BETA=0.1           # Reverse SFT weight β
-#   FUSION_LAMBDA=0.50          # Logit mixing weight λ
-#   BASE_MODEL_PATH=...         # Weak model path
-#   MODEL2_PATH=...             # Strong model path
-#   TRAIN_FILE=...              # Training data parquet
+#   bash recipe/on_policy_wdl_sft/run_on_policy_wdl_sft_qwen3_4b_math_m5_6.sh
 # ==============================================================================
 
 set -xeuo pipefail
@@ -59,7 +51,7 @@ export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH"}
+RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-M5-6"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"OnPolicyWDLSFT"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -115,7 +107,7 @@ fi
 # ===================== Section 6: Checkpoint Directory =========================
 MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
 MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
-MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-5}
+MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-13}
 MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-2}
 
 DEFAULT_CKPT_BASE_DIR="/data-1/checkpoints"
@@ -199,8 +191,8 @@ kl_loss_coef=0.0
 # WDL-SFT loss mode (replaces MiniRL)
 loss_mode="wdl_sft"
 
-# WDL-SFT hyperparameters (Section 4 defaults)
-# β: reverse SFT weight (conservative starting point)
+# WDL-SFT hyperparameters
+# β=0.1: enable reverse SFT on incorrect rollouts
 WDL_SFT_BETA=${WDL_SFT_BETA:-0.1}
 
 # Clipping params (not used by WDL-SFT but required by config schema)
@@ -294,11 +286,11 @@ if [ "${USE_REMOVE_PADDING}" = "True" ]; then
 fi
 
 # ===================== Section 13: Training Schedule ==========================
-# M5: Full epoch (~1639 steps at B=64, dataset=104916). Validate & save every 100 steps.
-test_freq=${TEST_FREQ:-100}
-save_freq=${SAVE_FREQ:-100}
+# M5.6: Short bidirectional run (300 steps). Validate & save every 25 steps.
+test_freq=${TEST_FREQ:-25}
+save_freq=${SAVE_FREQ:-25}
 total_epochs=${TOTAL_EPOCHS:-2}
-total_training_steps=${TOTAL_TRAINING_STEPS:-1745}
+total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
 
 # ==============================================================================
@@ -327,13 +319,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.use_torch_compile=False \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=5e-7 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.actor.calculate_entropy=True \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
