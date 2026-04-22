@@ -48,6 +48,8 @@ exports 4–5 knobs and sources the common launcher.
 
 ## Usage
 
+### Local physical machine (default `/data-1/...` paths)
+
 ```bash
 cd /data-1/verl07/verl
 tmux new-session -s ablation_2a_base
@@ -60,6 +62,38 @@ Or override knobs on the command line:
 ```bash
 LR=7e-7 TOTAL_TRAINING_STEPS=400 bash run_2a_sft.sh
 ```
+
+### Meituan MLP (AFO) — see `meituan/` subfolder
+
+The **same** `run_2X_*.sh` scripts run on Meituan MLP. The `meituan/` subfolder
+provides a thin path-override layer that redirects all `/data-1/...` defaults
+to dolphinfs paths:
+
+```
+meituan/
+├── env.sh       # HF_HOME, TRAIN_FILE, BASE_CKPT_DIR, ... → /mnt/dolphinfs/.../lgx/...
+├── jupyter.sh   # AFO worker entry: sources env.sh, dispatches on EXPERIMENT
+└── run.hope     # AFO job config template
+```
+
+Workflow:
+1. Copy the repo branch to `$LGX/verl08/verl-v0.7-feature-on-policy-wdl-sft/`
+2. Upload `Qwen3-4B-Base-SFT-stage-1` (only needed for `-sft` variants) and the
+   three parquet datasets (EnsembleLLM train + MATH-500 + AIME-2025 val) to
+   the paths shown in `meituan/env.sh`
+3. Copy `meituan/run.hope` to `$LGX/hope_dir/`, fill `afo.docker.image.name`,
+   set `afo.app.env.EXPERIMENT=2z-base` (or whichever variant)
+4. `hope submit run.hope`
+
+**Currently runnable on Meituan** (base model uploaded, SFT pending):
+- `2z-base` — MiniRL baseline. **Recommended first smoke test.**
+- `2a-base`, `2b-base`, `2c-base` — WDL-SFT-IS variants on Base init
+
+**Blocked until SFT model uploaded**:
+- `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft` — all `-sft` variants
+
+`meituan/jupyter.sh` fails fast with a clear error if the required init model
+or dataset isn't present at the expected dolphinfs path.
 
 ## Important caveats
 

@@ -1,0 +1,65 @@
+# ==============================================================================
+# AFO job config template for ablation_single_model.
+#
+# Usage:
+#   1. Copy this file to hope_dir/ (or your AFO submission staging area)
+#   2. Fill afo.docker.image.name with the verl image URL
+#   3. Pick EXPERIMENT below (default 2z-base = MiniRL baseline on Qwen3-4B-Base)
+#   4. Adjust LGX / queue / resource if needed
+#   5. Submit: `hope submit run.hope`
+#
+# Only -base variants are runnable until Qwen3-4B-Base-SFT-stage-1 is uploaded.
+#   2z-base  = MiniRL baseline (first smoke test — safest)
+#   2a-base  = WDL-SFT-IS, β=0,   lr=5e-7
+#   2b-base  = WDL-SFT-IS, β=0.1, lr=5e-7
+#   2c-base  = WDL-SFT-IS, β=0,   lr=1e-6
+# ==============================================================================
+
+[base]
+afo.app.name = verl-ablation-2z-base
+type = ml-easy-job
+
+[resource]
+usergroup = hadoop-ai-search
+queue = root.shxs_training_cluster.hadoop-fridayagi.friday_h20_train
+
+[roles]
+workers = 1
+worker.memory = 480000
+worker.vcore = 32
+worker.gcoresh20-141g = 8
+# Absolute path to jupyter.sh inside the copied repo on dolphinfs.
+# Adjust if the repo checkout lives at a different subpath under LGX.
+worker.script = bash /mnt/dolphinfs/ssd_pool/docker/user/hadoop-ai-search/yangfengkai02/lgx/verl08/verl-v0.7-feature-on-policy-wdl-sft/recipe/on_policy_wdl_sft/ablation_single_model/meituan/jupyter.sh
+
+[user_args]
+
+[am]
+afo.app.am.resource.mb = 4096
+
+[tensorboard]
+with.tensor.board = false
+
+[docker]
+# TODO: fill after building the verl image in MLP 新建镜像.
+# Format: registry-offlinebiz.sankuai.com/custom_prod/com.sankuai.data.hadoop.gpu/ai-search/<repo>:<tag>
+afo.docker.image.name = <FILL_IN_AFTER_BUILD>
+
+[data]
+afo.data.prefetch = false
+
+[failover]
+afo.app.support.engine.failover = true
+
+[others]
+client.git.revision.publish=false
+afo.app.env.YARN_CONTAINER_RUNTIME_DOCKER_SHM_SIZE_BYTES = 68719476736
+afo.dolphinfs.otherusers = hadoop-mtsearch-assistant
+
+# ----------------- Ablation selection (change this line!) -------------------
+# One of: 2a-base | 2b-base | 2c-base | 2z-base  (only -base runnable today)
+#         2a-sft  | 2b-sft  | 2c-sft  | 2z-sft   (requires SFT model upload)
+afo.app.env.EXPERIMENT = 2z-base
+
+# ----------------- Dolphinfs anchor (rarely needs override) -----------------
+afo.app.env.LGX = /mnt/dolphinfs/ssd_pool/docker/user/hadoop-ai-search/yangfengkai02/lgx

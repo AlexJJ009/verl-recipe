@@ -42,8 +42,10 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 2: Cache & Temp Directories ====================
-export HF_HOME=/data-1/.cache/huggingface
-export RAY_TMPDIR=/data-1/ray_tmp
+# All paths are overridable so the same scripts work on both the local dev box
+# (defaults → /data-1/...) and Meituan MLP (overridden via meituan/env.sh).
+export HF_HOME=${HF_HOME:-/data-1/.cache/huggingface}
+export RAY_TMPDIR=${RAY_TMPDIR:-/data-1/ray_tmp}
 export TMPDIR=${TMPDIR:-/data-1/tmp}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
 export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-$TMPDIR}
