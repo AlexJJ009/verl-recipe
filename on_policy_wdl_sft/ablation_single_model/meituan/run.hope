@@ -10,6 +10,7 @@
 #
 # Only -base variants are runnable until Qwen3-4B-Base-SFT-stage-1 is uploaded.
 #   2z-base  = MiniRL baseline (first smoke test — safest)
+#   2g-base  = canonical GRPO baseline (vanilla PPO-clip + std-normalized adv)
 #   2a-base  = WDL-SFT-IS, β=0,   lr=5e-7
 #   2b-base  = WDL-SFT-IS, β=0.1, lr=5e-7
 #   2c-base  = WDL-SFT-IS, β=0,   lr=1e-6
@@ -57,8 +58,8 @@ afo.app.env.YARN_CONTAINER_RUNTIME_DOCKER_SHM_SIZE_BYTES = 68719476736
 afo.dolphinfs.otherusers = hadoop-mtsearch-assistant
 
 # ----------------- Ablation selection (change this line!) -------------------
-# One of: 2a-base | 2b-base | 2c-base | 2z-base  (only -base runnable today)
-#         2a-sft  | 2b-sft  | 2c-sft  | 2z-sft   (requires SFT model upload)
+# One of: 2a-base | 2b-base | 2c-base | 2z-base | 2g-base  (runnable today)
+#         2a-sft  | 2b-sft  | 2c-sft  | 2z-sft  | 2g-sft   (requires SFT model upload)
 afo.app.env.EXPERIMENT = 2z-base
 
 # ----------------- Dolphinfs anchor (rarely needs override) -----------------

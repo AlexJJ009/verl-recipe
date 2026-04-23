@@ -34,10 +34,27 @@ comparison.
 | `run_2c_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `wdl_sft_is` | 0   | 1e-6 | 1C |
 | `run_2z_base.sh` | Qwen3-4B-Base | `minirl` (pure RL) | —   | 5e-7 | reference baseline |
 | `run_2z_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `minirl` (pure RL) | —   | 5e-7 | reference baseline |
+| `run_2g_base.sh` | Qwen3-4B-Base | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
+| `run_2g_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
 
 `_common_ablation.sh` holds the shared env setup, checkpoint/resume logic, and
 the Hydra launch command. Each `run_2*.sh` is a thin 10-line wrapper that
 exports 4–5 knobs and sources the common launcher.
+
+**`run_2g_*` vs `run_2z_*`**: both are reference baselines from the same init,
+but they exercise different loss families:
+
+| Knob | `run_2z_*` (MiniRL) | `run_2g_*` (canonical GRPO) |
+|---|---|---|
+| `LOSS_MODE` | `minirl` | `vanilla` (standard PPO-clip) |
+| `clip_ratio_low` / `high` | 0.2 / 0.27 (asymmetric) | 0.2 / 0.2 (symmetric) |
+| `norm_adv_by_std_in_grpo` | False | **True** (standard DeepSeek-style GRPO) |
+| `rollout_is` correction | token-level IS weights | token-level IS weights (same) |
+
+Everything else — `adv_estimator=grpo`, `clip_ratio_c=10.0`, lr, batch, rollout
+N, eval cadence — is identical. The 2G ↔ 2Z delta is exactly "which loss
+family" on the same data; useful as a second reference floor to triangulate
+against the MiniRL-centric 2X series.
 
 ## What we can decompose from the result
 
@@ -87,10 +104,11 @@ Workflow:
 
 **Currently runnable on Meituan** (base model uploaded, SFT pending):
 - `2z-base` — MiniRL baseline. **Recommended first smoke test.**
+- `2g-base` — canonical GRPO baseline (vanilla PPO-clip).
 - `2a-base`, `2b-base`, `2c-base` — WDL-SFT-IS variants on Base init
 
 **Blocked until SFT model uploaded**:
-- `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft` — all `-sft` variants
+- `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft`, `2g-sft` — all `-sft` variants
 
 `meituan/jupyter.sh` fails fast with a clear error if the required init model
 or dataset isn't present at the expected dolphinfs path.

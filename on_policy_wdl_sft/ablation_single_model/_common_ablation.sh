@@ -175,10 +175,15 @@ kl_coef=0.0
 use_kl_loss=False
 kl_loss_coef=0.0
 
-# Binary-mask / clip thresholds (v2). For LOSS_MODE=minirl these thresholds are
-# still honored by that loss's own clip logic — same stability frame.
-clip_ratio_low=0.2
-clip_ratio_high=0.27
+# GRPO advantage normalization. Default False (matches 1A/B/C and 2A/B/C/Z).
+# Canonical DeepSeek GRPO uses True (divide advantage by group std).
+# 2G-* (vanilla-loss GRPO baseline) overrides to True via env var.
+NORM_ADV_BY_STD_IN_GRPO=${NORM_ADV_BY_STD_IN_GRPO:-False}
+
+# Clip thresholds. Default asymmetric 0.2/0.27 (v2 binary-mask / MiniRL clip).
+# 2G-* sets both to 0.2 for symmetric PPO-clip (canonical GRPO).
+clip_ratio_low=${CLIP_RATIO_LOW:-0.2}
+clip_ratio_high=${CLIP_RATIO_HIGH:-0.27}
 
 # Rollout correction (π_fsdp/π_vllm log-prob mismatch) — identical to 1A/B/C
 rollout_is="token"
@@ -296,7 +301,7 @@ python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     algorithm.use_kl_in_reward=${use_kl_in_reward} \
     algorithm.kl_ctrl.kl_coef=${kl_coef} \
-    algorithm.norm_adv_by_std_in_grpo=False \
+    algorithm.norm_adv_by_std_in_grpo=${NORM_ADV_BY_STD_IN_GRPO} \
     algorithm.rollout_correction.rollout_is=${rollout_is} \
     algorithm.rollout_correction.rollout_is_threshold=${rollout_is_threshold} \
     algorithm.rollout_correction.rollout_is_batch_normalize=${rollout_is_batch_normalize} \

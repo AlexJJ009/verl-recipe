@@ -4,7 +4,8 @@
 #
 # Required env (set via run.hope `afo.app.env.X=Y`):
 #   EXPERIMENT   one of: 2a-base | 2a-sft | 2b-base | 2b-sft |
-#                        2c-base | 2c-sft | 2z-base | 2z-sft
+#                        2c-base | 2c-sft | 2z-base | 2z-sft |
+#                        2g-base | 2g-sft
 #
 # Optional env (all overridable via run.hope):
 #   LGX                      dolphinfs anchor (default: hadoop-ai-search/yangfengkai02/lgx)
@@ -22,7 +23,7 @@
 
 set -xeuo pipefail
 
-: "${EXPERIMENT:?EXPERIMENT must be set (one of 2a-base|2a-sft|2b-base|2b-sft|2c-base|2c-sft|2z-base|2z-sft)}"
+: "${EXPERIMENT:?EXPERIMENT must be set (one of 2a-base|2a-sft|2b-base|2b-sft|2c-base|2c-sft|2z-base|2z-sft|2g-base|2g-sft)}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABLATION_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -60,7 +61,7 @@ if [ ! -d "$INIT_MODEL_PATH" ]; then
 fi
 if [ ! -f "$TRAIN_FILE" ]; then
     echo "[meituan/jupyter.sh] ERROR: TRAIN_FILE not found at $TRAIN_FILE" >&2
-    echo "[meituan/jupyter.sh] HINT: upload EnsembleLLM train_rl_format.parquet to \$LGX/verl-exp/data/EnsembleLLM/" >&2
+    echo "[meituan/jupyter.sh] HINT: upload EnsembleLLM train_rl_format.parquet to \$LGX/verl-exp/data/EnsembleLLM-data-processed/" >&2
     exit 1
 fi
 

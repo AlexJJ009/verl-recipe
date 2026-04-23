@@ -132,3 +132,6 @@ outputs
 joint_training/metrics/
 joint_training/validation/
 on_policy_wdl_sft/validation/
+on_policy_wdl_sft/metrics/
+on_policy_wdl_sft/**/metrics/
+on_policy_wdl_sft/**/validation/

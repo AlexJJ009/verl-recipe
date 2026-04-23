@@ -39,11 +39,12 @@ export MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-6}
 export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-60}
 
 # --- Datasets (user must upload these to the below paths) ---------------------
-# NOT YET UPLOADED as of 2026-04-22 — the run script will fail fast with a
-# clear ENOENT if these are missing. Upload command template:
+# Uploaded as of 2026-04-22 to $LGX/verl-exp/data/ (EnsembleLLM-data-processed,
+# MATH-500, AIME-2025, AMC23, AQUA, SVAMP). The run script will fail fast with
+# a clear ENOENT if these are missing. Upload command template:
 #   rsync -avP /data-1/dataset/EnsembleLLM-data-processed/ \
-#     $LGX/verl-exp/data/EnsembleLLM/
-export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM/train_rl_format.parquet}
+#     $LGX/verl-exp/data/EnsembleLLM-data-processed/
+export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM-data-processed/train_rl_format.parquet}
 export TEST_FILES=${TEST_FILES:-"['$LGX/verl-exp/data/MATH-500/math500-test_with_system_prompt.parquet','$LGX/verl-exp/data/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 # --- Init-model paths — consumed by jupyter.sh based on EXPERIMENT suffix -----
