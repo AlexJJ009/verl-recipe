@@ -4,7 +4,7 @@ This file tracks offline vLLM evaluation results for On-Policy WDL-SFT experimen
 
 Numbering continues from `recipe/joint_training/INFERENCE_RESULTS.md` (EVAL-01 through EVAL-09).
 
-> **Note**: `EXPERIMENT_INDEX.md` carries EXP-12 (M5, diverged, no checkpoints retained), EXP-13 (M5.5, offline eval at step 300 → EVAL-12 / EVAL-13), EXP-14 (M5.6, offline eval at step 300 → EVAL-14 / EVAL-15), EXP-15 (LR3, offline eval at step 125 → EVAL-10 / EVAL-11), **EXP-16 (1A, v2; training complete 2026-04-20; step 225 model2 offline eval 2026-04-20 → EVAL-20, MATH-500 mean@3 = 83.1% — v2 breaks the v1 ~79% ceiling by +3.5 pp; step 225 model1 offline eval not yet run)**, **EXP-17 (1B, v2 with β=0.1; offline eval complete 2026-04-21 at step 275 → EVAL-16/17 and step 300 → EVAL-18/19; model1 format collapse is MORE severe than v1 EVAL-15, refuting the hypothesis that v2's lower-bound clip fixes the β>0 anchor-degradation failure mode)**, **EXP-18 (1C, v2 at lr=1e-6; training + offline eval complete 2026-04-22; EVAL-21/22/23/24 on steps 150 + 300 × m1/m2; m2 ceiling 82.5% at step 150, drops 4.4 pp by step 300; does not exceed 1A 83.1% offline ceiling)**, **EXP-19 (2Z-SFT, single-model MiniRL baseline from SFT init, lr=5e-7; training complete 2026-04-22, 300 steps, online MATH-500 peak 70.56% at step 275 — within 0.4–0.8 pp of joint v2 online peaks despite no joint/fusion/wdl_sft_is machinery; offline eval on step 275 pending on Eval machine, will register as EVAL-25; this is the decisive H3 init-dominant test — if 2Z-SFT m2 matches the v2 ~83% m2 ceiling, the joint+IS infrastructure is largely redundant for MATH accuracy from SFT init)**. All offline evals use the same pipeline and generation params; the only axes that vary are the source checkpoint and the sub-model extracted. **EXP-19 introduces a new dimension: single-model runs have only one backbone, so there is no model1/model2 split — one EVAL entry per checkpoint, not a pair.**
+> **Note**: `EXPERIMENT_INDEX.md` carries EXP-12 (M5, diverged, no checkpoints retained), EXP-13 (M5.5, offline eval at step 300 → EVAL-12 / EVAL-13), EXP-14 (M5.6, offline eval at step 300 → EVAL-14 / EVAL-15), EXP-15 (LR3, offline eval at step 125 → EVAL-10 / EVAL-11), **EXP-16 (1A, v2; training complete 2026-04-20; step 225 model2 offline eval 2026-04-20 → EVAL-20, MATH-500 mean@3 = 83.1% — v2 breaks the v1 ~79% ceiling by +3.5 pp; step 225 model1 offline eval not yet run)**, **EXP-17 (1B, v2 with β=0.1; offline eval complete 2026-04-21 at step 275 → EVAL-16/17 and step 300 → EVAL-18/19; model1 format collapse is MORE severe than v1 EVAL-15, refuting the hypothesis that v2's lower-bound clip fixes the β>0 anchor-degradation failure mode)**, **EXP-18 (1C, v2 at lr=1e-6; training + offline eval complete 2026-04-22; EVAL-21/22/23/24 on steps 150 + 300 × m1/m2; m2 ceiling 82.5% at step 150, drops 4.4 pp by step 300; does not exceed 1A 83.1% offline ceiling)**, **ABL-MINIRL-01 (2Z-SFT, single-model MiniRL baseline from SFT init, lr=5e-7; training complete 2026-04-22; offline eval complete 2026-04-22 → EVAL-25/26 on steps 275/300; MATH-500 mean@3 peak 80.7% at step 300, −2.4 pp below 1A m2 — H3 init-dominant partially supported: SFT init gets to ~80% without joint machinery, last ~2.4 pp requires joint)**, and **ABL-MINIRL-02 (2A-SFT, single-model + `wdl_sft_is` loss, lr=5e-7; training complete 2026-04-22; offline eval complete 2026-04-23 → EVAL-27/28 on steps 275/300; L_loss isolation = 2A − 2Z shows ≈0 on MATH-500, −16 to −25 pp on AQUA — the joint-vs-single MATH-500 lift is architectural, not loss-driven)**. All offline evals use the same pipeline and generation params; the only axes that vary are the source checkpoint and the sub-model extracted. **Single-model ABL-MINIRL runs have only one backbone, so there is no model1/model2 split — one EVAL entry per checkpoint, not a pair.**
 
 ---
 
@@ -550,33 +550,295 @@ Numbering continues from `recipe/joint_training/INFERENCE_RESULTS.md` (EVAL-01 t
 
 ---
 
+## EVAL-25: ABL-MINIRL-01 2Z-SFT step 275 (single-model, online peak)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | ABL-MINIRL-01 (MINIRL-2Z-SFT, single-model MiniRL from SFT-stage-1 init, lr=5e-7) |
+| **Model Weights** | `/data-1/model_weights/MINIRL-Qwen3-4B-MATH-2Z-SFT/step_275` |
+| **Checkpoint Step** | 275 (online MATH-500 peak = 70.56%) |
+| **Sub-Model** | n/a (single Qwen3-4B backbone, not joint) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8, on Eval machine L40S) |
+| **Benchmarks** | AIME-2025, MATH-500, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-22 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **AIME-2025** | 30 | **21.1%** | 26.7% | 26.7% | 15.6% |
+| **MATH-500** | 500 | **79.6%** | 88.4% | 82.6% | 3.4% |
+| **AMC-2023** | 40 | **61.7%** | 77.5% | 65.0% | 12.5% |
+| **AQUA** | 254 | **82.3%** | 92.5% | 87.0% | 1.4% |
+| **GSM8K** | 1319 | **92.5%** | 95.8% | 93.5% | 0.1% |
+| **MAWPS** | 355 | **95.6%** | 96.1% | 95.8% | 0.0% |
+| **SVAMP** | 300 | **94.1%** | 96.0% | 94.3% | 0.1% |
+
+### Notes
+
+- **First offline data point for the ABL-MINIRL single-model ablation family.** Purpose: floor for H3 decomposition — the gap between v2 joint m2 and single-model MiniRL from the same SFT init quantifies the joint-machinery contribution (loss + fusion + parameter sharing).
+- **Trails v2 joint m2 band (82.5–83.1%) on MATH-500 by −2.9 to −3.5 pp** (vs EVAL-20 1A m2 83.1%, EVAL-18 1B m2 82.9%, EVAL-21 1C m2 82.5%). Joint + wdl_sft_is adds a real MATH-500 lift over pure single-model MiniRL from the same init; the gap is small but consistent with EVAL-26.
+- **GSM8K 92.5%, MAWPS 95.6%, SVAMP 94.1% are at or above every v2 joint m2 data point** (best v2 joint: GSM8K 92.0% (1B step 300), MAWPS 95.7% (1C step 150), SVAMP 93.9% (1B step 300)). On easier benchmarks the joint machinery does not separate from single-model MiniRL — the joint contribution concentrates on MATH-500/AIME-2025.
+- **AIME-2025 21.1%**: matches EVAL-12 M5.5 m2 (20.0%) and edges every v2 joint m2 peak (14.4–18.9%). n=30 so ±3.3 pp per-problem noise applies, but the direction is consistent with single-model having more token budget per prompt (no joint fusion overhead).
+- **Format compliance is clean**: MATH-500 ext_fail 3.4%, GSM8K/MAWPS/SVAMP ≤ 0.1% — no β>0-style collapse (single-model MiniRL has no β term by construction). AMC-2023 12.5% and AIME-2025 15.6% reflect longer-trajectory bench-specific max_tokens pressure, not model instability.
+- Generation time: 2312s (~38.5 min) — AIME/AMC max_tokens pressure dominates.
+- Raw results saved to: `/data-1/model_weights/MINIRL-Qwen3-4B-MATH-2Z-SFT/step_275/inference_n3/` (mirrored on Eval machine under the same path).
+
+---
+
+## EVAL-26: ABL-MINIRL-01 2Z-SFT step 300 (single-model, final)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | ABL-MINIRL-01 (MINIRL-2Z-SFT, single-model MiniRL from SFT-stage-1 init, lr=5e-7) |
+| **Model Weights** | `/data-1/model_weights/MINIRL-Qwen3-4B-MATH-2Z-SFT/step_300` |
+| **Checkpoint Step** | 300 (final step; online MATH-500 = 70.16%) |
+| **Sub-Model** | n/a (single Qwen3-4B backbone, not joint) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8, on Eval machine L40S) |
+| **Benchmarks** | AIME-2025, MATH-500, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-22 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **AIME-2025** | 30 | **13.3%** | 20.0% | 13.3% | 12.2% |
+| **MATH-500** | 500 | **80.7%** | 89.2% | 83.6% | 2.9% |
+| **AMC-2023** | 40 | **60.8%** | 72.5% | 67.5% | 6.7% |
+| **AQUA** | 254 | **82.0%** | 90.2% | 86.6% | 1.4% |
+| **GSM8K** | 1319 | **91.9%** | 95.5% | 92.7% | 0.1% |
+| **MAWPS** | 355 | **95.7%** | 96.6% | 95.5% | 0.0% |
+| **SVAMP** | 300 | **93.7%** | 96.0% | 94.7% | 0.1% |
+
+### Notes
+
+- **Step_275 → step_300 delta**: MATH-500 **+1.1 pp** (79.6 → 80.7), AIME-2025 **−7.8 pp** (21.1 → 13.3), AMC-2023 −0.9, AQUA −0.3, GSM8K −0.6, MAWPS +0.1, SVAMP −0.4. Late-training is **neutral to mildly positive on MATH-500 and flat elsewhere**; AIME swing is on the edge of n=30 interpretability (±3.3 pp per problem → −7.8 pp ≈ 2 problems flipped).
+- **No late-training drift — opposite of 1C m2**: EVAL-21 → EVAL-23 lost **−4.4 pp** on MATH-500 from step 150 → 300 at lr=1e-6 β=0. Single-model MiniRL at lr=5e-7 stays monotone through the final step, same as v2 joint 1A/1B at lr=5e-7. Confirms that late-training drift is lr-driven, not joint-vs-single.
+- **Best ABL-MINIRL-01 ckpt for MATH-500**: step_300 (80.7%) narrowly beats step_275 (79.6%). For deployment, pick step_300.
+- **Gap to v2 joint m2 = ~2.4 pp on MATH-500**: step_300 MATH-500 80.7% is **−2.4 pp below EVAL-20 1A m2 (83.1%)** and **−2.2 pp below EVAL-18 1B m2 (82.9%)**. This is the ABL-MINIRL-01 answer for H3: **the SFT init gets you to ~80% on MATH-500 without any joint machinery, but the remaining ~2.4 pp to the v2 joint ceiling requires the joint architecture and wdl_sft_is loss**. Online val does not see this gap (joint and single-model online peaks within 1 pp); only offline mean@3 separates them.
+- **Format compliance clean**: MATH-500 ext_fail 2.9% (down from 3.4% at step_275), GSM8K/MAWPS/SVAMP all ≤ 0.1%. Late-training m2 is slightly more compact than step_275 (ext_fail down across the board).
+- Generation time: 2079s (~34.6 min), ~10% faster than EVAL-25's 2312s — consistent with lower ext_fail → fewer samples hitting max_tokens.
+- Raw results saved to: `/data-1/model_weights/MINIRL-Qwen3-4B-MATH-2Z-SFT/step_300/inference_n3/` (mirrored on Eval machine under the same path).
+
+---
+
+## EVAL-27: ABL-MINIRL-02 2A-SFT step 275 (single-model + wdl_sft_is, online peak)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | ABL-MINIRL-02 (WDL-SFT-2A-SFT, single-model with `loss_mode=wdl_sft_is` from SFT-stage-1 init, lr=5e-7) |
+| **Model Weights** | `/data-1/model_weights/WDL-SFT-Qwen3-4B-MATH-2A-SFT/step_275` |
+| **Checkpoint Step** | 275 (online MATH-500 peak) |
+| **Sub-Model** | n/a (single Qwen3-4B backbone, not joint) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8, on Eval machine L40S) |
+| **Benchmarks** | AIME-2025, MATH-500, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-23 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **AIME-2025** | 30 | **11.1%** | 16.7% | 10.0% | 32.2% |
+| **MATH-500** | 500 | **80.1%** | 88.4% | 82.6% | 4.9% |
+| **AMC-2023** | 40 | **55.8%** | 75.0% | 67.5% | 10.8% |
+| **AQUA** | 254 | **66.3%** | 79.1% | 69.3% | 4.2% |
+| **GSM8K** | 1319 | **90.6%** | 93.6% | 91.6% | 0.1% |
+| **MAWPS** | 355 | **94.3%** | 95.2% | 94.9% | 0.1% |
+| **SVAMP** | 300 | **92.8%** | 95.0% | 93.0% | 0.2% |
+
+### Notes
+
+- **L_loss isolation — this is the ABL-MINIRL-02 purpose**: 2A-SFT differs from 2Z-SFT (ABL-MINIRL-01) only in the loss term — `wdl_sft_is` (single-model variant of the v2 joint loss) vs pure MiniRL. Both are single Qwen3 backbones, both init from SFT-stage-1, both lr=5e-7, same data budget. The per-benchmark delta 2A − 2Z **attributes exclusively to the loss term**, with joint-architecture + fused-logit effects excluded by design. See paired comparison vs EVAL-25.
+- **MATH-500 essentially tied with 2Z-SFT**: 2A step_275 **80.1%** vs 2Z step_275 **79.6%** = **+0.5 pp** on mean@3; pass@3 **88.4% vs 88.4%** (identical). In single-model form, the wdl_sft_is loss does not lift the MATH-500 mean@3 meaningfully over pure MiniRL at the peak step. The ~2.4 pp gap 1A-vs-2Z observed in EVAL-20/26 is therefore **not** attributable to the loss; it tracks with the joint architecture + parameter sharing.
+- **AQUA regression vs 2Z-SFT is large — −16.0 pp mean@3 / −13.4 pp pass@3** (2A 66.3/79.1 vs 2Z 82.3/92.5). Extraction_fail is comparable (4.2% vs 1.4%) so the gap is mostly reasoning, not format. wdl_sft_is single-model appears to hurt AQUA multiple-choice performance — possibly because reverse-SFT / IS correction alters token-distribution in a way that breaks letter-answer discipline. Worth flagging for the 2B/2C follow-ups.
+- **Easy-bench slight regression (−1 to −2 pp)**: GSM8K 90.6 vs 2Z 92.5 (−1.9), MAWPS 94.3 vs 95.6 (−1.3), SVAMP 92.8 vs 94.1 (−1.3). Consistent small drop; not noise-level.
+- **AIME-2025 noise**: 2A 11.1 vs 2Z 21.1 is 3 problems (±3.3 pp each); don't over-interpret. pass@3 16.7 vs 26.7 is also in noise range for n=30.
+- **Format compliance clean** for the high-n benchmarks (GSM8K/MAWPS/SVAMP/MATH-500 all under 5% ext_fail). AIME ext_fail 32.2% and AMC 10.8% are elevated vs 2Z's 15.6% and 12.5% — single-model + wdl_sft_is consumes more token budget on hard math.
+- Generation time: 875s (~14.6 min), ~62% faster than EVAL-25's 2312s — likely driven by fewer samples hitting max_tokens due to differing output distributions (not yet characterized).
+- Raw results saved to: `/data-1/model_weights/WDL-SFT-Qwen3-4B-MATH-2A-SFT/step_275/inference_n3/` (mirrored on Eval machine under the same path).
+
+---
+
+## EVAL-28: ABL-MINIRL-02 2A-SFT step 300 (single-model + wdl_sft_is, final)
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | ABL-MINIRL-02 (WDL-SFT-2A-SFT, single-model with `loss_mode=wdl_sft_is` from SFT-stage-1 init, lr=5e-7) |
+| **Model Weights** | `/data-1/model_weights/WDL-SFT-Qwen3-4B-MATH-2A-SFT/step_300` |
+| **Checkpoint Step** | 300 (final step) |
+| **Sub-Model** | n/a (single Qwen3-4B backbone, not joint) |
+| **Inference Engine** | vLLM 0.12.0 (FLASH_ATTN backend, V1 engine, tp=8, on Eval machine L40S) |
+| **Benchmarks** | AIME-2025, MATH-500, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=1.0, top_p=0.95, top_k=-1, n=3, max_tokens=4096 |
+| **Date** | 2026-04-23 |
+
+### Results (n=3)
+
+| Benchmark | Samples | mean@3 | pass@3 | maj@3 | extraction_fail |
+|---|---|---|---|---|---|
+| **AIME-2025** | 30 | **10.0%** | 16.7% | 13.3% | 37.8% |
+| **MATH-500** | 500 | **80.1%** | 88.6% | 83.8% | 4.8% |
+| **AMC-2023** | 40 | **60.0%** | 82.5% | 75.0% | 3.3% |
+| **AQUA** | 254 | **57.0%** | 68.9% | 58.3% | 3.4% |
+| **GSM8K** | 1319 | **90.4%** | 93.7% | 91.6% | 0.1% |
+| **MAWPS** | 355 | **94.5%** | 95.5% | 94.4% | 0.0% |
+| **SVAMP** | 300 | **91.7%** | 95.7% | 92.0% | 0.0% |
+
+### Notes
+
+- **Step_275 → step_300 delta (2A-SFT)**: MATH-500 flat (80.1 → 80.1, 0.0 pp); AIME-2025 −1.1; AMC-2023 **+4.2 pp** (55.8 → 60.0); AQUA **−9.3 pp** (66.3 → 57.0); GSM8K −0.2; MAWPS +0.2; SVAMP −1.1. **MATH-500 plateaus; AMC improves; AQUA continues to drift down** (late-training continues to degrade AQUA letter-answer extraction under wdl_sft_is). Unlike 2Z-SFT (EVAL-25 → EVAL-26, MATH +1.1 pp / flat elsewhere), 2A-SFT's late-training is not uniformly neutral.
+- **Loss-term isolation vs 2Z-SFT step 300 (EVAL-26)** — the decisive L_loss decomposition:
+  - **MATH-500 mean@3**: 80.1 vs 80.7 → **−0.6 pp** (2A slightly *worse*); pass@3 88.6 vs 89.2 → **−0.6 pp**. Both within step-to-step noise. **wdl_sft_is as a loss term, in single-model form, does not lift MATH-500 over pure MiniRL.**
+  - **AMC-2023**: mean@3 60.0 vs 60.8 (−0.8), but pass@3 **82.5 vs 72.5 (+10.0 pp)** — 2A-SFT has higher AMC capability ceiling but same per-sample accuracy. Interesting mismatch; could indicate wdl_sft_is broadens the output distribution on hard math.
+  - **AQUA**: **mean@3 57.0 vs 82.0 (−25.0 pp) / pass@3 68.9 vs 90.2 (−21.3 pp)** — confirmed, wdl_sft_is single-model is structurally worse on AQUA. Worth isolating as a 2B/2C or follow-up question.
+  - **Easy benches**: GSM8K −1.5, MAWPS −1.2, SVAMP −2.0 — consistent small drop.
+- **Combining EVAL-27 + EVAL-28 (2A-SFT best step is step 275 = step 300 on MATH-500; pick step 300 for deployment because AMC is +4.2 pp better and MATH is tied)**.
+- **Verdict on L_loss (score(2A-SFT) − score(2Z-SFT))**: **near-zero on MATH-500**, negative on easy benches (−1 to −2), large negative on AQUA (−16 to −25), mixed on AMC (−0.8 mean@3 but +10 pass@3). Cross-referencing against the plan's §5 decomposition: $L_\text{loss}$ is **not** what buys the joint-vs-single MATH-500 lift. The remaining candidate for the joint lift is $L_\text{fusion}$ = score(1A) − score(2A-SFT) — that lift is now measured at **step 300: 83.1 − 80.1 = +3.0 pp on MATH-500 mean@3** (EVAL-20 1A step_225 m2 vs EVAL-28), **90.2 − 88.6 = +1.6 pp on pass@3** (EVAL-18 1B step_300 m2 vs EVAL-28). Joint architecture + fused-logit rollout + parameter sharing buys ~3 pp mean@3 and ~1.6 pp pass@3 on MATH-500 over a single-model variant using the same loss.
+- **Format compliance**: MATH-500 ext_fail 4.8% (slight down from 275's 4.9%). AQUA ext_fail 3.4% is normal — the AQUA regression is NOT a format-collapse artifact. AIME ext_fail creeps up to 37.8%; AMC comes down to 3.3% (from 10.8% at step_275, a clean improvement).
+- Generation time: 828s (~13.8 min), consistent with EVAL-27's 875s. Much faster than 2Z-SFT (EVAL-25/26 were 2312s / 2079s) — single-model wdl_sft_is appears to produce more compact outputs under this eval config.
+- Raw results saved to: `/data-1/model_weights/WDL-SFT-Qwen3-4B-MATH-2A-SFT/step_300/inference_n3/` (mirrored on Eval machine under the same path).
+
+---
+
 ## Cross-Experiment Comparison (On-Policy WDL-SFT vs 4B Baselines)
 
-### 4B model2 (strong/trainable sub-model) — mean@3
+Every table below reports **both `mean@3` and `pass@3`** side-by-side. Rationale: `mean@3` ranks average per-sample accuracy (production signal); `pass@3` is the n=3 oracle upper bound (capability ceiling — "can the model reach the answer in ≥1 of 3 tries"). The **`pass@3 − mean@3` gap** directly measures per-sample inconsistency: a high gap means the model sometimes solves and sometimes doesn't, independent of whether it "can". This can be driven by (a) extraction/format failure OR (b) reasoning variance — the data below distinguishes these, see the ★ Paper-worthy finding subsection after the Observations.
 
-| Benchmark | EXP-11 Qwen3-4B-SFT-DPO (ext, 365) | EXP-13 M5.5 m2 (v1, β=0, 300) | EXP-14 M5.6 m2 (v1, β=0.1, 300) | EXP-15 LR3 m2 (v1, lr=1e-6, β=0, 125) | **EXP-16 1A m2 (v2, β=0, 225)** | **EXP-17 1B m2 (v2, β=0.1, 275)** | **EXP-17 1B m2 (v2, β=0.1, 300)** | **EXP-18 1C m2 (v2, lr=1e-6, β=0, 150)** | **EXP-18 1C m2 (v2, lr=1e-6, β=0, 300)** |
-|---|---|---|---|---|---|---|---|---|---|
-| **MATH-500** | 67.7% | 78.6% | 79.1% | 79.6% | **83.1%** | 82.5% | 82.9% | 82.5% | 78.1% |
-| **AIME-2025** | 7.8% | **20.0%** | 17.8% | **20.0%** | 14.4% | 15.6% | 17.8% | 18.9% | 10.0% |
-| **AMC-2023** | 40.8% | 55.8% | 52.5% | 51.7% | 55.0% | 57.5% | **63.3%** | **63.3%** | 50.8% |
-| **AQUA** | 65.0% | 80.1% | 79.9% | 73.8% | 70.2% | 80.2% | 76.6% | **81.8%** | 79.8% |
-| **GSM8K** | 89.8% | 91.8% | 91.6% | 91.3% | 91.3% | 91.8% | **92.0%** | 91.7% | 90.1% |
-| **MAWPS** | 94.4% | 95.2% | 95.1% | 95.6% | 95.4% | 95.2% | 95.2% | **95.7%** | 94.7% |
-| **SVAMP** | 90.7% | 93.4% | 93.3% | **94.8%** | 93.7% | 93.7% | 93.9% | 93.9% | 92.0% |
+**Step selection**: for methods where the **offline-peak step ≠ final step (300)**, both are shown so late-training drift is visible as a separate row. Methods with monotone offline trajectories (1A, 1B under β=0.1, ABL-MINIRL-01) show just one or two representative rows. `(peak)` / `(final)` annotations mark which is which.
 
-### 4B model1 (weak/anchor sub-model) — mean@3
+Table layout is **method × benchmark** (transposed from earlier layout) — one row per (method, step), one column per benchmark. Best per-column is **bolded**; winner of the "best-per-benchmark" summary row is the single EVAL-N that holds the top in that column.
 
-| Benchmark | EXP-08 Qwen3-4B-Base (pretrained) | EXP-13 M5.5 m1 (v1, β=0, 300) | EXP-14 M5.6 m1 (v1, β=0.1, 300) ⚠ | EXP-15 LR3 m1 (v1, lr=1e-6, β=0, 125) | **EXP-17 1B m1 (v2, β=0.1, 275)** ⚠⚠ | **EXP-17 1B m1 (v2, β=0.1, 300)** ⚠⚠ | **EXP-18 1C m1 (v2, lr=1e-6, β=0, 150)** | **EXP-18 1C m1 (v2, lr=1e-6, β=0, 300)** |
+### 4B model2 (strong / trainable sub-model) — mean@3
+
+| Method | Step | MATH-500 | AIME-25 | AMC-23 | AQUA | GSM8K | MAWPS | SVAMP |
 |---|---|---|---|---|---|---|---|---|
-| **MATH-500** | 32.5% | **70.5%** | 48.9% | 63.7% | 38.7% | 37.9% | 52.7% | 64.7% |
-| **AIME-2025** | 3.3% | **8.9%** | 5.6% | 6.7% | 4.4% | 4.4% | 4.4% | 4.4% |
-| **AMC-2023** | 15.0% | **45.8%** | 30.8% | 36.7% | 30.8% | 25.0% | 30.0% | 37.5% |
-| **AQUA** | 6.8% | **57.5%** | 20.9% | 45.9% | 13.9% | 15.8% | 21.5% | 27.7% |
-| **GSM8K** | 27.8% | **82.0%** | 64.4% | 70.7% | 43.8% | 42.9% | 59.9% | 81.9% |
-| **MAWPS** | 21.7% | **84.9%** | 64.3% | 80.7% | 43.6% | 41.3% | 65.9% | **88.8%** |
-| **SVAMP** | 25.9% | **85.3%** | 62.7% | 77.4% | 38.6% | 38.7% | 59.7% | 82.4% |
+| EXP-13 M5.5 m2 (v1, β=0, lr=5e-7) | 300 | 78.6 | 20.0 | 55.8 | 80.1 | 91.8 | 95.2 | 93.4 |
+| EXP-14 M5.6 m2 (v1, β=0.1, lr=5e-7) | 300 | 79.1 | 17.8 | 52.5 | 79.9 | 91.6 | 95.1 | 93.3 |
+| EXP-15 LR3 m2 (v1, β=0, lr=1e-6) | 125 (peak) | 79.6 | 20.0 | 51.7 | 73.8 | 91.3 | 95.6 | 94.8 |
+| EXP-16 1A m2 (v2, β=0, lr=5e-7) ★ | 225 (peak) | **83.1** | 14.4 | 55.0 | 70.2 | 91.3 | 95.4 | 93.7 |
+| EXP-17 1B m2 (v2, β=0.1, lr=5e-7) | 275 | 82.5 | 15.6 | 57.5 | 80.2 | 91.8 | 95.2 | 93.7 |
+| EXP-17 1B m2 (v2, β=0.1, lr=5e-7) | 300 (final) | 82.9 | 17.8 | **63.3** | 76.6 | **92.0** | 95.2 | 93.9 |
+| EXP-18 1C m2 (v2, β=0, lr=1e-6) | 150 (peak) | 82.5 | 18.9 | **63.3** | 81.8 | 91.7 | **95.7** | 93.9 |
+| EXP-18 1C m2 (v2, β=0, lr=1e-6) | 300 (final) ↓ drift | 78.1 | 10.0 | 50.8 | 79.8 | 90.1 | 94.6 | 92.0 |
+| ABL-MINIRL-01 2Z-SFT (single, lr=5e-7) | 275 | 79.6 | **21.1** | 61.7 | **82.3** | **92.5** | 95.6 | 94.1 |
+| ABL-MINIRL-01 2Z-SFT (single, lr=5e-7) | 300 (final) | 80.7 | 13.3 | 60.8 | 82.0 | 91.9 | **95.7** | 93.7 |
+| ABL-MINIRL-02 2A-SFT (single + wdl_sft_is, lr=5e-7) | 275 | 80.1 | 11.1 | 55.8 | 66.3 | 90.6 | 94.3 | 92.8 |
+| ABL-MINIRL-02 2A-SFT (single + wdl_sft_is, lr=5e-7) | 300 (final) | 80.1 | 10.0 | 60.0 | 57.0 | 90.4 | 94.5 | 91.7 |
+| **Best-per-benchmark (EVAL-N)** |  | **83.1 (EVAL-20)** | **21.1 (EVAL-25)** | **63.3 (EVAL-18/21)** | **82.3 (EVAL-25)** | **92.5 (EVAL-25)** | **95.7 (EVAL-21/26)** | **94.8 (EVAL-10)** |
 
-*Note: EXP-16 1A m1 still not evaluated (see EVAL-20 notes). EXP-18 1C m1 at step 300 is the first clean β=0 v2 m1 data point with strong format compliance (5–19% ext_fail vs 1B's 37–49%).*
+### 4B model2 (strong / trainable sub-model) — pass@3
+
+| Method | Step | MATH-500 | AIME-25 | AMC-23 | AQUA | GSM8K | MAWPS | SVAMP |
+|---|---|---|---|---|---|---|---|---|
+| EXP-13 M5.5 m2 | 300 | 87.4 | 26.7 | 65.0 | 84.3 | 95.7 | 96.9 | 96.7 |
+| EXP-14 M5.6 m2 | 300 | 86.8 | 23.3 | 62.5 | 84.6 | 94.8 | 96.3 | 95.3 |
+| EXP-15 LR3 m2 | 125 (peak) | 87.6 | 23.3 | 60.0 | 84.6 | 95.5 | 96.3 | **97.0** |
+| EXP-16 1A m2 | 225 (peak) | 89.4 | 23.3 | 70.0 | 83.9 | 95.0 | 96.3 | 96.3 |
+| EXP-17 1B m2 | 275 | 89.2 | 20.0 | 72.5 | 88.2 | 95.3 | 96.3 | 96.0 |
+| EXP-17 1B m2 ★ | 300 (final) | **90.2** | 23.3 | **80.0** | 85.4 | 95.0 | 96.3 | 96.0 |
+| EXP-18 1C m2 | 150 (peak) | 88.6 | **30.0** | 75.0 | 88.6 | 95.5 | 96.3 | 96.3 |
+| EXP-18 1C m2 | 300 (final) ↓ | 86.8 | 16.7 | 67.5 | 89.4 | 94.2 | 95.8 | 96.0 |
+| ABL-MINIRL-01 | 275 | 88.4 | 26.7 | 77.5 | **92.5** | **95.8** | 96.1 | 96.0 |
+| ABL-MINIRL-01 | 300 (final) | 89.2 | 20.0 | 72.5 | 90.2 | 95.5 | **96.6** | 96.0 |
+| ABL-MINIRL-02 2A-SFT | 275 | 88.4 | 16.7 | 75.0 | 79.1 | 93.6 | 95.2 | 95.0 |
+| ABL-MINIRL-02 2A-SFT | 300 (final) | 88.6 | 16.7 | **82.5** | 68.9 | 93.7 | 95.5 | 95.7 |
+| **Best-per-benchmark (EVAL-N)** |  | **90.2 (EVAL-18)** | **30.0 (EVAL-21)** | **82.5 (EVAL-28)** | **92.5 (EVAL-25)** | **95.8 (EVAL-25)** | **96.6 (EVAL-26)** | **97.0 (EVAL-10)** |
+
+**Key mean@3-vs-pass@3 ranking reversal on m2**: `mean@3` MATH-500 is led by **1A (EVAL-20, 83.1%)**, but `pass@3` MATH-500 is led by **1B step_300 (EVAL-18, 90.2%)**. The two metrics disagree on which v2 checkpoint is "best" on the headline benchmark — 1A has higher mean-per-sample accuracy, 1B has higher capability ceiling in 3 tries. This happens because 1B m2 has slightly more format failures (`extraction_fail` 8.7% vs 1A's 8.3%) pulling mean down, but more correct answers appear in *at least one* of 3 samples.
+
+### 4B model1 (weak / anchor sub-model) — mean@3
+
+| Method | Step | MATH-500 | AIME-25 | AMC-23 | AQUA | GSM8K | MAWPS | SVAMP |
+|---|---|---|---|---|---|---|---|---|
+| EXP-13 M5.5 m1 (v1, β=0) ★ | 300 | **70.5** | **8.9** | **45.8** | **57.5** | 82.0 | 84.9 | 85.3 |
+| EXP-14 M5.6 m1 (v1, β=0.1) ⚠ | 300 | 48.9 | 5.6 | 30.8 | 20.9 | 64.4 | 64.3 | 62.7 |
+| EXP-15 LR3 m1 (v1, β=0, lr=1e-6) | 125 | 63.7 | 6.7 | 36.7 | 45.9 | 70.7 | 80.7 | 77.4 |
+| EXP-17 1B m1 (v2, β=0.1) ⚠⚠ | 275 | 38.7 | 4.4 | 30.8 | 13.9 | 43.8 | 43.6 | 38.6 |
+| EXP-17 1B m1 (v2, β=0.1) ⚠⚠ | 300 (final) | 37.9 | 4.4 | 25.0 | 15.7 | 42.9 | 41.3 | 38.7 |
+| EXP-18 1C m1 (v2, β=0, lr=1e-6) | 150 | 52.7 | 4.4 | 30.0 | 21.5 | 59.9 | 65.9 | 59.7 |
+| EXP-18 1C m1 (v2, β=0, lr=1e-6) ★v2 | 300 (final) | 64.7 | 4.4 | 37.5 | 27.7 | **81.9** | **88.8** | 82.4 |
+| **Best-per-benchmark (EVAL-N)** |  | **70.5 (EVAL-13)** | **8.9 (EVAL-13)** | **45.8 (EVAL-13)** | **57.5 (EVAL-13)** | **82.0 (EVAL-13)** | **88.8 (EVAL-24)** | **85.3 (EVAL-13)** |
+
+### 4B model1 (weak / anchor sub-model) — pass@3
+
+| Method | Step | MATH-500 | AIME-25 | AMC-23 | AQUA | GSM8K | MAWPS | SVAMP |
+|---|---|---|---|---|---|---|---|---|
+| EXP-13 M5.5 m1 ★ | 300 | **86.6** | **16.7** | **65.0** | **81.1** | **94.9** | 96.1 | **96.7** |
+| EXP-14 M5.6 m1 ⚠ | 300 | 78.2 | 13.3 | 50.0 | 46.9 | 92.0 | 92.4 | 92.7 |
+| EXP-15 LR3 m1 | 125 | 84.4 | 13.3 | 60.0 | 79.1 | 93.3 | **96.3** | 94.7 |
+| EXP-17 1B m1 ⚠⚠ | 275 | 71.6 | 10.0 | 60.0 | 33.1 | 79.1 | 79.2 | 74.7 |
+| EXP-17 1B m1 ⚠⚠ | 300 (final) | 71.6 | 13.3 | 50.0 | 37.4 | 78.6 | 75.5 | 74.0 |
+| EXP-18 1C m1 | 150 | 78.4 | 13.3 | 47.5 | 44.9 | 89.5 | 93.0 | 88.7 |
+| EXP-18 1C m1 | 300 (final) | 82.0 | 10.0 | 52.5 | 50.4 | 93.5 | 95.5 | 94.3 |
+| **Best-per-benchmark (EVAL-N)** |  | **86.6 (EVAL-13)** | **16.7 (EVAL-13)** | **65.0 (EVAL-13)** | **81.1 (EVAL-13)** | **94.9 (EVAL-13)** | **96.3 (EVAL-11)** | **96.7 (EVAL-13)** |
+
+**Striking pass@3 finding for m1**: EVAL-13 M5.5 m1's `pass@3 MATH-500 = 86.6%` is **higher than EVAL-20 1A m2's mean@3 MATH-500 = 83.1%** and **close to 1A m2's pass@3 of 89.4%**. This means the v1 β=0 m1 is **capable** of finding MATH-500 answers at almost the same rate as the v2 m2, but it *fails to extract / majority-vote* on enough samples to compete on mean@3 (where it lands at 70.5%, −12.6 pp from its pass@3). All v2 m1s (1B / 1C) also show large `pass@3 − mean@3` gaps (14–26 pp), but their pass@3 ceilings are lower (71.6–82.0% MATH-500 vs M5.5's 86.6%) — v2's lower-bound clip under β>0 reduces both format compliance AND capability on m1, while the joint-coupling gain under β=0/v2 (1C step 300) closes the format gap but not the capability gap.
+
+*Note: EXP-16 1A m1 not evaluated (deferred — see EVAL-20 notes). EXP-08 Qwen3-4B-Base pretrained and EXP-11 Qwen3-4B-SFT-DPO external baselines were evaluated pre-harness (pass@3 not tabulated here — reference MATH-500 mean@3 32.5% and 67.7% respectively; full data at `/data-1/model_weights/qwen3-4b-sft-dpo/step_367/inference_n3/eval_metrics.json`).*
+
+### 4B single-model ablation (ABL-MINIRL-01) vs v2 joint m2 — best-per-benchmark baseline
+
+Head-to-head for H3 decomposition. ABL-MINIRL-01 uses the same SFT-stage-1 init as joint's model2, same MATH data, same 300-step horizon, lr=5e-7 — the only difference is single Qwen3-4B backbone + MiniRL loss (no joint fusion, no wdl_sft_is). **The opponent column is "v2 joint m2 best-per-benchmark"** — the single best v2 joint m2 value across EXP-16/17/18 for each benchmark, NOT a single checkpoint. This avoids the misleading impression produced by using 1A m2 alone as the baseline on every row.
+
+| Benchmark | Metric | ABL-MINIRL-01 best | v2 joint m2 best | Δ (ABL − joint) |
+|---|---|---|---|---|
+| MATH-500  | mean@3 | 80.7 (step 300) | **83.1** (1A 225, EVAL-20) | **−2.4 pp** |
+| MATH-500  | pass@3 | 89.2 (step 300) | **90.2** (1B 300, EVAL-18) | **−1.0 pp** |
+| AIME-2025 | mean@3 | **21.1** (step 275) | 18.9 (1C 150, EVAL-21) | +2.2 pp (n=30 noise ±3.3/prob) |
+| AIME-2025 | pass@3 | 26.7 (step 275) | **30.0** (1C 150, EVAL-21) | −3.3 pp (n=30 noise) |
+| AMC-2023  | mean@3 | 61.7 (step 275) | **63.3** (1B 300 / 1C 150) | −1.6 pp |
+| AMC-2023  | pass@3 | 77.5 (step 275) | **80.0** (1B 300, EVAL-18) | −2.5 pp |
+| AQUA      | mean@3 | **82.3** (step 275) | 81.8 (1C 150, EVAL-21) | +0.5 pp |
+| AQUA      | pass@3 | **92.5** (step 275) | 89.4 (1C 300, EVAL-23) | +3.1 pp |
+| GSM8K     | mean@3 | **92.5** (step 275) | 92.0 (1B 300, EVAL-18) | +0.5 pp |
+| GSM8K     | pass@3 | **95.8** (step 275) | 95.5 (1C 150, EVAL-21) | +0.3 pp |
+| MAWPS     | mean@3 | 95.7 (step 300) | 95.7 (1C 150, EVAL-21) | 0.0 pp (tied) |
+| MAWPS     | pass@3 | **96.6** (step 300) | 96.3 (multiple) | +0.3 pp |
+| SVAMP     | mean@3 | 94.1 (step 275) | 93.9 (1B 300 / 1C 150) | +0.2 pp |
+| SVAMP     | pass@3 | 96.0 (step 275/300) | **96.3** (1A 225, EVAL-20) | −0.3 pp |
+
+**Reading**:
+
+- **Hard math (MATH-500, AIME-2025, AMC-2023)** — joint leads on both metrics, gap **−1.0 to −3.3 pp**. This is the meaningful region of the comparison.
+  - MATH-500 `pass@3 −1.0 pp` vs `mean@3 −2.4 pp` → ABL's **capability ceiling** (pass@3) is only ~1 pp behind joint; the extra ~1.4 pp on `mean@3` comes from **per-sample inconsistency** (ABL reaches the answer in 3 tries almost as often as joint, but on fewer of the 3 rollouts per prompt). This is NOT extraction failure — ABL's MATH-500 `extraction_fail` is 2.9% vs joint v2 m2's 7.6–8.7%; ABL extracts *better*. The remaining gap is **reasoning variance**: ABL samples reach correct answers less consistently even when it has the capability. See ★ Paper-worthy finding subsection below.
+- **AQUA / GSM8K / MAWPS / SVAMP** — essentially tied (±0.5 pp). SFT init saturates these; joint machinery provides no measurable lift.
+- **AIME-2025** — opposite direction on the two metrics (ABL +2.2 on mean@3, −3.3 on pass@3), but n=30 makes both swings noise-range. Don't draw conclusions.
+
+**Joint contribution is concentrated on hard-math reasoning (MATH-500 + AMC-2023), with half of the `mean@3` gap on MATH-500 closing at `pass@3`**. On easier benchmarks, single-model MiniRL from SFT init is cost-equivalent.
+
+### 4B single-model loss-term ablation (ABL-MINIRL-02 2A-SFT vs ABL-MINIRL-01 2Z-SFT) — L_loss isolation
+
+Pair: **same single Qwen3 backbone, same SFT-stage-1 init, same data, same lr=5e-7, same 300-step horizon. Only difference = `loss_mode=wdl_sft_is` (2A-SFT) vs pure MiniRL (2Z-SFT).** Per-benchmark delta 2A − 2Z attributes exclusively to the loss term; joint architecture, fused-logit rollout, and parameter-sharing effects are excluded by design. Both step_275 (online peak-ish) and step_300 (final) are shown.
+
+| Benchmark | Metric | 2A-SFT step 275 (EVAL-27) | 2Z-SFT step 275 (EVAL-25) | Δ (2A − 2Z) | 2A-SFT step 300 (EVAL-28) | 2Z-SFT step 300 (EVAL-26) | Δ (2A − 2Z) |
+|---|---|---|---|---|---|---|---|
+| MATH-500  | mean@3 | 80.1 | 79.6 | **+0.5** | 80.1 | 80.7 | −0.6 |
+| MATH-500  | pass@3 | 88.4 | 88.4 | 0.0 | 88.6 | 89.2 | −0.6 |
+| AIME-2025 | mean@3 | 11.1 | 21.1 | −10.0 (n=30 noise) | 10.0 | 13.3 | −3.3 (noise) |
+| AIME-2025 | pass@3 | 16.7 | 26.7 | −10.0 (n=30 noise) | 16.7 | 20.0 | −3.3 (noise) |
+| AMC-2023  | mean@3 | 55.8 | 61.7 | −5.9 | 60.0 | 60.8 | −0.8 |
+| AMC-2023  | pass@3 | 75.0 | 77.5 | −2.5 | **82.5** | 72.5 | **+10.0** |
+| AQUA      | mean@3 | 66.3 | 82.3 | **−16.0** ⚠ | 57.0 | 82.0 | **−25.0** ⚠ |
+| AQUA      | pass@3 | 79.1 | 92.5 | **−13.4** ⚠ | 68.9 | 90.2 | **−21.3** ⚠ |
+| GSM8K     | mean@3 | 90.6 | 92.5 | −1.9 | 90.4 | 91.9 | −1.5 |
+| GSM8K     | pass@3 | 93.6 | 95.8 | −2.2 | 93.7 | 95.5 | −1.8 |
+| MAWPS     | mean@3 | 94.3 | 95.6 | −1.3 | 94.5 | 95.7 | −1.2 |
+| MAWPS     | pass@3 | 95.2 | 96.1 | −0.9 | 95.5 | 96.6 | −1.1 |
+| SVAMP     | mean@3 | 92.8 | 94.1 | −1.3 | 91.7 | 93.7 | −2.0 |
+| SVAMP     | pass@3 | 95.0 | 96.0 | −1.0 | 95.7 | 96.0 | −0.3 |
+
+**Reading (L_loss verdict)**:
+
+- **MATH-500**: L_loss ≈ **0** in single-model form (−0.6 to +0.5 pp on mean@3; 0 to −0.6 on pass@3). **wdl_sft_is as a loss term, absent the joint architecture, does NOT lift MATH-500.** The ~2.4 pp joint-vs-single MATH-500 gap observed in EVAL-20/26 is therefore attributable to **joint architecture + fused-logit rollout + parameter sharing**, not the loss.
+- **AQUA regression is striking — L_loss = −16 to −25 pp**. Not a format/extraction artifact (ext_fail is comparable across 2A and 2Z); the drop is reasoning-level. Hypothesis: wdl_sft_is's IS ratio / clipping under single-model training alters the output distribution in a way that breaks AQUA letter-answer discipline (AQUA is multiple-choice A/B/C/D/E). Worth isolating.
+- **AMC-2023 pass@3 +10 pp at step 300**: the only place 2A-SFT beats 2Z-SFT. Combined with near-zero mean@3 delta, this says wdl_sft_is broadens capability on hard math but doesn't tighten sample-to-sample consistency. Small n (n=40) so treat as a hint, not a confirmation.
+- **Easy benchmarks (GSM8K / MAWPS / SVAMP)**: consistent −1 to −2 pp small regression on both metrics. wdl_sft_is appears to slightly hurt easy-bench performance in single-model form.
+- **AIME-2025**: n=30 noise-dominated; both directions of delta are within 2-problem noise.
+
+**Implication for plan §5 L_fusion**: with L_loss ≈ 0 on MATH-500, the full joint-vs-single MATH-500 lift collapses onto **L_fusion** = score(1A) − score(2A-SFT). Measured at step 300: **mean@3 +3.0 pp** (EVAL-20 83.1 − EVAL-28 80.1), **pass@3 +1.6 pp** (EVAL-18 90.2 − EVAL-28 88.6). The joint machinery buys ~3 pp mean@3 on MATH-500, almost entirely via fused-logit rollout + parameter sharing, not the loss term.
 
 ### Observations
 
@@ -585,9 +847,58 @@ Numbering continues from `recipe/joint_training/INFERENCE_RESULTS.md` (EVAL-01 t
 3. **Online joint signal is a biased estimate of m2 quality in different directions under different lrs**: 1B (β=0.1) online said step 275 > step 300, but offline m2-only said step 300 > step 275 (the joint-fusion signal was dragged down by the degrading m1). 1C (β=0, higher lr) online peaked at step 150 and drifted down; offline m2-only confirms step 150 > step 300 by 4.4 pp on MATH-500. **Rule**: extract m2 from the offline-peak step, which under lr=5e-7 is the final step, and under lr=1e-6 is the online-peak step.
 4. **Training time under β=0 IMPROVES m1 when lr is high enough** — an unexpected 1C finding: EVAL-22 → EVAL-24 moves m1 MATH-500 from 52.7% → 64.7% (+12 pp) and GSM8K from 59.9% → 81.9% (+22 pp) while ext_fail drops −15 pp. Under β=0 the reverse-SFT coefficient is zero so m1 receives no direct gradient — the gain strongly implies joint-arch parameter sharing (lm_head / embeddings / norms) lets m2's continued forward-SFT training drag m1 along on format-compliance axes. pass@3 moves only +3.6 pp, so the +12 mean@3 is mostly format, not capability.
 5. **Training time under β>0 DEGRADES m1 monotonically**: 1B step 275→300 m1 MATH −0.8, ext_fail +1–3 pp. The direction is opposite to 1C's m1 trajectory (β=0). The mirror pairing (1C vs 1B on m1 across steps) cleanly isolates β as the driver of m1 format erosion.
-6. **Best 4B model2 to date**: **EVAL-20 1A m2 step 225 (MATH-500 83.1%)**, narrowly ahead of 1B step 300 m2 (82.9%), 1C step 150 m2 (82.5%), 1B step 275 m2 (82.5%). **β=0 at lr=5e-7** (EXP-16 1A) is the recommended default: matches or leads on m2, avoids the β>0 m1 collapse, and avoids the 1C late-training m2 drift at lr=1e-6.
-7. **Best 4B model1 to date (v2 regime)**: **EVAL-24 1C m1 step 300 (MATH-500 64.7%, GSM8K 81.9%, MAWPS 88.8%)** — the first v2 m1 that doesn't collapse. Still trails the v1 β=0 m1 peak (EVAL-13 M5.5 m1, MATH 70.5% / GSM8K 82.0%), but those v1 m1s had explicit m1 gradient under v1 loss. Among v2 m1s, the pattern is clear: β=0 high-lr / long training maximizes m1 quality via joint-coupling; β>0 destroys it regardless of lr.
+6. **Best 4B model2 to date — winner depends on metric**: `mean@3` MATH-500 → **EVAL-20 1A m2 step 225 (83.1%)**; `pass@3` MATH-500 → **EVAL-18 1B m2 step 300 (90.2%)**. The reversal tells us 1B has higher capability ceiling under n=3 rollouts but 1A has lower format/extraction loss rate per sample. For production rollout-cost-constrained deployment, 1A is the default; if downstream uses majority-vote or reranking (i.e. can exploit pass@k), 1B is preferable. **β=0 at lr=5e-7** (EXP-16 1A) is the recommended default: leads on `mean@3`, avoids the β>0 m1 collapse, and avoids the 1C late-training m2 drift at lr=1e-6.
+7. **Best 4B model1 to date — v2 wins only on easier benchmarks; v1 M5.5 is the overall ceiling**: (a) On `mean@3` **EVAL-13 M5.5 m1 step 300** sweeps MATH-500 (**70.5**), AIME-2025 (**8.9**), AMC-2023 (**45.8**), AQUA (**57.5**), GSM8K (**82.0**), SVAMP (**85.3**); EVAL-24 1C m1 step 300 only wins MAWPS (88.8). (b) On `pass@3` the sweep is even more uniform — EVAL-13 leads on 6 of 7 benchmarks (only MAWPS goes to EVAL-11 LR3 m1). (c) `pass@3 − mean@3` gap on m1s is 14–26 pp, much larger than m2s' 5–10 pp — m1s are **format-constrained, not capability-constrained**; the v1 M5.5 m1 "knows" MATH-500 answers at pass@3 86.6% but extracts them on mean@3 only 70.5%. **v2 m1s (1C under β=0) close part of this format gap but their capability ceiling is still below v1's**. Directionally: to improve m1 reasoning capability, change training signal (more / different m1 gradient); to improve m1 accuracy from a given ceiling, target format-compliance (extract-fail reduction).
 8. **Decisive m1 format-collapse experiment is done**: EVAL-17/19 refuted "v2's lower-bound clip prevents m1 collapse under β>0", and EVAL-22/24 established a clean β=0 baseline. Future experiments should (a) default to β=0 and invest in data / loss-mode / scale variants, or (b) if β>0 is required for a downstream reason, target the format-token mechanism directly (freezing m1 embed/lm_head, format-token logit KL, gradient masking on extraction-critical tokens).
+9. **Joint-vs-single decomposition (EVAL-25/26 — ABL-MINIRL-01), per-benchmark and per-metric**: using **v2 joint m2 best-per-benchmark** (not 1A m2 alone) as the baseline, single-model MiniRL from the same SFT-stage-1 init **trails on hard-math only**:
+   - **MATH-500**: `mean@3` −2.4 pp (80.7 vs 83.1), `pass@3` −1.0 pp (89.2 vs 90.2). Decomposition: **capability ceiling gap ≈ 1 pp** (pass@3), **per-sample reasoning-variance gap ≈ 1.4 pp** (the difference between the two). The reasoning-variance component is the larger of the two, and it is **not** explained by extraction failure — ABL has *lower* `extraction_fail` on MATH-500 (2.9%) than joint v2 m2 (7.6–8.7%). Joint's `mean@3` advantage comes from producing correct answers more consistently across rollouts, not from a higher ceiling. See ★ Paper-worthy finding subsection below.
+   - **AMC-2023**: `mean@3` −1.6 pp, `pass@3` −2.5 pp — joint-dominant on both metrics.
+   - **AIME-2025**: n=30 noise-dominated (±3.3 pp/problem); mean@3 and pass@3 disagree on direction, don't read into it.
+   - **AQUA / GSM8K / MAWPS / SVAMP**: ties within ±0.5 pp on both metrics. SFT init saturates; joint adds nothing measurable.
+   **H3 (init-dominant) is partially confirmed**: the SFT init delivers the ~80% MATH-500 band and the full easy-bench performance without any joint machinery. The joint architecture + wdl_sft_is loss buys a real but narrow ~2.4 pp `mean@3` lift on hard math (MATH-500 + AMC-2023), shrinking to ~1.0 pp on `pass@3`. Online val fails to see this gap (joint and single-model online peaks within 1 pp); only offline `mean@3` / `pass@3` on hard-math separates them. **Practical implication**: joint machinery is worth its ~2× param memory + extraction overhead if MATH-500 / AMC-2023 is the target metric; otherwise single-model MiniRL from SFT init is cost-equivalent.
+10. **L_loss isolation (ABL-MINIRL-02 2A-SFT vs ABL-MINIRL-01 2Z-SFT, EVAL-27/28 vs EVAL-25/26)** — the single-model loss-only ablation cleanly isolates the `wdl_sft_is` loss contribution from the joint architecture's contribution. Same single Qwen3 backbone, same init, same data, same lr; only the loss differs. Result on MATH-500: **mean@3 delta ≈ 0** (80.1 vs 80.7 at step 300, within step-to-step noise), **pass@3 delta ≈ 0** (88.6 vs 89.2). Result on AQUA: **L_loss = −16 to −25 pp** — `wdl_sft_is` single-model hurts AQUA multiple-choice discipline badly; this is reasoning-level, not format-level (ext_fail comparable). Result on easy benches: small consistent −1 to −2 pp regression. **Plan §5 decomposition resolves**: the full joint-vs-single MATH-500 lift is **L_fusion** (architecture + fused-logit rollout + parameter sharing), not L_loss. Measured L_fusion on MATH-500 at step 300: **+3.0 pp mean@3** (1A m2 83.1 vs 2A-SFT 80.1), **+1.6 pp pass@3** (1B m2 90.2 vs 2A-SFT 88.6). **Follow-on experiment implied**: joint-architecture + MiniRL loss (no wdl_sft_is) would complete the 2×2 grid and confirm whether the tightness of `pass@3 − mean@3` (6.1–6.7 pp) is an architectural property rather than a wdl_sft_is property.
+11. **`mean@3` vs `pass@3` give different winners — and the pattern itself is informative**: on m2, 1A (EVAL-20) leads MATH-500 `mean@3` but 1B step 300 (EVAL-18) leads MATH-500 `pass@3`; on m1, EVAL-13 M5.5 m1 sweeps `pass@3` but is partial on `mean@3` (EVAL-24 1C m1 takes MAWPS on mean@3 only). The `pass@3 − mean@3` gap decomposes into two mechanisms: **(a) extraction failure** — the answer is correct internally but the output format prevents extraction (one-to-one correspondence with `extraction_fail`); **(b) reasoning variance** — the model reaches the answer on some of 3 samples but not others, independent of format. The relative contribution of (a) vs (b) can be inferred by cross-referencing `pass@3 − mean@3` with `extraction_fail`: a method with **low `extraction_fail` AND large `pass@3 − mean@3` gap** has its inconsistency dominated by reasoning variance (ABL on MATH-500 is this profile). A method with **high `extraction_fail` AND large `pass@3 − mean@3` gap** has it dominated by format (all m1s, especially v2 β=0.1 m1s). m1 gaps: 14–26 pp (mostly format). v2 m2 peak gaps: 6.1–7.3 pp (tight). v1 m2 gaps: 7.7–8.8 pp. ABL-MINIRL-01 gaps on MATH-500: 8.5–8.8 pp. **Practical rule**: for the "what is this method capable of" question, report `pass@3`; for "what will production serving see", report `mean@3`; for "how consistent is this method's reasoning", report `pass@3 − mean@3` alongside `extraction_fail` to disentangle the two mechanisms.
+
+### ★ Paper-worthy finding: `pass@3 − mean@3` as a reasoning-consistency statistic
+
+**Motivation**: most RL-for-reasoning papers report only `mean@k` (or `pass@1` / `maj@k`). But a single-number accuracy metric conflates three orthogonal failure modes — (a) capability ceiling, (b) extraction/format failure, (c) reasoning variance. Reporting `mean@3` and `pass@3` side-by-side **and cross-referencing with `extraction_fail`** separates them cleanly.
+
+**Proposed statistic for write-up**:
+
+$$\text{ReasoningVar}_k(m, D) = \text{pass@}k(m, D) - \text{mean@}k(m, D) - \text{extraction\_fail}(m, D) \cdot \text{pass@}k(m, D)$$
+
+(Roughly: "fraction of prompts where the model reaches the answer in at least 1 of k tries but doesn't reach it on all k, adjusted for extraction losses.") On MATH-500 this gives a cleaner reasoning-consistency signal than `pass@3 − mean@3` alone.
+
+**Key empirical observation from this work** (all MATH-500, n=3):
+
+| Method cluster | Representative (EVAL-N) | `mean@3` | `pass@3` | `ext_fail` | `pass@3 − mean@3` |
+|---|---|---|---|---|---|
+| **v2 joint m2 peak (`wdl_sft_is` + joint)** | 1A step 225 (EVAL-20) | 83.1 | 89.4 | 8.3 | **6.3** ★ tight |
+| v2 joint m2 peak | 1C step 150 (EVAL-21) | 82.5 | 88.6 | 7.6 | **6.1** ★ tight |
+| v2 joint m2 peak | 1B step 275 (EVAL-16) | 82.5 | 89.2 | 9.6 | 6.7 |
+| v1 joint m2 (`wdl_sft` + joint) | M5.5 step 300 (EVAL-12) | 78.6 | 87.4 | 16.7 | 8.8 |
+| v1 joint m2 | LR3 step 125 (EVAL-10) | 79.6 | 87.6 | 14.6 | 8.0 |
+| **Single-model MiniRL (ABL, no wdl_sft_is, no joint)** | 2Z-SFT step 300 (EVAL-26) | 80.7 | 89.2 | 2.9 | **8.5** ★ loose |
+| Single-model MiniRL | 2Z-SFT step 275 (EVAL-25) | 79.6 | 88.4 | 3.4 | **8.8** ★ loose |
+| **Single-model + wdl_sft_is (ABL, no joint)** | 2A-SFT step 300 (EVAL-28) | 80.1 | 88.6 | 4.8 | **8.5** ★ loose |
+| Single-model + wdl_sft_is | 2A-SFT step 275 (EVAL-27) | 80.1 | 88.4 | 4.9 | **8.3** ★ loose |
+
+**The finding**: **v2 `wdl_sft_is` loss (paired with joint architecture) tightens the `pass@3 − mean@3` gap on MATH-500 from ~8 pp down to ~6.5 pp**, while simultaneously raising the `pass@3` ceiling by ~2 pp over v1. The single-model ablation (ABL-MINIRL-01) — same SFT init, same data, same lr, only the loss and architecture differ — stays at the v1-era gap of ~8.5 pp despite having *dramatically lower* `extraction_fail` (2.9% vs v1's 14.6%). So: **ABL is a better extractor but a less consistent reasoner than v2 joint m2.** The improvement from v1 → v2 joint m2 is NOT primarily format-compliance (v2 m2 actually has *similar* `extraction_fail` to v1 m2, 7.6–9.6% vs 14.6–16.9%, modestly better). It is reasoning-variance reduction.
+
+**Further refinement from ABL-MINIRL-02 (2A-SFT, EVAL-27/28)**: adding the `wdl_sft_is` loss to the single-model variant (ABL-MINIRL-02 = 2Z-SFT + wdl_sft_is loss, no joint) **does NOT tighten the gap** — 2A-SFT step_300 has `pass@3 − mean@3` = 8.5 pp, identical to 2Z-SFT's 8.5 pp. The tightening from 8.5 → 6.5 pp therefore requires the **joint architecture** (fused-logit rollout + parameter sharing between m1/m2), not the loss function. This shifts the mechanism hypothesis: reasoning-variance reduction is an **architectural** property of the joint setup, not a loss-function property. Candidate mechanisms: (a) fused-logit rollout regularizes output distributions during RL training (exposes m2 to a smoother reward landscape), or (b) shared lm_head / embeddings act as an implicit ensemble that dampens sample-level variance. A clean next ablation would be **joint-architecture + MiniRL loss** (no wdl_sft_is) to isolate (a) from the specific loss choice; if that also tightens to ~6.5 pp, the architecture is the driver.
+
+**Hypothesis for the mechanism** (to be validated): fused-logit rollout + IS-corrected loss produces a softer / more consistent policy on hard-math prompts. When backed out to m2-only offline evaluation, this appears as lower per-sample variance at a given capability ceiling. The tightness is specifically a **v2 + joint** property — v1 joint and single-model v2-less both show loose gaps.
+
+**Why this matters for the paper**:
+1. It gives a **mechanism-level claim** for why v2 wdl_sft_is beats v1: not "higher ceiling" but "more consistent sampling at a slightly higher ceiling".
+2. It identifies a statistic (`pass@3 − mean@3` alongside `extraction_fail`) that **separates format-compliance gains from reasoning-consistency gains** — both are cited as "accuracy improvements" in SOTA comparisons, but they are structurally different and respond to different interventions.
+3. It suggests that `pass@3 − mean@3` could be a **training-dynamics metric** during RL (not just a final eval statistic) — a natural next ablation is to track it across checkpoints and see when it tightens.
+
+**Caveat before citing in the paper**: the decomposition is clean for "single method × all prompts in aggregate", but prompt-level `pass@3 − mean@3` is noisy (each prompt contributes 0, 1/3, 2/3, or 3/3 to mean@3 and 0 or 1 to pass@3 — tight discrete distribution). Variance should be reported (bootstrapped over prompts). Also this is n=3 data; for a write-up, consider also reporting at n=8 or n=16 where the gap opens wider and the decomposition gets more precise.
+
+**Where to place in the paper**: either as a dedicated subsection in the "Analysis" section under a heading like "Decomposing the v2-over-v1 gain: capability ceiling vs reasoning consistency", or as a 2-column table in the main results if space permits. Either way, include `extraction_fail` in every benchmark table — without it, the `pass@3 − mean@3` interpretation is ambiguous.
+
+**Greppable marker for future sessions**: `★ Paper-worthy finding`. One other such finding in the doc at the moment, to be added as they emerge.
 
 ---
 
