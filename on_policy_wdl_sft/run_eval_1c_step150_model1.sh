@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Offline eval: WDL-SFT M5.6 (EXP-14) step 300 — model1 (weak/anchor model, index=0)
+# Offline eval: WDL-SFT 1C (EXP-18) step 150 — model1 (weak/anchor, index=0)
 # n=3, 7 benchmarks with system prompt
 #
-# Prerequisite: merged joint weights at /data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300/
-# (produced by run_eval_m5_6_step300.sh Step 1)
+# Prerequisite: merged joint weights at /data-1/model_weights/WDL-SFT-4B-MATH-1C/step_150/
+# (produced by run_eval_1c_step150.sh Step 1)
 set -xeuo pipefail
 
-MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300
-MODEL1_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300_model1
-OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300_model1/inference_n3
+MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_150
+MODEL1_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_150_model1
+OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_150_model1/inference_n3
 
-# Step 1: Extract model1 (index=0, anchor/weak model)
 echo "=== Extracting model1 from merged joint checkpoint ==="
 if [ -d "$MODEL1_PATH" ] && [ -f "$MODEL1_PATH/model.safetensors" ]; then
     echo "  model1 already extracted, skipping."
@@ -22,7 +21,6 @@ else
     echo "  model1 extracted to $MODEL1_PATH"
 fi
 
-# Step 2: Run vLLM offline eval on model1
 echo "=== Running vLLM offline eval on model1 (n=3, tp=8) ==="
 python -u /workspace/verl/recipe/joint_training/offline_eval.py \
     --model_path "$MODEL1_PATH" \

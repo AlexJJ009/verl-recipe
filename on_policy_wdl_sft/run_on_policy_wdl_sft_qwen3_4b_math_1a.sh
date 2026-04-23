@@ -365,6 +365,7 @@ python3 -m verl.trainer.main_ppo \
     \
     `# --- Rollout (vLLM with FlashInfer backend) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
+    actor_rollout_ref.rollout.calculate_log_probs=True \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
     actor_rollout_ref.rollout.name=${ROLLOUT_ENGINE} \

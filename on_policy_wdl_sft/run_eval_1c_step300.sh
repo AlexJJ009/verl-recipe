@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# Offline eval: WDL-SFT M5.5 (EXP-13) step 300, n=3, 7 benchmarks with system prompt
-#
-# Pipeline:
-#   1. Merge FSDP shards -> merged joint model (HF safetensors)
-#   2. Extract model2 (strong/trainable model) from joint weights
-#   3. Run vLLM offline inference on model2
-#
-# Sibling script run_eval_m5_5_step300_model1.sh handles model1 (reuses the merged joint).
+# Offline eval: WDL-SFT 1C (EXP-18) step 300 — model2 (strong/trainable, index=1)
+# n=3, 7 benchmarks with system prompt
 set -xeuo pipefail
 
-FSDP_ACTOR_DIR=/data-2/checkpoints/WDL-SFT-Qwen3-4B-MATH-M5-5_1775980322/global_step_300/actor
-MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-M5-5/step_300
-MODEL2_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-M5-5/step_300_model2
-OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-M5-5/step_300_model2/inference_n3
+FSDP_ACTOR_DIR=/data-1/checkpoints/WDL-SFT-Qwen3-4B-MATH-1C_1776768784/global_step_300/actor
+MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_300
+MODEL2_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_300_model2
+OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-1C/step_300_model2/inference_n3
 
-# Step 1: Merge FSDP shards to HF safetensors format
 echo "=== Step 1: Merging FSDP checkpoint ==="
-if [ -d "$MERGED_JOINT_PATH" ] && [ -f "$MERGED_JOINT_PATH/model.safetensors" ]; then
+if [ -d "$MERGED_JOINT_PATH" ] && [ -f "$MERGED_JOINT_PATH/model.safetensors.index.json" ]; then
     echo "  Merged weights already exist, skipping merge."
 else
     CUDA_VISIBLE_DEVICES=0 python -u -m verl.model_merger merge \
@@ -27,8 +20,7 @@ else
     echo "  Merged to $MERGED_JOINT_PATH"
 fi
 
-# Step 2: Extract model2 (index=1, trainable strong model)
-echo "=== Step 2: Extracting model2 ==="
+echo "=== Step 2: Extracting model2 (index=1, strong/trainable) ==="
 if [ -d "$MODEL2_PATH" ] && [ -f "$MODEL2_PATH/model.safetensors" ]; then
     echo "  model2 already extracted, skipping."
 else
@@ -39,8 +31,7 @@ else
     echo "  model2 extracted to $MODEL2_PATH"
 fi
 
-# Step 3: Run vLLM offline eval on model2
-echo "=== Step 3: Running vLLM offline eval (n=3, tp=8) ==="
+echo "=== Step 3: Running vLLM offline eval on model2 (n=3, tp=8) ==="
 python -u /workspace/verl/recipe/joint_training/offline_eval.py \
     --model_path "$MODEL2_PATH" \
     --tensor_parallel 8 \
@@ -58,4 +49,4 @@ python -u /workspace/verl/recipe/joint_training/offline_eval.py \
         /data-1/dataset/MAWPS/mawps-test_with_system_prompt.parquet \
         /data-1/dataset/SVAMP/svamp-test_with_system_prompt.parquet
 
-echo "=== Eval complete. Results at $OUTPUT_DIR ==="
+echo "=== model2 eval complete. Results at $OUTPUT_DIR ==="

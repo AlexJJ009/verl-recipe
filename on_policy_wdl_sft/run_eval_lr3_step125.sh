@@ -8,9 +8,9 @@
 set -xeuo pipefail
 
 FSDP_ACTOR_DIR=/data-1/checkpoints/WDL-SFT-Qwen3-4B-MATH-LR3_1776359574/global_step_125/actor
-MERGED_JOINT_PATH=/data-1/eval_results/wdl-sft-lr3-step125_merged_joint
-MODEL2_PATH=/data-1/eval_results/wdl-sft-lr3-step125_model2
-OUTPUT_DIR=/data-1/eval_results/wdl-sft-lr3-step125_n3_sysprompt
+MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125
+MODEL2_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125_model2
+OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125_model2/inference_n3
 
 # Step 1: Merge FSDP shards to HF safetensors format
 echo "=== Step 1: Merging FSDP checkpoint ==="

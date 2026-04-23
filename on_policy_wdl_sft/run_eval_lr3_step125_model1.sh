@@ -2,13 +2,13 @@
 # Offline eval: WDL-SFT LR-3 step 125 — model1 (weak/anchor model, index=0)
 # n=3, 7 benchmarks with system prompt
 #
-# Prerequisite: merged joint weights at /data-1/eval_results/wdl-sft-lr3-step125_merged_joint/
+# Prerequisite: merged joint weights at /data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125/
 # (produced by run_eval_lr3_step125.sh Step 1)
 set -xeuo pipefail
 
-MERGED_JOINT_PATH=/data-1/eval_results/wdl-sft-lr3-step125_merged_joint
-MODEL1_PATH=/data-1/eval_results/wdl-sft-lr3-step125_model1
-OUTPUT_DIR=/data-1/eval_results/wdl-sft-lr3-step125_model1_n3_sysprompt
+MERGED_JOINT_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125
+MODEL1_PATH=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125_model1
+OUTPUT_DIR=/data-1/model_weights/WDL-SFT-4B-MATH-LR3/step_125_model1/inference_n3
 
 # Step 1: Extract model1 (index=0, anchor/weak model)
 echo "=== Extracting model1 from merged joint checkpoint ==="

@@ -30,10 +30,10 @@ bash run_eval_m5_6_step300_model1.sh 2>&1 | tee "$LOG_DIR/eval_m5_6_step300_mode
 
 log_section "All four evals complete."
 echo "Metrics JSONs written to:"
-echo "  /data-1/eval_results/wdl-sft-m5_5-step300_n3_sysprompt/eval_metrics.json"
-echo "  /data-1/eval_results/wdl-sft-m5_5-step300_model1_n3_sysprompt/eval_metrics.json"
-echo "  /data-1/eval_results/wdl-sft-m5_6-step300_n3_sysprompt/eval_metrics.json"
-echo "  /data-1/eval_results/wdl-sft-m5_6-step300_model1_n3_sysprompt/eval_metrics.json"
+echo "  /data-1/model_weights/WDL-SFT-4B-MATH-M5-5/step_300_model2/inference_n3/eval_metrics.json"
+echo "  /data-1/model_weights/WDL-SFT-4B-MATH-M5-5/step_300_model1/inference_n3/eval_metrics.json"
+echo "  /data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300_model2/inference_n3/eval_metrics.json"
+echo "  /data-1/model_weights/WDL-SFT-4B-MATH-M5-6/step_300_model1/inference_n3/eval_metrics.json"
 
 # ------------------------------------------------------------------
 # Outer launch reference (for restart / manual re-run):
