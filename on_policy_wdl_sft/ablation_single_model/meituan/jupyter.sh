@@ -54,8 +54,8 @@ esac
 if [ ! -d "$INIT_MODEL_PATH" ]; then
     echo "[meituan/jupyter.sh] ERROR: init model not found at $INIT_MODEL_PATH" >&2
     if [[ "$EXPERIMENT" == *-sft ]]; then
-        echo "[meituan/jupyter.sh] HINT: -sft experiments need Qwen3-4B-Base-SFT-stage-1 at $MEITUAN_SFT_MODEL_PATH" >&2
-        echo "[meituan/jupyter.sh] HINT: not yet uploaded as of 2026-04-22 — run a -base variant first" >&2
+        echo "[meituan/jupyter.sh] HINT: -sft experiments need Qwen3-4B-Base-SFT-stage-1 at $MEITUAN_SFT_MODEL_PATH (flat dir)" >&2
+        echo "[meituan/jupyter.sh] HINT: see docs/joint_training/guides/meituan_platform.md for upload workflow" >&2
     fi
     exit 1
 fi

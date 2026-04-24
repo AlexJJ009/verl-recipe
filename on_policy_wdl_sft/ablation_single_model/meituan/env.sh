@@ -48,11 +48,15 @@ export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM-data-processed/tr
 export TEST_FILES=${TEST_FILES:-"['$LGX/verl-exp/data/MATH-500/math500-test_with_system_prompt.parquet','$LGX/verl-exp/data/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 # --- Init-model paths — consumed by jupyter.sh based on EXPERIMENT suffix -----
-# Meituan's HF layout is git-clone style (NOT HF cache "models--*/snapshots/*"):
-#   lgx/huggingface.co/Qwen/Qwen3-4B-Base              (exists as of 2026-04-22)
-#   lgx/huggingface.co/Qwen/Qwen3-4B-Base-SFT-stage-1  (NOT yet uploaded)
+# Both models use a flat directory layout (real files, no HF cache symlinks).
+# Rationale: dolphinfs disallows hardlinks AND symlinks, so the HF cache layout
+# (models--<org>--<name>/snapshots/<hash>/<file> -> ../../blobs/<sha>) cannot be
+# materialized. The SFT model's blobs were `mv`'d into a flat dir on 2026-04-23
+# after a Mac-zip upload lost all symlinks; verified via sha256 against the
+# original LFS oids. Future uploads should go straight to flat layout — see
+# docs/joint_training/guides/meituan_platform.md.
 export MEITUAN_BASE_MODEL_PATH=${MEITUAN_BASE_MODEL_PATH:-$LGX/huggingface.co/Qwen/Qwen3-4B-Base}
-export MEITUAN_SFT_MODEL_PATH=${MEITUAN_SFT_MODEL_PATH:-$LGX/huggingface.co/Qwen/Qwen3-4B-Base-SFT-stage-1}
+export MEITUAN_SFT_MODEL_PATH=${MEITUAN_SFT_MODEL_PATH:-$LGX/huggingface.co/Qwen/Qwen3-4B-Base-SFT-stage-1/flat}
 
 # --- Pre-create dolphinfs dirs so training script doesn't fail on first write -
 mkdir -p "$HF_HOME" "$BASE_CKPT_DIR" "$WANDB_DIR" "$LOG_DIR"
