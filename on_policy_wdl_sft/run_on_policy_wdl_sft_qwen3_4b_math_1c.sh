@@ -37,8 +37,8 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Section 2: Cache & Temp Directories ====================
-export HF_HOME=/data-1/.cache/huggingface
-export RAY_TMPDIR=/data-1/ray_tmp
+export HF_HOME=${HF_HOME:-/data-1/.cache/huggingface}
+export RAY_TMPDIR=${RAY_TMPDIR:-/data-1/ray_tmp}
 export TMPDIR=${TMPDIR:-/data-1/tmp}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
 export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-$TMPDIR}
@@ -59,7 +59,7 @@ export RAY_LOGGING_LEVEL=WARNING
 export HYDRA_FULL_ERROR=1
 
 # ===================== Section 3: W&B Configuration ===========================
-RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-1C"}
+RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-1C-LABELFIX"}
 export WANDB_PROJECT=${WANDB_PROJECT:-"OnPolicyWDLSFT"}
 export WANDB_RUN_NAME="${WANDB_RUN_NAME:-${RUN_PREFIX}_$(date +%s)}"
 
@@ -89,7 +89,7 @@ FUSION_LAMBDA=${FUSION_LAMBDA:-0.50}
 # Joint model output path
 MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
 MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
-DEFAULT_MODEL_PATH="/data-1/.cache/huggingface/QwenJoint-4B-WDL-SFT-${MODEL2_CACHE_TAG}"
+DEFAULT_MODEL_PATH="${HF_HOME}/QwenJoint-4B-WDL-SFT-${MODEL2_CACHE_TAG}"
 MODEL_PATH=${MODEL_PATH:-"$DEFAULT_MODEL_PATH"}
 
 # Training data (RL format parquet with system prompt)

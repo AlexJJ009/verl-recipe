@@ -37,6 +37,13 @@ comparison.
 | `run_2g_base.sh` | Qwen3-4B-Base | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
 | `run_2g_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
 
+After the 2026-04-27 reward-label fix for `wdl_sft_is`, all `run_2a_*`,
+`run_2b_*`, and `run_2c_*` wrappers default their `RUN_PREFIX` to
+`WDL-SFT-...-LABELFIX`. This deliberately prevents new spec-correct runs from
+auto-resuming the pre-fix checkpoints under the old prefixes. The `minirl`
+(`2z`) and `vanilla` (`2g`) baselines are not affected by this bug and keep
+their original prefixes.
+
 `_common_ablation.sh` holds the shared env setup, checkpoint/resume logic, and
 the Hydra launch command. Each `run_2*.sh` is a thin 10-line wrapper that
 exports 4–5 knobs and sources the common launcher.

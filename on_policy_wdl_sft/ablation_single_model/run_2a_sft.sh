@@ -9,7 +9,7 @@
 # ==============================================================================
 set -xeuo pipefail
 
-export RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-2A-SFT"}
+export RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-2A-SFT-LABELFIX"}
 export INIT_MODEL_PATH=${INIT_MODEL_PATH:-"/data-1/.cache/Qwen3-4B-Base-SFT-stage-1"}
 export LOSS_MODE=${LOSS_MODE:-"wdl_sft_is"}
 export WDL_SFT_BETA=${WDL_SFT_BETA:-0.0}

@@ -6,7 +6,7 @@
 # ==============================================================================
 set -xeuo pipefail
 
-export RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-2B-BASE"}
+export RUN_PREFIX=${RUN_PREFIX:-"WDL-SFT-Qwen3-4B-MATH-2B-BASE-LABELFIX"}
 export INIT_MODEL_PATH=${INIT_MODEL_PATH:-"/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539"}
 export LOSS_MODE=${LOSS_MODE:-"wdl_sft_is"}
 export WDL_SFT_BETA=${WDL_SFT_BETA:-0.1}
