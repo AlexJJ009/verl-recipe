@@ -22,6 +22,11 @@ export WANDB_DIR=${WANDB_DIR:-$LGX/verl-exp/wandb_runs}
 export LOG_DIR=${LOG_DIR:-$LGX/verl-exp/logs/on_policy_wdl_sft}
 export WANDB_MODE=${WANDB_MODE:-offline}
 export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-60}
+export MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-1}
+export KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
+export BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-val-core/HuggingFaceH4/MATH-500/acc/mean@1}
+export BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
+export BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
 
 # Init-model paths: flat dirs, no HF cache symlink layout on dolphinfs.
 # Keep these aligned with ablation_single_model/meituan/env.sh; the weights stay

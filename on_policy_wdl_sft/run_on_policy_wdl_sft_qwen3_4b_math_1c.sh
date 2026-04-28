@@ -308,6 +308,12 @@ total_epochs=${TOTAL_EPOCHS:-2}
 total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
 
+# Meituan storage budget: keep latest full checkpoint plus best model-only checkpoint.
+KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
+BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/acc/mean@1"}
+BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
+BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
+
 # Higher LR than 1a (1e-6 vs 5e-7) — matches EXP-15 LR3 rate for direct comparison
 LR=${LR:-1e-6}
 
@@ -431,6 +437,10 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="${CKPTS_DIR}" \
     trainer.max_actor_ckpt_to_keep=${MAX_ACTOR_CKPTS_TO_KEEP} \
     trainer.max_critic_ckpt_to_keep=${MAX_CRITIC_CKPTS_TO_KEEP} \
+    +trainer.keep_best_ckpt=${KEEP_BEST_CKPT} \
+    +trainer.best_ckpt_metric_key="${BEST_CKPT_METRIC_KEY}" \
+    +trainer.best_ckpt_metric_mode=${BEST_CKPT_METRIC_MODE} \
+    +trainer.best_ckpt_strip_optimizer=${BEST_CKPT_STRIP_OPTIMIZER} \
     trainer.log_val_generations=${VAL_GENERATIONS_TO_LOG} \
     +trainer.log_val_generations_to_tracking=${VAL_GENERATIONS_TO_TRACKING} \
     trainer.validation_data_dir="${VALIDATION_DATA_DIR}" \
