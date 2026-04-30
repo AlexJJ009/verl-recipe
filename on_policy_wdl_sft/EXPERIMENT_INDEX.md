@@ -10,6 +10,8 @@ Branch: `feature/on-policy-wdl-sft`
 
 > **Reward-label bug note (2026-04-27)**: `wdl_sft_is` training before 2026-04-27 used GRPO-centered `advantages` as reward labels instead of raw `token_level_scores.sum(dim=-1)`. This affects EXP-16/17/18 and ABL-MINIRL-02/05/06/07, plus any pre-fix runs from `run_2b_sft.sh` / `run_2c_sft.sh` if they exist outside this index. Treat those as **pre-fix `wdl_sft_is` results**, not spec-correct WDL-SFT-IS. The launch scripts now default to `RUN_PREFIX` values ending in `-LABELFIX` for post-fix reruns. `wdl_sft` v1, `minirl`, and `vanilla` / GRPO runs are not affected by this bug.
 
+> **Post-fix rerun status (2026-04-27 local time)**: Meituan is temporarily unavailable, so the first label-fix rerun is running locally: `WDL-SFT-Qwen3-4B-MATH-2A-BASE-LABELFIX_1777346990` from `run_2a_base.sh` in tmux `wdl_2a_base_labelfix`. It passed the 20-minute health check and had reached step 10/300. All other affected `wdl_sft_is` reruns (`1a`, `1b`, `1c`, `2a-sft`, `2b-base`, `2b-sft`, `2c-base`, `2c-sft`) have **not** been rerun under their `-LABELFIX` prefixes yet.
+
 ---
 
 ## EXP-12: WDL-SFT-M5 — First Long Run (lr=1e-6, β=0.1, bidirectional)
