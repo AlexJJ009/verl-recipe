@@ -5,12 +5,14 @@ echo "Environment ready (Docker/uv mode)."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECIPE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(cd "${RECIPE_ROOT}/../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "${RECIPE_ROOT}/../.." && pwd)}"
 
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
-export HF_HOME=${HF_HOME:-/data-1/.cache/huggingface}
+export CACHE_ROOT=${CACHE_ROOT:-/data-1/.cache}
+export DATA_ROOT=${DATA_ROOT:-/data-1/dataset}
+export HF_HOME=${HF_HOME:-${CACHE_ROOT}/huggingface}
 export RAY_TMPDIR=${RAY_TMPDIR:-/data-1/ray_tmp}
 export TMPDIR=${TMPDIR:-/data-1/tmp}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
@@ -41,15 +43,15 @@ mkdir -p "$WANDB_DIR"
 NNODES=${NNODES:-1}
 NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 
-BASE_MODEL_PATH=${BASE_MODEL_PATH:-"/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539"}
-MODEL2_PATH=${MODEL2_PATH:-"/data-1/.cache/Qwen3-4B-Base-SFT-stage-1"}
+BASE_MODEL_PATH=${BASE_MODEL_PATH:-"${HF_HOME}/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539"}
+MODEL2_PATH=${MODEL2_PATH:-"${CACHE_ROOT}/Qwen3-4B-Base-SFT-stage-1"}
 FUSION_LAMBDA=${FUSION_LAMBDA:-0.50}
 MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
 MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
 MODEL_PATH=${MODEL_PATH:-"${HF_HOME}/QwenJoint-4B-WDL-SFT-${MODEL2_CACHE_TAG}"}
 
-TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/EnsembleLLM-data-processed/train_rl_format.parquet"}
-TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test_with_system_prompt.parquet','/data-1/dataset/AIME-2025/aime-2025_with_system_prompt.parquet']"}
+TRAIN_FILE=${TRAIN_FILE:-"${DATA_ROOT}/EnsembleLLM-data-processed/train_rl_format.parquet"}
+TEST_FILES=${TEST_FILES:-"['${DATA_ROOT}/MATH-500/math500-test_with_system_prompt.parquet','${DATA_ROOT}/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 if [ ! -d "$MODEL_PATH" ]; then
     echo "Joint model not found at $MODEL_PATH. Preparing from base + strong models..."
@@ -62,10 +64,12 @@ if [ ! -d "$MODEL_PATH" ]; then
         --fusion_lambda "$FUSION_LAMBDA"
 fi
 
-MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
+MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-160}
 MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
-MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-13}
-MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-2}
+# Keep storage bounded by default: one latest checkpoint plus the best checkpoint
+# tracked by trainer.keep_best_ckpt.
+MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-1}
+MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-1}
 BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-1/checkpoints}
 
 get_df_target() {
