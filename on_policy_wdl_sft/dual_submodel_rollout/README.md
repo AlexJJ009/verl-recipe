@@ -28,8 +28,9 @@ bash recipe/on_policy_wdl_sft/dual_submodel_rollout/run_3a_model2_rollout_beta0.
 `run_3b_model2_rollout_beta01.sh` is identical except for
 `WDL_SFT_BETA=0.1`.
 
+Default validation uses `actor_rollout_ref.rollout.val_kwargs.n=3`.
 Default checkpoint retention keeps only the latest checkpoint plus the best
-checkpoint selected by `val-core/HuggingFaceH4/MATH-500/acc/mean@1`.
+checkpoint selected by `val-core/HuggingFaceH4/MATH-500/acc/mean@3`.
 The launch fails fast unless `BASE_CKPT_DIR` has at least
 `MIN_FREE_GB_FOR_CKPT=160` GiB free by default; override this only for short
 smoke runs or when checkpoint size is known.

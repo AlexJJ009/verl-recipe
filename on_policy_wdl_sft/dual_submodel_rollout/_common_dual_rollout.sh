@@ -204,7 +204,7 @@ total_epochs=${TOTAL_EPOCHS:-2}
 total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
 KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
-BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/acc/mean@1"}
+BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/acc/mean@3"}
 BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
 BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
 LR=${LR:-5e-7}
@@ -282,7 +282,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.val_kwargs.n=3 \
     +actor_rollout_ref.rollout.custom.joint_rollout_sources="[sub_model_0,sub_model_1]" \
     +actor_rollout_ref.rollout.custom.joint_rollout_select=sub_model_1 \
     +actor_rollout_ref.rollout.custom.joint_rollout_train_on_selected_only=true \
