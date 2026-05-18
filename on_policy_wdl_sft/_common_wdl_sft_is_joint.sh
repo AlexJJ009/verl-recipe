@@ -33,7 +33,14 @@ export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 
 # ===================== Cache, Temp, Runtime ==================================
-export HF_HOME=${HF_HOME:-"${DATA_ROOT}/.cache/huggingface"}
+# verl-harness images may set HF_HOME=/root/.cache/huggingface. For local
+# training that path is inside the disposable container layer, so treat it as
+# unset unless the caller explicitly points HF_HOME somewhere else.
+if [ -z "${HF_HOME+x}" ] || [ "$HF_HOME" = "/root/.cache/huggingface" ]; then
+    export HF_HOME="${DATA_ROOT}/.cache/huggingface"
+else
+    export HF_HOME
+fi
 export RAY_TMPDIR=${RAY_TMPDIR:-"${DATA_ROOT}/ray_tmp"}
 export TMPDIR=${TMPDIR:-"${DATA_ROOT}/tmp"}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-"${DATA_ROOT}/.config/vllm"}
