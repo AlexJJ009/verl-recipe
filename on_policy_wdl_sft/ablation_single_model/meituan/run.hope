@@ -4,20 +4,22 @@
 # Usage:
 #   1. Copy this file to hope_dir/ (or your AFO submission staging area)
 #   2. Fill afo.docker.image.name with the verl image URL
-#   3. Pick EXPERIMENT below (default 2z-base = MiniRL baseline on Qwen3-4B-Base)
+#   3. Pick EXPERIMENT below (default 2h-math-base = new-loss single-model on MATH train)
 #   4. Adjust LGX / queue / resource if needed
 #   5. Submit: `hope submit run.hope`
 #
 # Only -base variants are runnable until Qwen3-4B-Base-SFT-stage-1 is uploaded.
 #   2z-base  = MiniRL baseline (first smoke test — safest)
 #   2g-base  = canonical GRPO baseline (vanilla PPO-clip + std-normalized adv)
+#   2g-math-base = canonical GRPO baseline on Hendrycks MATH train
+#   2h-math-base = single-model wdl_group_adv_is on Hendrycks MATH train
 #   2a-base  = WDL-SFT-IS, β=0,   lr=5e-7
 #   2b-base  = WDL-SFT-IS, β=0.1, lr=5e-7
 #   2c-base  = WDL-SFT-IS, β=0,   lr=1e-6
 # ==============================================================================
 
 [base]
-afo.app.name = verl-ablation-2z-base
+afo.app.name = verl-ablation-2h-math-base
 type = ml-easy-job
 
 [resource]
@@ -58,9 +60,9 @@ afo.app.env.YARN_CONTAINER_RUNTIME_DOCKER_SHM_SIZE_BYTES = 68719476736
 afo.dolphinfs.otherusers = hadoop-mtsearch-assistant
 
 # ----------------- Ablation selection (change this line!) -------------------
-# One of: 2a-base | 2b-base | 2c-base | 2z-base | 2g-base  (runnable today)
-#         2a-sft  | 2b-sft  | 2c-sft  | 2z-sft  | 2g-sft   (requires SFT model upload)
-afo.app.env.EXPERIMENT = 2z-base
+# One of: 2a-base | 2b-base | 2c-base | 2z-base | 2g-base | 2g-math-base | 2h-math-base  (runnable today)
+#         2a-sft  | 2b-sft  | 2c-sft  | 2z-sft  | 2g-sft  | 2g-math-sft  | 2h-math-sft   (requires SFT model upload)
+afo.app.env.EXPERIMENT = 2h-math-base
 
 # ----------------- Dolphinfs anchor (rarely needs override) -----------------
 afo.app.env.LGX = /mnt/dolphinfs/ssd_pool/docker/user/hadoop-ai-search/yangfengkai02/lgx

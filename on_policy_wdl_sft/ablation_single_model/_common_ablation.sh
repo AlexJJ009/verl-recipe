@@ -9,7 +9,8 @@
 #   Required from caller (export before sourcing):
 #     RUN_PREFIX            e.g. "WDL-SFT-Qwen3-4B-MATH-2A-BASE"
 #     INIT_MODEL_PATH       absolute path to the HF model dir (Qwen3 arch)
-#     LOSS_MODE             "wdl_sft_is" (ablation) or "minirl" (baseline 2Z)
+#     LOSS_MODE             "wdl_sft_is" / "wdl_group_adv_is" (ablation) or
+#                           "minirl" / "vanilla" (baselines)
 #     LR                    learning rate (e.g. 5e-7, 1e-6)
 #
 #   Optional from caller:
@@ -30,7 +31,7 @@ set -xeuo pipefail
 
 : "${RUN_PREFIX:?RUN_PREFIX must be set by the caller}"
 : "${INIT_MODEL_PATH:?INIT_MODEL_PATH must be set by the caller}"
-: "${LOSS_MODE:?LOSS_MODE must be set by the caller (wdl_sft_is or minirl)}"
+: "${LOSS_MODE:?LOSS_MODE must be set by the caller}"
 : "${LR:?LR must be set by the caller}"
 
 WDL_SFT_BETA=${WDL_SFT_BETA:-0.0}
@@ -186,11 +187,20 @@ clip_ratio_low=${CLIP_RATIO_LOW:-0.2}
 clip_ratio_high=${CLIP_RATIO_HIGH:-0.27}
 
 # Rollout correction (π_fsdp/π_vllm log-prob mismatch) — identical to 1A/B/C
-rollout_is="token"
-rollout_is_threshold=5.0
-rollout_is_batch_normalize="false"
-rollout_rs="null"
-rollout_rs_threshold="null"
+# for the v2 WDL-SFT-IS family. The newer wdl_group_adv_is loss owns its
+# detached IS term internally and explicitly forbids external rollout_is weights.
+rollout_is=${ROLLOUT_IS:-token}
+rollout_is_threshold=${ROLLOUT_IS_THRESHOLD:-5.0}
+rollout_is_batch_normalize=${ROLLOUT_IS_BATCH_NORMALIZE:-false}
+rollout_rs=${ROLLOUT_RS:-null}
+rollout_rs_threshold=${ROLLOUT_RS_THRESHOLD:-null}
+if [ "$LOSS_MODE" = "wdl_group_adv_is" ]; then
+    rollout_is=${ROLLOUT_IS:-null}
+    rollout_rs=${ROLLOUT_RS:-null}
+    NORM_ADV_BY_STD_IN_GRPO=${NORM_ADV_BY_STD_IN_GRPO:-false}
+fi
+ALL_CORRECT_SFT_FALLBACK=${ALL_CORRECT_SFT_FALLBACK:-true}
+POS_SFT_FALLBACK_COEF=${POS_SFT_FALLBACK_COEF:-1.0}
 
 # ===================== Section 8b: Reward Manager =============================
 reward_manager=dapo
@@ -221,6 +231,7 @@ temperature=1.0
 top_p=1.0
 top_k=-1
 val_top_p=0.95
+val_n=${VAL_N:-1}
 
 # ===================== Section 12: Performance & Memory =======================
 sp_size=1
@@ -289,6 +300,10 @@ LOSS_EXTRA_ARGS=()
 case "$LOSS_MODE" in
     wdl_sft_is|wdl_sft)
         LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.wdl_sft_beta=${WDL_SFT_BETA}")
+        ;;
+    wdl_group_adv_is)
+        LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.all_correct_sft_fallback=${ALL_CORRECT_SFT_FALLBACK}")
+        LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.pos_sft_fallback_coef=${POS_SFT_FALLBACK_COEF}")
         ;;
     minirl|vanilla|gspo|sapo|gpg|clip_cov|kl_cov|geo_mean|cispo|bypass_mode)
         : # no extra args needed
@@ -381,7 +396,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.val_kwargs.n=${val_n} \
     \
     `# --- Data ---` \
     data.train_files="${TRAIN_FILE}" \

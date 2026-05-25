@@ -36,6 +36,10 @@ comparison.
 | `run_2z_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `minirl` (pure RL) | —   | 5e-7 | reference baseline |
 | `run_2g_base.sh` | Qwen3-4B-Base | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
 | `run_2g_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
+| `run_2g_math_base.sh` | Qwen3-4B-Base | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO on MATH train |
+| `run_2g_math_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO on MATH train |
+| `run_2h_math_base.sh` | Qwen3-4B-Base | `wdl_group_adv_is` | — | 5e-7 | single-model new-loss ablation on MATH train, val n=3 |
+| `run_2h_math_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `wdl_group_adv_is` | — | 5e-7 | single-model new-loss ablation on MATH train, val n=3 |
 
 After the 2026-04-27 reward-label fix for `wdl_sft_is`, all `run_2a_*`,
 `run_2b_*`, and `run_2c_*` wrappers default their `RUN_PREFIX` to
@@ -62,6 +66,24 @@ Everything else — `adv_estimator=grpo`, `clip_ratio_c=10.0`, lr, batch, rollou
 N, eval cadence — is identical. The 2G ↔ 2Z delta is exactly "which loss
 family" on the same data; useful as a second reference floor to triangulate
 against the MiniRL-centric 2X series.
+
+`run_2g_math_*` keeps the 2G GRPO settings but changes the training parquet to
+Hendrycks MATH train (`MATH_TRAIN_FILE`, default
+`/data-1/dataset/math/train_rl_format.parquet`) and defaults to one filtered
+epoch: `TOTAL_TRAINING_STEPS=115`, `TOTAL_EPOCHS=1`. Validation remains
+MATH-500 + AIME-2025.
+
+`run_2h_math_*` uses the same Hendrycks MATH train parquet, one-epoch
+115-step budget, and MATH-500 + AIME-2025 validation set as the 1D joint
+`wdl_group_adv_is` run, but removes the joint model. It sets
+`LOSS_MODE=wdl_group_adv_is`, `ROLLOUT_IS=null`, `VAL_N=3`, and keeps
+validation sampling at `temperature=1.0`, `top_p=0.95`, `top_k=-1`.
+Best-checkpoint retention tracks `val-core/HuggingFaceH4/MATH-500/acc/mean@3`.
+
+`monitor_2h_math_queue.sh` runs the 2H MATH ablations in order: Base first,
+then SFT. It uses `/data-1/verl07/run_train.sh` when present, otherwise falls
+back to `docker run ... verl-harness`; it waits for step 115 completion and
+gates the next launch on disk/GPU availability.
 
 ## What we can decompose from the result
 
@@ -112,10 +134,13 @@ Workflow:
 **Currently runnable on Meituan** (base model uploaded, SFT pending):
 - `2z-base` — MiniRL baseline. **Recommended first smoke test.**
 - `2g-base` — canonical GRPO baseline (vanilla PPO-clip).
+- `2g-math-base` — canonical GRPO baseline on Hendrycks MATH train.
 - `2a-base`, `2b-base`, `2c-base` — WDL-SFT-IS variants on Base init
 
 **Blocked until SFT model uploaded**:
-- `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft`, `2g-sft` — all `-sft` variants
+- `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft`, `2g-sft`, `2g-math-sft` — all `-sft` variants
+
+`2g-math-*` also requires `$LGX/verl-exp/data/math/train_rl_format.parquet`.
 
 `meituan/jupyter.sh` fails fast with a clear error if the required init model
 or dataset isn't present at the expected dolphinfs path.
