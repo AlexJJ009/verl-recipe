@@ -126,7 +126,19 @@ fi
 
 mkdir -p "$BASE_CKPT_DIR"
 
-LATEST_CKPT_DIR=$(find "$BASE_CKPT_DIR" -maxdepth 1 -type d -name "${RUN_PREFIX}_*" 2>/dev/null | sort | tail -1)
+find_latest_resumable_ckpt_dir() {
+    local dir
+    while IFS= read -r dir; do
+        [ -n "$dir" ] || continue
+        if [ -f "$dir/latest_checkpointed_iteration.txt" ] || \
+            find "$dir" -maxdepth 1 -type d -name 'global_step_*' 2>/dev/null | grep -q .; then
+            printf '%s\n' "$dir"
+            return
+        fi
+    done < <(find "$BASE_CKPT_DIR" -maxdepth 1 -type d -name "${RUN_PREFIX}_*" 2>/dev/null | sort -r)
+}
+
+LATEST_CKPT_DIR=$(find_latest_resumable_ckpt_dir)
 
 if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
     EXPERIMENT_NAME=$(basename "$LATEST_CKPT_DIR")
