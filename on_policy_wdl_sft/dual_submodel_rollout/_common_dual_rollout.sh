@@ -12,7 +12,11 @@ export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:Tr
 
 export CACHE_ROOT=${CACHE_ROOT:-/data-1/.cache}
 export DATA_ROOT=${DATA_ROOT:-/data-1/dataset}
-export HF_HOME=${HF_HOME:-${CACHE_ROOT}/huggingface}
+if [ "${HF_HOME:-}" = "" ] || [ "${HF_HOME:-}" = "/root/.cache/huggingface" ]; then
+    export HF_HOME="${CACHE_ROOT}/huggingface"
+else
+    export HF_HOME
+fi
 export RAY_TMPDIR=${RAY_TMPDIR:-/data-1/ray_tmp}
 export TMPDIR=${TMPDIR:-/data-1/tmp}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/data-1/.config/vllm}
@@ -129,6 +133,11 @@ loss_mode=${LOSS_MODE:-wdl_sft_is}
 WDL_SFT_BETA=${WDL_SFT_BETA:-0.0}
 clip_ratio_low=${CLIP_RATIO_LOW:-0.2}
 clip_ratio_high=${CLIP_RATIO_HIGH:-0.27}
+gamma_pos_sft=${GAMMA_POS_SFT:-1.0}
+tis_threshold=${TIS_THRESHOLD:-5.0}
+joint_rollout_sources=${JOINT_ROLLOUT_SOURCES:-"[sub_model_0,sub_model_1]"}
+joint_rollout_select=${JOINT_ROLLOUT_SELECT:-sub_model_1}
+joint_rollout_train_on_selected_only=${JOINT_ROLLOUT_TRAIN_ON_SELECTED_ONLY:-true}
 
 # Dual rollout deliberately does not use rollout_is_weights as loss weights by default.
 rollout_is=${ROLLOUT_IS:-null}
@@ -159,6 +168,7 @@ sp_size=${SP_SIZE:-1}
 use_dynamic_bsz=${USE_DYNAMIC_BSZ:-True}
 actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-9192}
 infer_ppo_max_token_len=${INFER_PPO_MAX_TOKEN_LEN:-$(((max_prompt_length + max_response_length) * 6))}
+CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 offload=${OFFLOAD:-False}
 fsdp_size=${FSDP_SIZE:--1}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
@@ -237,12 +247,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.calculate_entropy=True \
+    actor_rollout_ref.actor.calculate_entropy=${CALCULATE_ENTROPY} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.policy_loss.loss_mode=${loss_mode} \
     +actor_rollout_ref.actor.policy_loss.wdl_sft_beta=${WDL_SFT_BETA} \
+    +actor_rollout_ref.actor.policy_loss.gamma_pos_sft=${gamma_pos_sft} \
+    +actor_rollout_ref.actor.policy_loss.tis_threshold=${tis_threshold} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
@@ -283,9 +295,9 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.rollout.val_kwargs.n=3 \
-    +actor_rollout_ref.rollout.custom.joint_rollout_sources="[sub_model_0,sub_model_1]" \
-    +actor_rollout_ref.rollout.custom.joint_rollout_select=sub_model_1 \
-    +actor_rollout_ref.rollout.custom.joint_rollout_train_on_selected_only=true \
+    +actor_rollout_ref.rollout.custom.joint_rollout_sources="${joint_rollout_sources}" \
+    +actor_rollout_ref.rollout.custom.joint_rollout_select=${joint_rollout_select} \
+    +actor_rollout_ref.rollout.custom.joint_rollout_train_on_selected_only=${joint_rollout_train_on_selected_only} \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILES}" \
     data.prompt_key=prompt \

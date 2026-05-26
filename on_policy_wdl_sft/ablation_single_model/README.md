@@ -1,4 +1,4 @@
-# Ablation: Single-Model WDL-SFT-IS (Series 2X)
+# Ablation: Single-Model WDL-SFT / Group-Advantage IS
 
 Scripts that test whether the `wdl_sft_is` loss works on its own — i.e. **without**
 the joint-model + fused-logit rollout used in 1A/1B/1C. Every script here uses
@@ -36,6 +36,8 @@ comparison.
 | `run_2z_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `minirl` (pure RL) | —   | 5e-7 | reference baseline |
 | `run_2g_base.sh` | Qwen3-4B-Base | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
 | `run_2g_sft.sh`  | Qwen3-4B-Base-SFT-stage-1 | `vanilla` (PPO-clip, GRPO) | — | 5e-7 | canonical GRPO baseline |
+| `run_4b_math_base.sh` | Qwen3-4B-Base | `wdl_group_adv_is` | — | 5e-7 | 4A single-model Base ablation |
+| `run_4c_math_sft.sh` | Qwen3-4B-Base-SFT-stage-1 | `wdl_group_adv_is` | — | 5e-7 | 4A single-model SFT ablation |
 
 After the 2026-04-27 reward-label fix for `wdl_sft_is`, all `run_2a_*`,
 `run_2b_*`, and `run_2c_*` wrappers default their `RUN_PREFIX` to
@@ -47,6 +49,12 @@ their original prefixes.
 `_common_ablation.sh` holds the shared env setup, checkpoint/resume logic, and
 the Hydra launch command. Each `run_2*.sh` is a thin 10-line wrapper that
 exports 4–5 knobs and sources the common launcher.
+
+The 4B/4C MATH scripts reuse `/data-1/dataset/math/train_rl_format.parquet`,
+`TOTAL_TRAINING_STEPS=115`, `TOTAL_EPOCHS=1`, validation `VAL_N=3`, and
+`BEST_CKPT_METRIC_KEY=val-core/HuggingFaceH4/MATH-500/acc/mean@3`. They use
+`LOSS_MODE=wdl_group_adv_is` with `ROLLOUT_IS=null` because the loss owns its
+detached IS term internally.
 
 **`run_2g_*` vs `run_2z_*`**: both are reference baselines from the same init,
 but they exercise different loss families:
@@ -89,7 +97,7 @@ LR=7e-7 TOTAL_TRAINING_STEPS=400 bash run_2a_sft.sh
 
 ### Meituan MLP (AFO) — see `meituan/` subfolder
 
-The **same** `run_2X_*.sh` scripts run on Meituan MLP. The `meituan/` subfolder
+The **same** `run_2X_*.sh` and `run_4{b,c}_*.sh` scripts run on Meituan MLP. The `meituan/` subfolder
 provides a thin path-override layer that redirects all `/data-1/...` defaults
 to dolphinfs paths:
 
@@ -106,16 +114,20 @@ Workflow:
    three parquet datasets (EnsembleLLM train + MATH-500 + AIME-2025 val) to
    the paths shown in `meituan/env.sh`
 3. Copy `meituan/run.hope` to `$LGX/hope_dir/`, fill `afo.docker.image.name`,
-   set `afo.app.env.EXPERIMENT=2z-base` (or whichever variant)
+   set `afo.app.env.EXPERIMENT=2z-base` (or `4b-math-base` / `4c-math-sft`)
 4. `hope submit run.hope`
 
 **Currently runnable on Meituan** (base model uploaded, SFT pending):
 - `2z-base` — MiniRL baseline. **Recommended first smoke test.**
 - `2g-base` — canonical GRPO baseline (vanilla PPO-clip).
 - `2a-base`, `2b-base`, `2c-base` — WDL-SFT-IS variants on Base init
+- `4b-math-base` — current `wdl_group_adv_is` single-model Base ablation on
+  MATH train
 
 **Blocked until SFT model uploaded**:
 - `2a-sft`, `2b-sft`, `2c-sft`, `2z-sft`, `2g-sft` — all `-sft` variants
+- `4c-math-sft` — current `wdl_group_adv_is` single-model SFT ablation on
+  MATH train
 
 `meituan/jupyter.sh` fails fast with a clear error if the required init model
 or dataset isn't present at the expected dolphinfs path.

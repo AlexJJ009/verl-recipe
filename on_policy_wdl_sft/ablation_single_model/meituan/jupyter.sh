@@ -3,9 +3,9 @@
 # Meituan AFO worker entry point for single-model ablation runs.
 #
 # Required env (set via run.hope `afo.app.env.X=Y`):
-#   EXPERIMENT   one of: 2a-base | 2a-sft | 2b-base | 2b-sft |
+#   EXPERIMENT   examples: 2a-base | 2a-sft | 2b-base | 2b-sft |
 #                        2c-base | 2c-sft | 2z-base | 2z-sft |
-#                        2g-base | 2g-sft
+#                        2g-base | 2g-sft | 4b-math-base | 4c-math-sft
 #
 # Optional env (all overridable via run.hope):
 #   LGX                      dolphinfs anchor (default: hadoop-ai-search/yangfengkai02/lgx)
@@ -23,7 +23,7 @@
 
 set -xeuo pipefail
 
-: "${EXPERIMENT:?EXPERIMENT must be set (one of 2a-base|2a-sft|2b-base|2b-sft|2c-base|2c-sft|2z-base|2z-sft|2g-base|2g-sft)}"
+: "${EXPERIMENT:?EXPERIMENT must be set (for example 2a-base or 4b-math-base)}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ABLATION_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -64,6 +64,15 @@ if [ ! -f "$TRAIN_FILE" ]; then
     echo "[meituan/jupyter.sh] HINT: upload EnsembleLLM train_rl_format.parquet to \$LGX/verl-exp/data/EnsembleLLM-data-processed/" >&2
     exit 1
 fi
+case "$EXPERIMENT" in
+    4*-math-*)
+        if [ ! -f "$MATH_TRAIN_FILE" ]; then
+            echo "[meituan/jupyter.sh] ERROR: MATH_TRAIN_FILE not found at $MATH_TRAIN_FILE" >&2
+            echo "[meituan/jupyter.sh] HINT: upload MATH train_rl_format.parquet to \$LGX/verl-exp/data/math/" >&2
+            exit 1
+        fi
+        ;;
+esac
 
 # ---- 4. Resolve run script ---------------------------------------------------
 # EXPERIMENT "2z-base" → run_2z_base.sh

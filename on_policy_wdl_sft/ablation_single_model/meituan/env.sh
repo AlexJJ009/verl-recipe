@@ -50,6 +50,7 @@ export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-60}
 #   rsync -avP /data-1/dataset/EnsembleLLM-data-processed/ \
 #     $LGX/verl-exp/data/EnsembleLLM-data-processed/
 export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM-data-processed/train_rl_format.parquet}
+export MATH_TRAIN_FILE=${MATH_TRAIN_FILE:-$LGX/verl-exp/data/math/train_rl_format.parquet}
 export TEST_FILES=${TEST_FILES:-"['$LGX/verl-exp/data/MATH-500/math500-test_with_system_prompt.parquet','$LGX/verl-exp/data/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 # --- Init-model paths — consumed by jupyter.sh based on EXPERIMENT suffix -----
@@ -73,5 +74,6 @@ echo "[meituan/env.sh] BASE_CKPT_DIR           = $BASE_CKPT_DIR"
 echo "[meituan/env.sh] WANDB_DIR               = $WANDB_DIR"
 echo "[meituan/env.sh] LOG_DIR                 = $LOG_DIR"
 echo "[meituan/env.sh] TRAIN_FILE              = $TRAIN_FILE"
+echo "[meituan/env.sh] MATH_TRAIN_FILE         = $MATH_TRAIN_FILE"
 echo "[meituan/env.sh] MEITUAN_BASE_MODEL_PATH = $MEITUAN_BASE_MODEL_PATH"
 echo "[meituan/env.sh] MEITUAN_SFT_MODEL_PATH  = $MEITUAN_SFT_MODEL_PATH"

@@ -186,11 +186,20 @@ clip_ratio_low=${CLIP_RATIO_LOW:-0.2}
 clip_ratio_high=${CLIP_RATIO_HIGH:-0.27}
 
 # Rollout correction (π_fsdp/π_vllm log-prob mismatch) — identical to 1A/B/C
-rollout_is="token"
-rollout_is_threshold=5.0
-rollout_is_batch_normalize="false"
-rollout_rs="null"
-rollout_rs_threshold="null"
+# for the v2 WDL-SFT-IS family. The newer wdl_group_adv_is loss owns its
+# detached IS term internally and explicitly forbids external rollout_is weights.
+rollout_is=${ROLLOUT_IS:-token}
+rollout_is_threshold=${ROLLOUT_IS_THRESHOLD:-5.0}
+rollout_is_batch_normalize=${ROLLOUT_IS_BATCH_NORMALIZE:-false}
+rollout_rs=${ROLLOUT_RS:-null}
+rollout_rs_threshold=${ROLLOUT_RS_THRESHOLD:-null}
+if [ "$LOSS_MODE" = "wdl_group_adv_is" ]; then
+    rollout_is=${ROLLOUT_IS:-null}
+    rollout_rs=${ROLLOUT_RS:-null}
+    NORM_ADV_BY_STD_IN_GRPO=${NORM_ADV_BY_STD_IN_GRPO:-false}
+fi
+ALL_CORRECT_SFT_FALLBACK=${ALL_CORRECT_SFT_FALLBACK:-true}
+POS_SFT_FALLBACK_COEF=${POS_SFT_FALLBACK_COEF:-1.0}
 
 # ===================== Section 8b: Reward Manager =============================
 reward_manager=dapo
@@ -221,6 +230,7 @@ temperature=1.0
 top_p=1.0
 top_k=-1
 val_top_p=0.95
+val_n=${VAL_N:-1}
 
 # ===================== Section 12: Performance & Memory =======================
 sp_size=1
@@ -229,6 +239,7 @@ use_dynamic_bsz=True
 # Default kept at 9192 for strict comparability; override via env if you need speed.
 actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-9192}
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 6))
+CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 offload=False
 fsdp_size=-1
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
@@ -290,6 +301,10 @@ case "$LOSS_MODE" in
     wdl_sft_is|wdl_sft)
         LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.wdl_sft_beta=${WDL_SFT_BETA}")
         ;;
+    wdl_group_adv_is)
+        LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.all_correct_sft_fallback=${ALL_CORRECT_SFT_FALLBACK}")
+        LOSS_EXTRA_ARGS+=("+actor_rollout_ref.actor.policy_loss.pos_sft_fallback_coef=${POS_SFT_FALLBACK_COEF}")
+        ;;
     minirl|vanilla|gspo|sapo|gpg|clip_cov|kl_cov|geo_mean|cispo|bypass_mode)
         : # no extra args needed
         ;;
@@ -331,7 +346,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.calculate_entropy=True \
+    actor_rollout_ref.actor.calculate_entropy=${CALCULATE_ENTROPY} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
@@ -381,7 +396,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.n=1 \
+    actor_rollout_ref.rollout.val_kwargs.n=${val_n} \
     \
     `# --- Data ---` \
     data.train_files="${TRAIN_FILE}" \
