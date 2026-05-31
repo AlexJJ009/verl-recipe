@@ -92,7 +92,7 @@ MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
 DEFAULT_MODEL_PATH="${HF_HOME}/QwenJoint-4B-WDL-SFT-${MODEL2_CACHE_TAG}"
 MODEL_PATH=${MODEL_PATH:-"$DEFAULT_MODEL_PATH"}
 
-TRAIN_FILE=${TRAIN_FILE:-"${DATA_ROOT}/dataset/EnsembleLLM-data-processed/train_rl_format.parquet"}
+TRAIN_FILE=${TRAIN_FILE:-"${DATA_ROOT}/dataset/EnsembleLLM-data-processed/staged_v1/train_rl_format_boxed_prompt.parquet"}
 TEST_FILES=${TEST_FILES:-"['${DATA_ROOT}/dataset/MATH-500/math500-test_with_system_prompt.parquet','${DATA_ROOT}/dataset/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 if [ ! -d "$MODEL_PATH" ]; then

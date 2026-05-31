@@ -10,7 +10,7 @@ DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness}
 CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints}
 WANDB_ROOT=${WANDB_ROOT:-/data-1/wandb_runs}
 METRICS_ROOT=${METRICS_ROOT:-"${REPO_HOST}/recipe/on_policy_wdl_sft/staged_v1/metrics"}
-MIN_FREE_GB=${MIN_FREE_GB:-160}
+MIN_FREE_GB=${MIN_FREE_GB:-100}
 MIN_WANDB_FREE_GB=${MIN_WANDB_FREE_GB:-10}
 MAX_GPU_UTIL=${MAX_GPU_UTIL:-50}
 ALLOW_RESUME=${ALLOW_RESUME:-0}
@@ -40,16 +40,16 @@ export ACTOR_PPO_EPOCHS=${ACTOR_PPO_EPOCHS:-1}
 export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-false}
 
 RUN_PREFIXES=(
-    "WDL-SFT-STAGED-V1-S2-FROM-S1-BETA0-BETA0"
-    "WDL-SFT-STAGED-V1-S2-FROM-S1-BETA01-BETA01"
+    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA0-BETA0"
+    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA01-BETA01"
 )
 RUN_SCRIPTS=(
     "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_from_s1_beta0_beta0.sh"
     "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_from_s1_beta01_beta01.sh"
 )
 TMUX_NAMES=(
-    "staged_v1_s2_from_s1_beta0_beta0"
-    "staged_v1_s2_from_s1_beta01_beta01"
+    "staged_v1_s2_boxed_from_s1_beta0_beta0"
+    "staged_v1_s2_boxed_from_s1_beta01_beta01"
 )
 
 log() {

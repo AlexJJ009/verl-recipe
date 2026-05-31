@@ -5,8 +5,8 @@ set -xeuo pipefail
 
 : "${RUN_PREFIX:?RUN_PREFIX must be set by the caller}"
 : "${WDL_SFT_BETA:?WDL_SFT_BETA must be set by the caller}"
-: "${STAGE1_CKPT_DIR:?STAGE1_CKPT_DIR must pin the Stage 1 checkpoint dir}"
-: "${STAGE1_STEP:?STAGE1_STEP must pin the Stage 1 best step}"
+: "${STAGE1_RUN_PREFIX:=ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA0-V1}"
+: "${STAGE1_STEP:=best}"
 
 WRAPPER_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export WRAPPER_SCRIPT_DIR
@@ -14,6 +14,7 @@ export WRAPPER_SCRIPT_DIR
 export LOSS_MODE=${LOSS_MODE:-wdl_sft}
 export LR=${LR:-5e-7}
 export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-75}
+export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-100}
 export WANDB_PROJECT=${WANDB_PROJECT:-"OnPolicySFT-Then-WDLSFT-StagedV1"}
 export WANDB_MODE=${WANDB_MODE:-offline}
 export VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN:-False}
@@ -22,7 +23,7 @@ export SAVE_FREQ=${SAVE_FREQ:-5}
 export VAL_N=${VAL_N:-3}
 export DATA_SEED=${DATA_SEED:-20260528}
 export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
-export TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/EnsembleLLM-data-processed/staged_v1/stage2_after_s1_150steps_seed20260528_75steps.parquet"}
+export TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/EnsembleLLM-data-processed/staged_v1/stage2_boxed_after_s1_150steps_seed20260528_75steps.parquet"}
 export ROLLOUT_IS=${ROLLOUT_IS:-null}
 export ROLLOUT_RS=${ROLLOUT_RS:-null}
 export ROLLOUT_IS_THRESHOLD=${ROLLOUT_IS_THRESHOLD:-5.0}
@@ -43,34 +44,11 @@ export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLL
 export ACTOR_PPO_EPOCHS=${ACTOR_PPO_EPOCHS:-1}
 export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-false}
 
-if [ ! -d "$STAGE1_CKPT_DIR" ]; then
-    echo "ERROR: STAGE1_CKPT_DIR not found: $STAGE1_CKPT_DIR" >&2
-    exit 1
-fi
-
-FSDP_ACTOR_DIR="${STAGE1_CKPT_DIR}/global_step_${STAGE1_STEP}/actor"
-if [ ! -d "$FSDP_ACTOR_DIR" ]; then
-    echo "ERROR: pinned Stage 1 actor checkpoint not found: $FSDP_ACTOR_DIR" >&2
-    exit 1
-fi
-
 if [ ! -f "$TRAIN_FILE" ]; then
     echo "ERROR: Stage 2 non-overlap train shard not found: $TRAIN_FILE" >&2
     exit 1
 fi
 
-export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-/data-1/model_weights/staged_v1}
-export MERGED_MODEL2_DIR=${MERGED_MODEL2_DIR:-"${STAGE1_MERGED_MODEL_ROOT}/$(basename "$STAGE1_CKPT_DIR")/step_${STAGE1_STEP}"}
-MODEL2_PATH_FOR_CONFIG=${MODEL2_PATH:-"$MERGED_MODEL2_DIR"}
-
-MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH_FOR_CONFIG")
-MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
-if [ -z "${HF_HOME+x}" ] || [ "$HF_HOME" = "/root/.cache/huggingface" ]; then
-    STAGE2_HF_HOME="/data-1/.cache/huggingface"
-else
-    STAGE2_HF_HOME="$HF_HOME"
-fi
-export MODEL_PATH=${MODEL_PATH:-"${STAGE2_HF_HOME}/QwenJoint-4B-Stage2-${MODEL2_CACHE_TAG}"}
 export DATA_SHUFFLE=${DATA_SHUFFLE:-False}
 
 print_stage2_config() {
@@ -79,13 +57,14 @@ print_stage2_config() {
 RUN_PREFIX=$RUN_PREFIX
 TRAIN_FILE=$TRAIN_FILE
 BASE_MODEL_PATH=${BASE_MODEL_PATH:-/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539}
+STAGE1_RUN_PREFIX=$STAGE1_RUN_PREFIX
 STAGE1_CKPT_DIR=$STAGE1_CKPT_DIR
 STAGE1_STEP=$STAGE1_STEP
 FSDP_ACTOR_DIR=$FSDP_ACTOR_DIR
-MODEL2_PATH=${MODEL2_PATH:-$MERGED_MODEL2_DIR}
+MODEL2_PATH=$MODEL2_PATH
 MODEL_PATH=$MODEL_PATH
 ROLLOUT_ENGINE_ARCHITECTURE_PATH=$MODEL_PATH
-ROLLOUT_WEIGHT_SOURCE_MODEL2_PATH=${MODEL2_PATH:-$MERGED_MODEL2_DIR}
+ROLLOUT_WEIGHT_SOURCE_MODEL2_PATH=$MODEL2_PATH
 LOSS_MODE=$LOSS_MODE
 WDL_SFT_BETA=$WDL_SFT_BETA
 JOINT_TRAINING=True
@@ -150,17 +129,34 @@ print("[STAGE2 MODEL2 LOAD CHECK] " + json.dumps(summary, sort_keys=True))
 PY
 }
 
-print_stage2_config
-
-if [ "${STAGE2_DRY_RUN:-0}" = "1" ]; then
-    echo "[STAGE2 DRY RUN] exiting before joint preparation/training"
-    exit 0
-fi
-
 # shellcheck disable=SC1091
 source "${WRAPPER_SCRIPT_DIR}/_resolve_stage1_model2.sh"
 
+STAGE1_CKPT_DIR=${STAGE1_CKPT_DIR:-"(explicit MODEL2_PATH)"}
+FSDP_ACTOR_DIR=${FSDP_ACTOR_DIR:-"(explicit MODEL2_PATH)"}
+if [ -d "${STAGE1_CKPT_DIR}/global_step_${STAGE1_STEP}/actor" ]; then
+    FSDP_ACTOR_DIR="${STAGE1_CKPT_DIR}/global_step_${STAGE1_STEP}/actor"
+fi
+export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-/data-1/model_weights/staged_v1}
+MERGED_MODEL2_DIR=${MERGED_MODEL2_DIR:-"$MODEL2_PATH"}
+
+MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
+MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
+if [ -z "${HF_HOME+x}" ] || [ "$HF_HOME" = "/root/.cache/huggingface" ]; then
+    STAGE2_HF_HOME="/data-1/.cache/huggingface"
+else
+    STAGE2_HF_HOME="$HF_HOME"
+fi
+export MODEL_PATH=${MODEL_PATH:-"${STAGE2_HF_HOME}/QwenJoint-4B-Stage2-${MODEL2_CACHE_TAG}"}
+
+print_stage2_config
+
 load_check_model2
+
+if [ "${STAGE2_DRY_RUN:-0}" = "1" ]; then
+    echo "[STAGE2 DRY RUN] resolve/merge/load check complete; exiting before joint preparation/training"
+    exit 0
+fi
 
 if [ "${STAGE2_MERGE_ONLY:-0}" = "1" ]; then
     echo "[STAGE2 MERGE ONLY] Model2 merge/load check complete"

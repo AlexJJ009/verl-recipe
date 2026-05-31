@@ -32,17 +32,8 @@ DEFAULT_ENV_FILES = [
 ]
 
 BETA_RUNS = [
-    ("s1-beta-0", "0.0", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA0-V1"),
-    ("s1-beta-01", "0.1", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA01-V1"),
-    ("s1-beta-02", "0.2", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA02-V1"),
-    ("s1-beta-03", "0.3", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA03-V1"),
-    ("s1-beta-04", "0.4", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA04-V1"),
-    ("s1-beta-05", "0.5", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA05-V1"),
-    ("s1-beta-06", "0.6", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA06-V1"),
-    ("s1-beta-07", "0.7", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA07-V1"),
-    ("s1-beta-08", "0.8", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA08-V1"),
-    ("s1-beta-09", "0.9", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA09-V1"),
-    ("s1-beta-10", "1.0", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA10-V1"),
+    ("s1-boxed-beta-0", "0.0", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA0-V1"),
+    ("s1-boxed-beta-01", "0.1", "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA01-V1"),
 ]
 
 

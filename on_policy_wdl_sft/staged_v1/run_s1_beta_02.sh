@@ -2,7 +2,7 @@
 # Stage 1 single-model On-Policy SFT beta grid wrapper, beta=0.2.
 set -xeuo pipefail
 
-export RUN_PREFIX=${RUN_PREFIX:-"ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA02-V1"}
+export RUN_PREFIX=${RUN_PREFIX:-"ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA02-V1"}
 export WDL_SFT_BETA=${WDL_SFT_BETA:-0.2}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

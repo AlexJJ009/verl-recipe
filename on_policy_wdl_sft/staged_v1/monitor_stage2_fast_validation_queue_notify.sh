@@ -13,12 +13,12 @@ LOG_FILE=${LOG_FILE:-/data-1/verl07/verl/recipe/on_policy_wdl_sft/staged_v1/moni
 WXPUSHER_SCRIPT=${WXPUSHER_SCRIPT:-/root/agent-core/skills/wxpusher-notify/scripts/wxpusher_notify.py}
 
 RUN_PREFIXES=(
-    "WDL-SFT-STAGED-V1-S2-FROM-S1-BETA0-BETA0"
-    "WDL-SFT-STAGED-V1-S2-FROM-S1-BETA01-BETA01"
+    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA0-BETA0"
+    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA01-BETA01"
 )
 TMUX_NAMES=(
-    "staged_v1_s2_from_s1_beta0_beta0"
-    "staged_v1_s2_from_s1_beta01_beta01"
+    "staged_v1_s2_boxed_from_s1_beta0_beta0"
+    "staged_v1_s2_boxed_from_s1_beta01_beta01"
 )
 
 log() {

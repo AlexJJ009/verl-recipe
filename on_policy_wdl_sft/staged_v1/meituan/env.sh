@@ -15,7 +15,7 @@ export LOG_DIR=${LOG_DIR:-$LGX/verl-exp/logs/staged_v1}
 export WANDB_PROJECT=${WANDB_PROJECT:-OnPolicySFT-Then-WDLSFT-StagedV1}
 export WANDB_MODE=${WANDB_MODE:-offline}
 
-export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-160}
+export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-100}
 export MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-1}
 export MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-1}
 export KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
@@ -31,13 +31,13 @@ export DATA_SEED=${DATA_SEED:-20260528}
 export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
 export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-150}
 
-export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM-data-processed/train_rl_format.parquet}
+export TRAIN_FILE=${TRAIN_FILE:-$LGX/verl-exp/data/EnsembleLLM-data-processed/staged_v1/train_rl_format_boxed_prompt.parquet}
 export TEST_FILES=${TEST_FILES:-"['$LGX/verl-exp/data/MATH-500/math500-test_with_system_prompt.parquet','$LGX/verl-exp/data/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
 export MEITUAN_BASE_MODEL_PATH=${MEITUAN_BASE_MODEL_PATH:-$LGX/huggingface.co/Qwen/Qwen3-4B-Base}
 export BASE_MODEL_PATH=${BASE_MODEL_PATH:-$MEITUAN_BASE_MODEL_PATH}
 
-export STAGE1_RUN_PREFIX=${STAGE1_RUN_PREFIX:-ONPOLICY-SFT-Qwen3-4B-MATH-S1-BASE-V1}
+export STAGE1_RUN_PREFIX=${STAGE1_RUN_PREFIX:-ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA0-V1}
 export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-$LGX/verl-exp/model_weights/staged_v1}
 
 mkdir -p \

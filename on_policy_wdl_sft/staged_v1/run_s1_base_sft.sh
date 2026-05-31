@@ -11,7 +11,8 @@ export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-150}
 export WANDB_PROJECT=${WANDB_PROJECT:-"OnPolicySFT-Then-WDLSFT-StagedV1"}
 export WANDB_MODE=${WANDB_MODE:-offline}
 export VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN:-False}
-export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-160}
+export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-100}
+export TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/EnsembleLLM-data-processed/staged_v1/train_rl_format_boxed_prompt.parquet"}
 
 # v1 On-Policy SFT: no old/current IS, no rollout IS correction.
 export JOINT_TRAINING=${JOINT_TRAINING:-False}

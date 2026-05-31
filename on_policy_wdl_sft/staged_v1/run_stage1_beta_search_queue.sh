@@ -9,7 +9,7 @@ LAUNCHER=${LAUNCHER:-/data-1/verl07/run_train.sh}
 DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness}
 CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints}
 WANDB_ROOT=${WANDB_ROOT:-/data-1/wandb_runs}
-MIN_FREE_GB=${MIN_FREE_GB:-160}
+MIN_FREE_GB=${MIN_FREE_GB:-100}
 MIN_WANDB_FREE_GB=${MIN_WANDB_FREE_GB:-10}
 MAX_GPU_UTIL=${MAX_GPU_UTIL:-50}
 ALLOW_RESUME=${ALLOW_RESUME:-0}
@@ -29,43 +29,16 @@ export WANDB_PROJECT=${WANDB_PROJECT:-OnPolicySFT-Then-WDLSFT-StagedV1}
 export WANDB_MODE=${WANDB_MODE:-offline}
 
 RUN_PREFIXES=(
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA0-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA01-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA02-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA03-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA04-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA05-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA06-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA07-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA08-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA09-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BETA10-V1"
+    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA0-V1"
+    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA01-V1"
 )
 RUN_SCRIPTS=(
     "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_0.sh"
     "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_01.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_02.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_03.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_04.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_05.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_06.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_07.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_08.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_09.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_10.sh"
 )
 TMUX_NAMES=(
-    "staged_v1_s1_beta0"
-    "staged_v1_s1_beta01"
-    "staged_v1_s1_beta02"
-    "staged_v1_s1_beta03"
-    "staged_v1_s1_beta04"
-    "staged_v1_s1_beta05"
-    "staged_v1_s1_beta06"
-    "staged_v1_s1_beta07"
-    "staged_v1_s1_beta08"
-    "staged_v1_s1_beta09"
-    "staged_v1_s1_beta10"
+    "staged_v1_s1_boxed_beta0"
+    "staged_v1_s1_boxed_beta01"
 )
 
 log() {

@@ -24,10 +24,13 @@ from transformers import AutoTokenizer
 from verl.utils.dataset.rl_dataset import RLHFDataset
 
 
-DEFAULT_SOURCE = Path("/data-1/dataset/EnsembleLLM-data-processed/train_rl_format.parquet")
+DEFAULT_SOURCE = Path(
+    "/data-1/dataset/EnsembleLLM-data-processed/staged_v1/"
+    "train_rl_format_boxed_prompt.parquet"
+)
 DEFAULT_OUTPUT = Path(
     "/data-1/dataset/EnsembleLLM-data-processed/staged_v1/"
-    "stage2_after_s1_150steps_seed20260528_75steps.parquet"
+    "stage2_boxed_after_s1_150steps_seed20260528_75steps.parquet"
 )
 DEFAULT_MODEL = Path(
     "/data-1/.cache/huggingface/models--Qwen--Qwen3-4B-Base/"
