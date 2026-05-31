@@ -171,10 +171,10 @@ echo "Log file: $LOG_FILE"
 adv_estimator=grpo
 loss_agg_mode="seq-mean-token-sum"
 
-use_kl_in_reward=False
-kl_coef=0.0
-use_kl_loss=False
-kl_loss_coef=0.0
+use_kl_in_reward=${USE_KL_IN_REWARD:-False}
+kl_coef=${KL_COEF:-0.0}
+use_kl_loss=${USE_KL_LOSS:-False}
+kl_loss_coef=${KL_LOSS_COEF:-0.0}
 
 # GRPO advantage normalization. Default False (matches 1A/B/C and 2A/B/C/Z).
 # Canonical DeepSeek GRPO uses True (divide advantage by group std).
@@ -258,6 +258,7 @@ ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
 ROLLOUT_ENABLE_CHUNKED_PREFILL=${ROLLOUT_ENABLE_CHUNKED_PREFILL:-true}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-$((max_prompt_length + max_response_length))}
 ROLLOUT_MAX_NUM_SEQS=${ROLLOUT_MAX_NUM_SEQS:-256}
+ROLLOUT_CALCULATE_LOG_PROBS=${ROLLOUT_CALCULATE_LOG_PROBS:-True}
 
 if [ "${ROLLOUT_ENGINE}" = "vllm" ]; then
     ROLLOUT_FREE_CACHE_ENGINE_DEFAULT=False
@@ -363,6 +364,7 @@ python3 -m verl.trainer.main_ppo \
     \
     `# --- Model (single-model path: joint_training stays at default=False) ---` \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
+    +actor_rollout_ref.model.joint_training=${JOINT_TRAINING:-False} \
     actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \
     actor_rollout_ref.model.trust_remote_code=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -370,7 +372,7 @@ python3 -m verl.trainer.main_ppo \
     \
     `# --- Rollout (vLLM, standard single-model) ---` \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
-    actor_rollout_ref.rollout.calculate_log_probs=True \
+    actor_rollout_ref.rollout.calculate_log_probs=${ROLLOUT_CALCULATE_LOG_PROBS} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
     actor_rollout_ref.rollout.name=${ROLLOUT_ENGINE} \

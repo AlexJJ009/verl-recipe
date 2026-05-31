@@ -1,0 +1,8 @@
+*.log
+*.lock
+*.json
+*.jsonl
+*.tmp
+messages/
+codex_monitor_last.md
+codex_monitor_stderr.log

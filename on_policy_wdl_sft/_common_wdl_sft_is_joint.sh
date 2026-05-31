@@ -218,6 +218,7 @@ VAL_N=${VAL_N:-3}
 sp_size=${SP_SIZE:-1}
 use_dynamic_bsz=${USE_DYNAMIC_BSZ:-True}
 actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-9192}
+calculate_entropy=${CALCULATE_ENTROPY:-True}
 offload=${FSDP_OFFLOAD:-False}
 fsdp_size=${FSDP_SIZE:--1}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
@@ -292,7 +293,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.calculate_entropy=True \
+    actor_rollout_ref.actor.calculate_entropy=${calculate_entropy} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
