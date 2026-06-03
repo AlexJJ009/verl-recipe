@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sequential boxed Stage1 -> fixed merge -> Stage2 matched-beta queue.
+# Sequential plateau handoff queue: Stage1 step 60 -> fixed merge -> Stage2 40 steps.
 
 set -euo pipefail
 
@@ -9,7 +9,7 @@ LAUNCHER=${LAUNCHER:-/data-1/verl07/run_train.sh}
 DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness}
 CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints}
 WANDB_ROOT=${WANDB_ROOT:-/data-1/wandb_runs}
-MODEL2_ROOT=${MODEL2_ROOT:-/data-1/model_weights/staged_v1/boxed_matched}
+MODEL2_ROOT=${MODEL2_ROOT:-/data-1/model_weights/staged_v1/plateau_handoff_p60}
 METRICS_ROOT=${METRICS_ROOT:-"${REPO_HOST}/recipe/on_policy_wdl_sft/staged_v1/metrics"}
 MIN_FREE_GB=${MIN_FREE_GB:-100}
 MIN_WANDB_FREE_GB=${MIN_WANDB_FREE_GB:-10}
@@ -18,13 +18,14 @@ MAX_GPU_UTIL=${MAX_GPU_UTIL:-50}
 ALLOW_RESUME=${ALLOW_RESUME:-0}
 ALLOW_OVERWRITE_MERGED_MODEL2=${ALLOW_OVERWRITE_MERGED_MODEL2:-0}
 POLL_SEC=${POLL_SEC:-300}
-LOG_FILE=${LOG_FILE:-"${REPO_HOST}/recipe/on_policy_wdl_sft/staged_v1/run_boxed_matched_chain_queue.log"}
-QUEUE_TMUX=${QUEUE_TMUX:-staged_v1_boxed_matched_chain_queue}
+LOG_FILE=${LOG_FILE:-"${REPO_HOST}/recipe/on_policy_wdl_sft/staged_v1/run_plateau_p60_chain_queue.log"}
+QUEUE_TMUX=${QUEUE_TMUX:-staged_v1_plateau_p60_chain_queue}
 WXPUSHER_NOTIFY=${WXPUSHER_NOTIFY:-1}
 WXPUSHER_SCRIPT=${WXPUSHER_SCRIPT:-/root/agent-core/skills/wxpusher-notify/scripts/wxpusher_notify.py}
 
-STAGE1_TOTAL_TRAINING_STEPS=${STAGE1_TOTAL_TRAINING_STEPS:-150}
-STAGE2_TOTAL_TRAINING_STEPS=${STAGE2_TOTAL_TRAINING_STEPS:-75}
+STAGE1_TOTAL_TRAINING_STEPS=${STAGE1_TOTAL_TRAINING_STEPS:-60}
+STAGE1_HANDOFF_STEP=${STAGE1_HANDOFF_STEP:-60}
+STAGE2_TOTAL_TRAINING_STEPS=${STAGE2_TOTAL_TRAINING_STEPS:-40}
 
 export VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN:-False}
 export TEST_FREQ=${TEST_FREQ:-5}
@@ -43,35 +44,35 @@ export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLL
 export ACTOR_PPO_EPOCHS=${ACTOR_PPO_EPOCHS:-1}
 export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-false}
 
-BETA_LABELS=("beta0" "beta01")
+BETA_LABELS=("P60-B0" "P60-B01")
 BETA_VALUES=("0.0" "0.1")
 STAGE1_PREFIXES=(
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA0-V1"
-    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-BOXED-BETA01-V1"
+    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-PLATEAU-P60-BETA0-V1"
+    "ONPOLICY-SFT-Qwen3-4B-MATH-S1-PLATEAU-P60-BETA01-V1"
 )
 STAGE1_SCRIPTS=(
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_0.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_beta_01.sh"
+    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_plateau_p60_beta_0.sh"
+    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s1_plateau_p60_beta_01.sh"
 )
 STAGE1_TMUX_NAMES=(
-    "staged_v1_chain_s1_boxed_beta0"
-    "staged_v1_chain_s1_boxed_beta01"
+    "staged_v1_p60_s1_beta0"
+    "staged_v1_p60_s1_beta01"
 )
 STAGE2_PREFIXES=(
-    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA0-BETA0"
-    "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA01-BETA01"
+    "WDL-SFT-STAGED-V1-S2-PLATEAU-P60-BETA0-BETA0"
+    "WDL-SFT-STAGED-V1-S2-PLATEAU-P60-BETA01-BETA01"
 )
 STAGE2_SCRIPTS=(
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_from_s1_beta0_beta0.sh"
-    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_from_s1_beta01_beta01.sh"
+    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_plateau_p60_beta0_beta0.sh"
+    "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/run_s2_plateau_p60_beta01_beta01.sh"
 )
 STAGE2_TMUX_NAMES=(
-    "staged_v1_chain_s2_boxed_beta0"
-    "staged_v1_chain_s2_boxed_beta01"
+    "staged_v1_p60_s2_beta0"
+    "staged_v1_p60_s2_beta01"
 )
 MERGED_MODEL2_DIRS=(
-    "${MODEL2_ROOT}/model2-from-s1-boxed-beta0-best"
-    "${MODEL2_ROOT}/model2-from-s1-boxed-beta01-best"
+    "${MODEL2_ROOT}/model2-from-s1-p60-beta0-step60"
+    "${MODEL2_ROOT}/model2-from-s1-p60-beta01-step60"
 )
 
 START_BETA_INDEX=${START_BETA_INDEX:-0}
@@ -119,7 +120,7 @@ has_conflicting_training() {
     local session_count container_count
     session_count=$(tmux list-sessions -F '#S' 2>/dev/null \
         | grep -Ev "^${QUEUE_TMUX}$" \
-        | grep -Ec '(^staged_v1_chain_s[12]_|^staged_v1_s[12]_|^ablation_|^wdl_|^train_)' || true)
+        | grep -Ec '(^staged_v1_(chain|p60)_s[12]_|^staged_v1_s[12]_|^ablation_|^wdl_|^train_)' || true)
     container_count=$(docker ps --format '{{.Names}} {{.Image}} {{.Command}}' 2>/dev/null \
         | grep -Eci 'verl-harness|main_ppo|run_s[12]_|ONPOLICY|WDL-SFT' || true)
     [ "$session_count" -eq 0 ] && [ "$container_count" -eq 0 ]
@@ -143,15 +144,6 @@ latest_step() {
     fi
     find "$ckpt_dir" -maxdepth 1 -type d -name 'global_step_*' 2>/dev/null \
         | sed 's/.*global_step_//' | sort -n | tail -1
-}
-
-best_step() {
-    local ckpt_dir="$1"
-    if [ -f "$ckpt_dir/best_checkpoint.json" ]; then
-        python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["step"])' "$ckpt_dir/best_checkpoint.json"
-        return
-    fi
-    latest_step "$ckpt_dir"
 }
 
 is_complete() {
@@ -220,7 +212,7 @@ assert_no_unapproved_collision() {
         return
     fi
     log "ERROR: existing incomplete checkpoint would trigger auto-resume: $ckpt_dir; set ALLOW_RESUME=1 to resume explicitly"
-    notify "Boxed WDL-SFT chain blocked" "Status: blocked
+    notify "Plateau P60 WDL-SFT chain blocked" "Status: blocked
 What happened: Existing incomplete checkpoint would trigger auto-resume.
 Evidence: checkpoint=${ckpt_dir}
 Next action: Set ALLOW_RESUME=1 only if resuming is intended."
@@ -269,7 +261,7 @@ launch_run() {
     sleep 5
     tmux has-session -t "$tmux_name" 2>/dev/null || {
         log "ERROR: tmux session failed to start: $tmux_name; see $launch_log"
-        notify "Boxed WDL-SFT chain launch failed" "Status: failed
+        notify "Plateau P60 WDL-SFT chain launch failed" "Status: failed
 What happened: tmux session failed to start.
 Evidence: tmux=${tmux_name}; log=${launch_log}
 Next action: Inspect the launch log before relaunching."
@@ -299,7 +291,7 @@ wait_for_checkpoint_completion() {
         fi
         if [ "$tmux_state" = "missing" ]; then
             log "ERROR: tmux $tmux_name exited before final checkpoint; latest_step=$step, need=$final_step"
-            notify "Boxed WDL-SFT chain run failed" "Status: failed
+            notify "Plateau P60 WDL-SFT chain run failed" "Status: failed
 What happened: ${tmux_name} exited before final checkpoint.
 Evidence: prefix=${prefix}; latest_step=${step}; need=${final_step}
 Next action: Inspect ${LOG_FILE%.log}_${tmux_name}.log."
@@ -341,7 +333,7 @@ wait_for_stage2_completion() {
         fi
         if [ "$tmux_state" = "missing" ]; then
             log "ERROR: tmux $tmux_name exited before final checkpoint+metrics; latest_step=$step, metrics=$metrics_state, need=$final_step"
-            notify "Boxed WDL-SFT Stage2 failed" "Status: failed
+            notify "Plateau P60 WDL-SFT Stage2 failed" "Status: failed
 What happened: ${tmux_name} exited before final checkpoint+metrics.
 Evidence: prefix=${prefix}; latest_step=${step}; metrics=${metrics_state}
 Next action: Inspect ${LOG_FILE%.log}_${tmux_name}.log."
@@ -353,16 +345,19 @@ Next action: Inspect ${LOG_FILE%.log}_${tmux_name}.log."
 }
 
 merge_stage1_model2() {
-    local beta_label="$1" stage1_prefix="$2" merged_dir="$3" ckpt_dir step merge_log
+    local beta_label="$1" stage1_prefix="$2" merged_dir="$3" ckpt_dir merge_log
     ckpt_dir=$(latest_ckpt_dir "$stage1_prefix")
     [ -n "$ckpt_dir" ] || { log "ERROR: cannot merge; missing Stage1 checkpoint for $stage1_prefix"; exit 1; }
-    step=$(best_step "$ckpt_dir")
+    if ! [ -d "$ckpt_dir/global_step_${STAGE1_HANDOFF_STEP}/actor" ]; then
+        log "ERROR: cannot merge; missing fixed Stage1 handoff actor checkpoint: $ckpt_dir/global_step_${STAGE1_HANDOFF_STEP}/actor"
+        exit 1
+    fi
     merge_log="${LOG_FILE%.log}_merge_${beta_label}.log"
 
-    log "merging Stage1 best to fixed Model2 dir: beta=${beta_label} ckpt=${ckpt_dir} step=${step} target=${merged_dir}"
-    notify "Boxed WDL-SFT merge starting" "Status: started
-What happened: Merging Stage1 best checkpoint to fixed Model2 dir for ${beta_label}.
-Evidence: checkpoint=${ckpt_dir}; step=${step}; target=${merged_dir}
+    log "merging Stage1 fixed handoff to Model2 dir: beta=${beta_label} ckpt=${ckpt_dir} step=${STAGE1_HANDOFF_STEP} target=${merged_dir}"
+    notify "Plateau P60 WDL-SFT merge starting" "Status: started
+What happened: Merging Stage1 fixed handoff checkpoint to Model2 dir for ${beta_label}.
+Evidence: checkpoint=${ckpt_dir}; step=${STAGE1_HANDOFF_STEP}; target=${merged_dir}
 Next action: Stage2 will start after load check passes."
 
     mkdir -p "$MODEL2_ROOT"
@@ -371,7 +366,7 @@ Next action: Stage2 will start after load check passes."
         ALLOW_OVERWRITE_MERGED_MODEL2="$ALLOW_OVERWRITE_MERGED_MODEL2" \
         STAGE1_RUN_PREFIX="$stage1_prefix" \
         STAGE1_CKPT_DIR="$ckpt_dir" \
-        STAGE1_STEP="$step" \
+        STAGE1_STEP="$STAGE1_HANDOFF_STEP" \
         MERGED_MODEL2_DIR="$merged_dir" \
         bash "$LAUNCHER" "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/merge_stage1_model2_fixed.sh" \
             2>&1 | tee -a "$merge_log"
@@ -381,7 +376,7 @@ Next action: Stage2 will start after load check passes."
             -e ALLOW_OVERWRITE_MERGED_MODEL2="$ALLOW_OVERWRITE_MERGED_MODEL2" \
             -e STAGE1_RUN_PREFIX="$stage1_prefix" \
             -e STAGE1_CKPT_DIR="$ckpt_dir" \
-            -e STAGE1_STEP="$step" \
+            -e STAGE1_STEP="$STAGE1_HANDOFF_STEP" \
             -e MERGED_MODEL2_DIR="$merged_dir" \
             -v /data-1:/data-1 -v "$REPO_HOST:$REPO_CONTAINER" -w "$REPO_CONTAINER" \
             "$DOCKER_IMAGE" bash "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/staged_v1/merge_stage1_model2_fixed.sh" \
@@ -390,24 +385,24 @@ Next action: Stage2 will start after load check passes."
 
     if ! has_merged_model2 "$merged_dir"; then
         log "ERROR: merged Model2 weights missing after merge: $merged_dir"
-        notify "Boxed WDL-SFT merge failed" "Status: failed
+        notify "Plateau P60 WDL-SFT merge failed" "Status: failed
 What happened: Merge command finished but Model2 weights are missing.
 Evidence: target=${merged_dir}; log=${merge_log}
 Next action: Inspect the merge log."
         exit 1
     fi
 
-    notify "Boxed WDL-SFT merge complete" "Status: completed
+    notify "Plateau P60 WDL-SFT merge complete" "Status: completed
 What happened: Fixed Model2 dir is ready for ${beta_label}.
-Evidence: target=${merged_dir}; source=${ckpt_dir}; step=${step}
+Evidence: target=${merged_dir}; source=${ckpt_dir}; step=${STAGE1_HANDOFF_STEP}
 Next action: Launching matched Stage2."
 }
 
-log "boxed matched Stage1->Stage2 chain queue started"
-notify "Boxed WDL-SFT chain started" "Status: started
-What happened: Starting sequential boxed matched chains: beta=0.0 then beta=0.1.
-Evidence: stage1_steps=${STAGE1_TOTAL_TRAINING_STEPS}; stage2_steps=${STAGE2_TOTAL_TRAINING_STEPS}; model2_root=${MODEL2_ROOT}
-Next action: The queue will run Stage1, fixed merge, then Stage2 for each beta."
+log "plateau P60 Stage1->Stage2 chain queue started"
+notify "Plateau P60 WDL-SFT chain started" "Status: started
+What happened: Starting sequential plateau handoff chains: P60-B0 then P60-B01.
+Evidence: stage1_steps=${STAGE1_TOTAL_TRAINING_STEPS}; handoff_step=${STAGE1_HANDOFF_STEP}; stage2_steps=${STAGE2_TOTAL_TRAINING_STEPS}; model2_root=${MODEL2_ROOT}
+Next action: The queue will run Stage1, fixed-step merge, then Stage2 for each beta."
 
 for idx in "${!BETA_LABELS[@]}"; do
     if [ "$idx" -lt "$START_BETA_INDEX" ] || [ "$idx" -gt "$END_BETA_INDEX" ]; then
@@ -424,49 +419,52 @@ for idx in "${!BETA_LABELS[@]}"; do
     s2_tmux="${STAGE2_TMUX_NAMES[$idx]}"
     merged_dir="${MERGED_MODEL2_DIRS[$idx]}"
 
-    log "chain start: beta=${beta_value}"
-    if is_complete "$s1_prefix" "$STAGE1_TOTAL_TRAINING_STEPS"; then
-        log "skip Stage1 already complete: $s1_prefix"
-    else
-        assert_no_unapproved_collision "$s1_prefix" "$STAGE1_TOTAL_TRAINING_STEPS"
-        wait_for_resources
-        notify "Boxed WDL-SFT Stage1 starting" "Status: started
-What happened: Starting Stage1 for beta=${beta_value}.
-Evidence: prefix=${s1_prefix}; final_step=${STAGE1_TOTAL_TRAINING_STEPS}
-Next action: Merge will run after Stage1 checkpoint completes."
+    log "chain start: ${beta_label} beta=${beta_value}"
+    notify "Plateau P60 WDL-SFT chain branch started" "Status: started
+What happened: Starting ${beta_label}.
+Evidence: stage1_prefix=${s1_prefix}; stage2_prefix=${s2_prefix}
+Next action: Waiting for resources."
+
+    assert_no_unapproved_collision "$s1_prefix" "$STAGE1_TOTAL_TRAINING_STEPS"
+    assert_no_unapproved_collision "$s2_prefix" "$STAGE2_TOTAL_TRAINING_STEPS"
+
+    wait_for_resources
+    if ! is_complete "$s1_prefix" "$STAGE1_TOTAL_TRAINING_STEPS"; then
         launch_run "$s1_script" "$s1_tmux" "$STAGE1_TOTAL_TRAINING_STEPS" ""
-        wait_for_checkpoint_completion "$s1_prefix" "$s1_tmux" "$STAGE1_TOTAL_TRAINING_STEPS"
-        notify "Boxed WDL-SFT Stage1 complete" "Status: completed
-What happened: Stage1 completed for beta=${beta_value}.
-Evidence: prefix=${s1_prefix}; checkpoint=$(latest_ckpt_dir "$s1_prefix")
-Next action: Merging best checkpoint to fixed Model2 dir."
+        notify "Plateau P60 Stage1 launched" "Status: started
+What happened: Stage1 launched for ${beta_label}.
+Evidence: prefix=${s1_prefix}; tmux=${s1_tmux}; final_step=${STAGE1_TOTAL_TRAINING_STEPS}
+Next action: Waiting for Stage1 completion."
+    else
+        log "Stage1 already complete: prefix=${s1_prefix}"
     fi
+    wait_for_checkpoint_completion "$s1_prefix" "$s1_tmux" "$STAGE1_TOTAL_TRAINING_STEPS"
+
+    notify "Plateau P60 Stage1 complete" "Status: completed
+What happened: Stage1 reached final checkpoint for ${beta_label}.
+Evidence: prefix=${s1_prefix}; final_step=${STAGE1_TOTAL_TRAINING_STEPS}; handoff_step=${STAGE1_HANDOFF_STEP}
+Next action: Fixed-step Model2 merge."
 
     wait_for_resources
     merge_stage1_model2 "$beta_label" "$s1_prefix" "$merged_dir"
 
-    if is_complete "$s2_prefix" "$STAGE2_TOTAL_TRAINING_STEPS" && has_stage2_final_metrics "$s2_prefix" "$STAGE2_TOTAL_TRAINING_STEPS"; then
-        log "skip Stage2 already complete with metrics: $s2_prefix"
-    else
-        assert_no_unapproved_collision "$s2_prefix" "$STAGE2_TOTAL_TRAINING_STEPS"
-        wait_for_resources
-        notify "Boxed WDL-SFT Stage2 starting" "Status: started
-What happened: Starting matched Stage2 for beta=${beta_value}.
-Evidence: prefix=${s2_prefix}; model2=${merged_dir}; final_step=${STAGE2_TOTAL_TRAINING_STEPS}
-Next action: Queue waits for final checkpoint and metrics."
-        extra_env="MODEL2_PATH=$merged_dir MERGED_MODEL2_DIR=$merged_dir REQUIRE_MERGED_MODEL2_PROVENANCE=True STAGE1_RUN_PREFIX=$s1_prefix"
-        launch_run "$s2_script" "$s2_tmux" "$STAGE2_TOTAL_TRAINING_STEPS" "$extra_env"
-        wait_for_stage2_completion "$s2_prefix" "$s2_tmux" "$STAGE2_TOTAL_TRAINING_STEPS"
-        notify "Boxed WDL-SFT Stage2 complete" "Status: completed
-What happened: Stage2 completed for beta=${beta_value}.
-Evidence: prefix=${s2_prefix}; checkpoint=$(latest_ckpt_dir "$s2_prefix"); model2=${merged_dir}
+    wait_for_resources
+    launch_run "$s2_script" "$s2_tmux" "$STAGE2_TOTAL_TRAINING_STEPS" "STAGE1_STEP=$STAGE1_HANDOFF_STEP MERGED_MODEL2_DIR=$merged_dir REQUIRE_MERGED_MODEL2_PROVENANCE=True ALLOW_OVERWRITE_MERGED_MODEL2=$ALLOW_OVERWRITE_MERGED_MODEL2"
+    notify "Plateau P60 Stage2 launched" "Status: started
+What happened: Stage2 launched for ${beta_label}.
+Evidence: prefix=${s2_prefix}; tmux=${s2_tmux}; final_step=${STAGE2_TOTAL_TRAINING_STEPS}; model2=${merged_dir}
+Next action: Waiting for final checkpoint and metrics."
+    wait_for_stage2_completion "$s2_prefix" "$s2_tmux" "$STAGE2_TOTAL_TRAINING_STEPS"
+
+    notify "Plateau P60 Stage2 complete" "Status: completed
+What happened: Stage2 reached final checkpoint and metrics for ${beta_label}.
+Evidence: prefix=${s2_prefix}; final_step=${STAGE2_TOTAL_TRAINING_STEPS}; metrics=$(metrics_path_for_ckpt "$(latest_ckpt_dir "$s2_prefix")")
 Next action: Queue will continue or finish."
-    fi
-    log "chain complete: beta=${beta_value}"
+    log "chain complete: ${beta_label}"
 done
 
-log "boxed matched Stage1->Stage2 chain queue complete"
-notify "Boxed WDL-SFT chain complete" "Status: completed
-What happened: Both boxed matched chains completed.
-Evidence: beta=0.0 and beta=0.1; log=${LOG_FILE}
-Next action: Review Stage1 and Stage2 validation metrics."
+log "plateau P60 Stage1->Stage2 chain queue complete"
+notify "Plateau P60 WDL-SFT chain complete" "Status: completed
+What happened: Primary plateau handoff matrix completed.
+Evidence: stage1_steps=${STAGE1_TOTAL_TRAINING_STEPS}; handoff_step=${STAGE1_HANDOFF_STEP}; stage2_steps=${STAGE2_TOTAL_TRAINING_STEPS}; log=${LOG_FILE}
+Next action: Review peak/final metrics and raw validation health against the plan acceptance criteria."
