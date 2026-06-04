@@ -86,3 +86,51 @@ python3 recipe/on_policy_wdl_sft/staged_v1/create_stage2_nonoverlap_shard.py --v
 
 Legacy `run_s2_beta_*.sh` wrappers are not the fast-validation entry points.
 Use `run_s2_from_s1_beta*_beta*.sh` for this plan.
+
+## P60 Math-7 Offline Eval
+
+The P60 plateau handoff offline eval queue is:
+
+```text
+recipe/on_policy_wdl_sft/staged_v1/run_plateau_p60_math7_eval_queue.sh
+```
+
+It evaluates the Stage1 step-60 model2 handoff weights and Stage2 best/final
+model2 weights for beta `0.0` and `0.1` on the seven local math benchmarks with
+system prompt:
+
+```text
+AIME-2025, MATH-500, AMC23, AQUA, GSM8K, MAWPS, SVAMP
+```
+
+Default generation/eval settings:
+
+```text
+N_SAMPLES=3
+TEMPERATURE=1.0
+TOP_P=0.95
+MAX_TOKENS=4096
+TENSOR_PARALLEL=8
+```
+
+Start it in tmux:
+
+```bash
+tmux new-session -s staged_v1_p60_math7_eval_queue
+bash recipe/on_policy_wdl_sft/staged_v1/run_plateau_p60_math7_eval_queue.sh
+```
+
+Queue and per-model logs are written under:
+
+```text
+recipe/on_policy_wdl_sft/staged_v1/eval_logs/
+```
+
+Result directories are written under:
+
+```text
+/data-1/model_weights/staged_v1/plateau_handoff_p60/math7_eval/
+```
+
+For deterministic sanity checks, override `N_SAMPLES=1 TEMPERATURE=0 TOP_P=1.0`,
+but do not mix those greedy results with the main `mean@3` table.
