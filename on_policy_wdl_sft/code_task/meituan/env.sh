@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Meituan AFO overrides for code-task On-Policy WDL-SFT.
+set -euo pipefail
+
+LGX=${LGX:-/mnt/dolphinfs/ssd_pool/docker/user/hadoop-ai-search/yangfengkai02/lgx}
+
+export DATA_ROOT=${DATA_ROOT:-$LGX/verl-exp}
+export HF_HOME=${HF_HOME:-$LGX/verl-exp/hf_cache}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-$HF_HOME/datasets}
+export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-$HF_HOME/hub}
+export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-$HF_HOME}
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$LGX/verl-exp/cache}
+export BASE_CKPT_DIR=${BASE_CKPT_DIR:-$LGX/verl-exp/checkpoints}
+export WANDB_DIR=${WANDB_DIR:-$LGX/verl-exp/wandb_runs/code_task}
+export LOG_DIR=${LOG_DIR:-$LGX/verl-exp/logs/code_task}
+export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-$LOG_DIR/metrics}
+export VALIDATION_DATA_DIR=${VALIDATION_DATA_DIR:-$LOG_DIR/validation}
+export RAY_TMPDIR=${RAY_TMPDIR:-/tmp/ray_tmp}
+export TMPDIR=${TMPDIR:-/tmp/verl_tmp}
+export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-/tmp/vllm_config}
+export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-$TMPDIR}
+
+export WANDB_PROJECT=${WANDB_PROJECT:-OnPolicyWDLSFT-CodeTask}
+export WANDB_MODE=${WANDB_MODE:-offline}
+export BASE_MODEL_PATH=${BASE_MODEL_PATH:-$LGX/huggingface.co/Qwen/Qwen3-4B-Base}
+export MODEL2_PATH=${MODEL2_PATH:-}
+export MODEL_PATH=${MODEL_PATH:-}
+
+export CODE_DATA_ROOT=${CODE_DATA_ROOT:-$LGX/verl-exp/data/code/verl_rl}
+export CODE_TRAIN_FILE=${CODE_TRAIN_FILE:-$CODE_DATA_ROOT/kodcode_light_rl_10k_train_rl_format.parquet}
+export DEEPCODER_TRAIN_FILE=${DEEPCODER_TRAIN_FILE:-$CODE_DATA_ROOT/deepcoder_preview_train_rl_format.parquet}
+export CODE_STAGE2_TRAIN_FILE=${CODE_STAGE2_TRAIN_FILE:-$CODE_DATA_ROOT/code_stage2_after_s1_seed20260528.parquet}
+export CODE_STAGE2_RETENTION_BETA0_TRAIN_FILE=${CODE_STAGE2_RETENTION_BETA0_TRAIN_FILE:-$CODE_DATA_ROOT/kodcode_stage2_after_s1_seed20260604_beta0_handoff.parquet}
+export CODE_STAGE2_RETENTION_BETA01_TRAIN_FILE=${CODE_STAGE2_RETENTION_BETA01_TRAIN_FILE:-$CODE_DATA_ROOT/kodcode_stage2_after_s1_seed20260604_beta01_handoff.parquet}
+export CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE=${CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE:-$CODE_DATA_ROOT/online_full_humaneval_plus/official_humaneval_plus_val.parquet}
+export CODE_ONLINE_MBPP_PLUS_VAL_FILE=${CODE_ONLINE_MBPP_PLUS_VAL_FILE:-$CODE_DATA_ROOT/online_full_mbpp_plus/official_mbpp_plus_val.parquet}
+export CODE_ONLINE_VAL_FILE=${CODE_ONLINE_VAL_FILE:-$CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE}
+export CODE_VAL_FILES=${CODE_VAL_FILES:-"['$CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE','$CODE_ONLINE_MBPP_PLUS_VAL_FILE']"}
+export TRAIN_FILE=${TRAIN_FILE:-$CODE_TRAIN_FILE}
+export TEST_FILES=${TEST_FILES:-$CODE_VAL_FILES}
+export VALIDATION_DATA_DIR=${VALIDATION_DATA_DIR:-$LOG_DIR/validation}
+export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-$LGX/verl-exp/model_weights/code_task/stage1_model2}
+export MERGED_MODEL2_DIR=${MERGED_MODEL2_DIR:-}
+export MERGED_MODEL2_PROVENANCE_FILE=${MERGED_MODEL2_PROVENANCE_FILE:-}
+export CODE_EVAL_OUTPUT_ROOT=${CODE_EVAL_OUTPUT_ROOT:-$LGX/verl-exp/eval_outputs/code_task}
+
+export CUSTOM_REWARD_FN_PATH=${CUSTOM_REWARD_FN_PATH:-}
+export CUSTOM_REWARD_FN_NAME=${CUSTOM_REWARD_FN_NAME:-compute_score_code_official_aligned}
+export REWARD_MANAGER=${REWARD_MANAGER:-dapo}
+export SANDBOX_FUSION_URL=${SANDBOX_FUSION_URL:-}
+export SANDBOX_FUSION_MAX_CONCURRENT=${SANDBOX_FUSION_MAX_CONCURRENT:-32}
+export SANDBOX_FUSION_MEMORY_LIMIT_MB=${SANDBOX_FUSION_MEMORY_LIMIT_MB:-2048}
+export CODE_REWARD_TIMEOUT=${CODE_REWARD_TIMEOUT:-8}
+export BIGCODEBENCH_MAX_AS_LIMIT=${BIGCODEBENCH_MAX_AS_LIMIT:-131072}
+export BIGCODEBENCH_MAX_DATA_LIMIT=${BIGCODEBENCH_MAX_DATA_LIMIT:-131072}
+export BIGCODEBENCH_MAX_STACK_LIMIT=${BIGCODEBENCH_MAX_STACK_LIMIT:-10}
+export CODE_EVAL_OFFICIAL_SITE=${CODE_EVAL_OFFICIAL_SITE:-$LGX/verl-exp/code_eval_envs/official_site}
+export LCB_REPO_DIR=${LCB_REPO_DIR:-$LGX/verl-exp/code_eval_envs/LiveCodeBench}
+export CODE_OFFICIAL_SOURCE_ROOT=${CODE_OFFICIAL_SOURCE_ROOT:-$LGX/verl-exp/data/code/official_sources}
+export BIGCODEBENCH_OVERRIDE_PATH=${BIGCODEBENCH_OVERRIDE_PATH:-$CODE_OFFICIAL_SOURCE_ROOT/bigcodebench/BigCodeBench-v0.1.4.jsonl}
+export REPO_PYTHONPATH_ROOT=${REPO_PYTHONPATH_ROOT:-${REPO_ROOT:-/data-1/verl07/verl}}
+export PYTHONPATH="$REPO_PYTHONPATH_ROOT:$CODE_EVAL_OFFICIAL_SITE:$LCB_REPO_DIR:${PYTHONPATH:-}"
+
+export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
+mkdir -p "$HF_HOME" "$HF_DATASETS_CACHE" "$HUGGINGFACE_HUB_CACHE" "$XDG_CACHE_HOME" \
+    "$BASE_CKPT_DIR" "$WANDB_DIR" "$LOG_DIR" "$VERL_FILE_LOGGER_ROOT" \
+    "$RAY_TMPDIR" "$TMPDIR" "$VLLM_CONFIG_ROOT" "$VERL_ZMQ_IPC_DIR" \
+    "$STAGE1_MERGED_MODEL_ROOT" "$CODE_EVAL_OUTPUT_ROOT" "$CODE_OFFICIAL_SOURCE_ROOT"
+
+echo "[code_task/meituan/env.sh] LGX=$LGX"
+echo "[code_task/meituan/env.sh] BASE_MODEL_PATH=$BASE_MODEL_PATH"
+echo "[code_task/meituan/env.sh] HF_HOME=$HF_HOME"
+echo "[code_task/meituan/env.sh] HF_DATASETS_CACHE=$HF_DATASETS_CACHE"
+echo "[code_task/meituan/env.sh] HUGGINGFACE_HUB_CACHE=$HUGGINGFACE_HUB_CACHE"
+echo "[code_task/meituan/env.sh] CODE_OFFICIAL_SOURCE_ROOT=$CODE_OFFICIAL_SOURCE_ROOT"
+echo "[code_task/meituan/env.sh] BIGCODEBENCH_OVERRIDE_PATH=$BIGCODEBENCH_OVERRIDE_PATH"
+echo "[code_task/meituan/env.sh] CODE_TRAIN_FILE=$CODE_TRAIN_FILE"
+echo "[code_task/meituan/env.sh] DEEPCODER_TRAIN_FILE=$DEEPCODER_TRAIN_FILE"
+echo "[code_task/meituan/env.sh] CODE_STAGE2_TRAIN_FILE=$CODE_STAGE2_TRAIN_FILE"
+echo "[code_task/meituan/env.sh] CODE_STAGE2_RETENTION_BETA0_TRAIN_FILE=$CODE_STAGE2_RETENTION_BETA0_TRAIN_FILE"
+echo "[code_task/meituan/env.sh] CODE_STAGE2_RETENTION_BETA01_TRAIN_FILE=$CODE_STAGE2_RETENTION_BETA01_TRAIN_FILE"
+echo "[code_task/meituan/env.sh] CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE=$CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE"
+echo "[code_task/meituan/env.sh] CODE_ONLINE_MBPP_PLUS_VAL_FILE=$CODE_ONLINE_MBPP_PLUS_VAL_FILE"
+echo "[code_task/meituan/env.sh] CODE_ONLINE_VAL_FILE=$CODE_ONLINE_VAL_FILE"
+echo "[code_task/meituan/env.sh] REPO_PYTHONPATH_ROOT=$REPO_PYTHONPATH_ROOT"
+echo "[code_task/meituan/env.sh] SANDBOX_FUSION_URL configured=$([ -n "$SANDBOX_FUSION_URL" ] && echo yes || echo no)"

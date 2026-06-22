@@ -135,3 +135,7 @@ on_policy_wdl_sft/validation/
 on_policy_wdl_sft/metrics/
 on_policy_wdl_sft/**/metrics/
 on_policy_wdl_sft/**/validation/
+on_policy_wdl_sft/**/archive_logs/
+on_policy_wdl_sft/**/eval_logs/
+on_policy_wdl_sft/**/wandb_sync_*/
+on_policy_wdl_sft/**/*_status.tsv

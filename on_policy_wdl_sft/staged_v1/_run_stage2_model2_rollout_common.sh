@@ -140,7 +140,7 @@ fi
 export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-/data-1/model_weights/staged_v1}
 MERGED_MODEL2_DIR=${MERGED_MODEL2_DIR:-"$MODEL2_PATH"}
 
-MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
+MODEL2_CACHE_TAG="${RUN_PREFIX}-${STAGE1_RUN_PREFIX}-$(basename "$MODEL2_PATH")"
 MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
 if [ -z "${HF_HOME+x}" ] || [ "$HF_HOME" = "/root/.cache/huggingface" ]; then
     STAGE2_HF_HOME="/data-1/.cache/huggingface"

@@ -1,0 +1,28 @@
+{
+  "EvalPlus": {
+    "benchmarks": ["HumanEval", "HumanEval+", "MBPP", "MBPP+"],
+    "preferred": "official evalplus package/API",
+    "status": "official-verified",
+    "never_official_from": [
+      "/data-1/dataset/EnsembleLLM-data-processed/HumanEval/test_plus.jsonl",
+      "/data-1/dataset/EnsembleLLM-data-processed/MBPP/test_plus.jsonl"
+    ]
+  },
+  "BigCodeBench": {
+    "benchmarks": ["BigCodeBench"],
+    "preferred": "official bigcodebench package or official GitHub evaluator",
+    "status": "official-verified",
+    "fallback_label": "none-official-required"
+  },
+  "LiveCodeBench": {
+    "benchmarks": ["LiveCodeBench"],
+    "preferred": "official LiveCodeBench code-generation evaluator",
+    "status": "official-verified",
+    "fallback_label": "none-official-required"
+  },
+  "training_reward": {
+    "preferred": "sandbox_fusion",
+    "smoke_fallback": "local_exec",
+    "fallback_label": "smoke_only"
+  }
+}

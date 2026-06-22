@@ -90,6 +90,8 @@ MODEL_PATH="$INIT_MODEL_PATH"
 
 TRAIN_FILE=${TRAIN_FILE:-"/data-1/dataset/EnsembleLLM-data-processed/train_rl_format.parquet"}
 TEST_FILES=${TEST_FILES:-"['/data-1/dataset/MATH-500/math500-test_with_system_prompt.parquet','/data-1/dataset/AIME-2025/aime-2025_with_system_prompt.parquet']"}
+TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
+VAL_MAX_SAMPLES=${VAL_MAX_SAMPLES:--1}
 
 # ===================== Section 6: Checkpoint Directory ========================
 MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
@@ -203,19 +205,19 @@ ALL_CORRECT_SFT_FALLBACK=${ALL_CORRECT_SFT_FALLBACK:-true}
 POS_SFT_FALLBACK_COEF=${POS_SFT_FALLBACK_COEF:-1.0}
 
 # ===================== Section 8b: Reward Manager =============================
-reward_manager=dapo
-enable_overlong_buffer=false
-overlong_buffer_len=$((1024 * 1))
-overlong_penalty_factor=0.5
+reward_manager=${REWARD_MANAGER:-dapo}
+enable_overlong_buffer=${ENABLE_OVERLONG_BUFFER:-false}
+overlong_buffer_len=${OVERLONG_BUFFER_LEN:-$((1024 * 1))}
+overlong_penalty_factor=${OVERLONG_PENALTY_FACTOR:-0.5}
 
 # Reuse the reward function from the parent recipe directory (one level up).
 PARENT_RECIPE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CUSTOM_REWARD_FN_PATH="${PARENT_RECIPE_DIR}/custom_reward_function_latex_verify.py"
-CUSTOM_REWARD_FN_NAME="compute_score_latex_verify"
+CUSTOM_REWARD_FN_PATH=${CUSTOM_REWARD_FN_PATH:-"${PARENT_RECIPE_DIR}/custom_reward_function_latex_verify.py"}
+CUSTOM_REWARD_FN_NAME=${CUSTOM_REWARD_FN_NAME:-"compute_score_latex_verify"}
 
 # ===================== Section 9: Sequence Lengths ============================
-max_prompt_length=500
-max_response_length=4096
+max_prompt_length=${MAX_PROMPT_LENGTH:-500}
+max_response_length=${MAX_RESPONSE_LENGTH:-4096}
 
 # ===================== Section 10: Batch Sizes ================================
 # Compute-matched to 1A/1B/1C: 64 prompts/step × 8 rollouts = 512 responses/step.
@@ -223,14 +225,15 @@ max_response_length=4096
 # Note: on a single model one could safely go to mini_bsz=16 (MiniRL default);
 # we keep 8 to isolate "model count" as the only variable.
 train_prompt_bsz=${TRAIN_PROMPT_BSZ:-64}
-n_resp_per_prompt=8
+n_resp_per_prompt=${ROLLOUT_N:-8}
 train_prompt_mini_bsz=${TRAIN_PROMPT_MINI_BSZ:-8}
 
 # ===================== Section 11: Sampling Parameters ========================
-temperature=1.0
-top_p=1.0
-top_k=-1
-val_top_p=0.95
+temperature=${TEMPERATURE:-1.0}
+top_p=${TOP_P:-1.0}
+top_k=${TOP_K:--1}
+val_temperature=${VAL_TEMPERATURE:-$temperature}
+val_top_p=${VAL_TOP_P:-0.95}
 val_n=${VAL_N:-1}
 
 # ===================== Section 12: Performance & Memory =======================
@@ -293,6 +296,12 @@ KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
 BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/acc/mean@1"}
 BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
 BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
+PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-}
+if [ -n "$PROTECTED_CKPT_STEPS" ] && [ "$PROTECTED_CKPT_STEPS" != "null" ] && [ "$PROTECTED_CKPT_STEPS" != "None" ]; then
+    if [[ "$PROTECTED_CKPT_STEPS" != \[*\] ]]; then
+        PROTECTED_CKPT_STEPS="[${PROTECTED_CKPT_STEPS}]"
+    fi
+fi
 
 # ===================== Section 14: Loss-specific extra args ===================
 # wdl_sft_is carries an additional +policy_loss.wdl_sft_beta override.
@@ -394,7 +403,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
     +actor_rollout_ref.rollout.micro_batch_size=${GENERATION_MICRO_BATCH_SIZE} \
     actor_rollout_ref.rollout.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.temperature=${temperature} \
+    actor_rollout_ref.rollout.val_kwargs.temperature=${val_temperature} \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
@@ -409,9 +418,12 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
+    data.train_max_samples=${TRAIN_MAX_SAMPLES} \
+    data.val_max_samples=${VAL_MAX_SAMPLES} \
     \
     `# --- Reward ---` \
     reward_model.reward_manager=${reward_manager} \
+    +reward.timeout=${REWARD_TIMEOUT:-300} \
     +reward_model.reward_kwargs.overlong_buffer_cfg.enable=${enable_overlong_buffer} \
     +reward_model.reward_kwargs.overlong_buffer_cfg.len=${overlong_buffer_len} \
     +reward_model.reward_kwargs.overlong_buffer_cfg.penalty_factor=${overlong_penalty_factor} \
@@ -438,6 +450,8 @@ python3 -m verl.trainer.main_ppo \
     +trainer.best_ckpt_metric_key="${BEST_CKPT_METRIC_KEY}" \
     +trainer.best_ckpt_metric_mode=${BEST_CKPT_METRIC_MODE} \
     +trainer.best_ckpt_strip_optimizer=${BEST_CKPT_STRIP_OPTIMIZER} \
+    +trainer.protected_ckpt_steps="${PROTECTED_CKPT_STEPS}" \
+    +trainer.protected_ckpt_strip_optimizer=${PROTECTED_CKPT_STRIP_OPTIMIZER:-False} \
     trainer.log_val_generations=${VAL_GENERATIONS_TO_LOG} \
     +trainer.log_val_generations_to_tracking=${VAL_GENERATIONS_TO_TRACKING} \
     trainer.validation_data_dir="${VALIDATION_DATA_DIR}" \

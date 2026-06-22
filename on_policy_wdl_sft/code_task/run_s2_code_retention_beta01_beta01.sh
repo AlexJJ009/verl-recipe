@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Formal short Stage2 code-task handoff, beta=0.1 Stage1 -> beta=0.1 Stage2.
+set -euo pipefail
+
+export RUN_PREFIX=${RUN_PREFIX:-CODE-S2-RETENTION-BETA01-BETA01}
+export STAGE1_RUN_PREFIX=${STAGE1_RUN_PREFIX:-ONPOLICY-SFT-Qwen3-4B-CODE-KODCODE-S1-BETA01-V2-RETENTION-R2}
+export WDL_SFT_BETA=${WDL_SFT_BETA:-0.1}
+export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-30}
+export TRAIN_PROMPT_BSZ=${TRAIN_PROMPT_BSZ:-64}
+export ROLLOUT_N=${ROLLOUT_N:-8}
+export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-512}
+export NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
+export TEST_FREQ=${TEST_FREQ:-5}
+export SAVE_FREQ=${SAVE_FREQ:-5}
+export VAL_N=${VAL_N:-1}
+export VAL_TEMPERATURE=${VAL_TEMPERATURE:-0.2}
+export VAL_TOP_P=${VAL_TOP_P:-0.95}
+export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
+export DATA_SEED=${DATA_SEED:-20260604}
+export DATA_SHUFFLE=${DATA_SHUFFLE:-False}
+export STAGE2_HANDOFF_STEP=${STAGE2_HANDOFF_STEP:-70}
+export CODE_TRAIN_FILE=${CODE_TRAIN_FILE:-/data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_beta01_p70_handoff.parquet}
+export MODEL2_LABEL=${MODEL2_LABEL:-beta01}
+export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-/data-1/model_weights/code_task/stage2_retention/${MODEL2_LABEL}}
+export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-100}
+export MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-null}
+export MAX_CRITIC_CKPTS_TO_KEEP=${MAX_CRITIC_CKPTS_TO_KEEP:-null}
+export KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-False}
+export BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-False}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "${SCRIPT_DIR}/run_s2_code_model2_rollout_common.sh" "$@"
