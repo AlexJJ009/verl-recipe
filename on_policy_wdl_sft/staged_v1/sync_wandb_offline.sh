@@ -7,6 +7,9 @@ WANDB_PROJECT=${WANDB_PROJECT:-OnPolicySFT-Then-WDLSFT-StagedV1}
 WANDB_ENTITY=${WANDB_ENTITY:-}
 WANDB_SYNC_DIR=${WANDB_SYNC_DIR:-}
 MARK_SYNCED=${MARK_SYNCED:-true}
+TRAINING_RELEASE_GATE=${TRAINING_RELEASE_GATE:-1}
+TRAINING_RELEASE_GATE_SCRIPT=${TRAINING_RELEASE_GATE_SCRIPT:-/data-1/verl07/verl/scripts/training_result_release_gate.py}
+RELEASE_GATE_RUN_NAME=${RELEASE_GATE_RUN_NAME:-}
 
 usage() {
     cat <<'EOF'
@@ -19,6 +22,7 @@ Environment:
   WANDB_ENTITY    optional W&B entity/team
   MARK_SYNCED     default: true
   INCLUDE_SYNCED  default: false; set true to re-upload already synced runs
+  RELEASE_GATE_RUN_NAME  exact training run name required before cloud sync
 EOF
 }
 
@@ -43,6 +47,13 @@ fi
 if ! command -v wandb >/dev/null 2>&1; then
     echo "ERROR: wandb CLI not found in PATH." >&2
     exit 2
+fi
+if [ "$TRAINING_RELEASE_GATE" = "1" ]; then
+    if [ -z "$RELEASE_GATE_RUN_NAME" ]; then
+        echo "ERROR: RELEASE_GATE_RUN_NAME is required when TRAINING_RELEASE_GATE=1." >&2
+        exit 2
+    fi
+    python3 "$TRAINING_RELEASE_GATE_SCRIPT" check --run-name "$RELEASE_GATE_RUN_NAME"
 fi
 
 args=(sync "--project" "$WANDB_PROJECT")

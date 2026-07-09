@@ -18,6 +18,8 @@ if [ "$STAGE2_HANDOFF_STEP" = "best" ] && [ "${ALLOW_BEST_HANDOFF:-0}" != "1" ];
     exit 1
 fi
 export STAGE1_STEP="$STAGE2_HANDOFF_STEP"
+export EXPECTED_STAGE1_RUN_PREFIX=${EXPECTED_STAGE1_RUN_PREFIX:-}
+export EXPECTED_STAGE1_BETA=${EXPECTED_STAGE1_BETA:-}
 
 export CODE_TRAIN_FILE=${CODE_TRAIN_FILE:-/data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_handoff.parquet}
 export CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE=${CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE:-/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet}
@@ -58,6 +60,9 @@ export DATA_SEED=${DATA_SEED:-20260604}
 export DATA_SHUFFLE=${DATA_SHUFFLE:-False}
 export WANDB_PROJECT=${WANDB_PROJECT:-OnPolicyWDLSFT-CodeTask}
 export WANDB_MODE=${WANDB_MODE:-offline}
+export CODE_REWARD_TIMEOUT=${CODE_REWARD_TIMEOUT:-30}
+export CODE_REWARD_STDIN_CASE_TIMEOUT=${CODE_REWARD_STDIN_CASE_TIMEOUT:-2}
+export CODE_REWARD_EXEC_MAX_AS_MB=${CODE_REWARD_EXEC_MAX_AS_MB:-4096}
 export BIGCODEBENCH_MAX_AS_LIMIT=${BIGCODEBENCH_MAX_AS_LIMIT:-131072}
 export BIGCODEBENCH_MAX_DATA_LIMIT=${BIGCODEBENCH_MAX_DATA_LIMIT:-131072}
 export BIGCODEBENCH_MAX_STACK_LIMIT=${BIGCODEBENCH_MAX_STACK_LIMIT:-10}
@@ -154,14 +159,72 @@ print(json.dumps(expected, sort_keys=True))
 PY
 }
 
+check_expected_stage2_source() {
+    python3 - "$STAGE1_RUN_PREFIX" "$STAGE1_CKPT_DIR" "$WDL_SFT_BETA" "$TRAIN_FILE" "$MERGED_MODEL2_DIR" "$MERGED_MODEL2_PROVENANCE_FILE" "$EXPECTED_STAGE1_RUN_PREFIX" "$EXPECTED_STAGE1_BETA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+(
+    stage1_prefix,
+    stage1_ckpt,
+    stage2_beta,
+    train_file,
+    merged_dir,
+    provenance_file,
+    expected_prefix,
+    expected_beta,
+) = sys.argv[1:]
+
+if expected_prefix and stage1_prefix != expected_prefix:
+    raise SystemExit(f"[code-s2] ERROR: STAGE1_RUN_PREFIX mismatch: expected={expected_prefix} actual={stage1_prefix}")
+if expected_beta and stage2_beta != expected_beta:
+    raise SystemExit(f"[code-s2] ERROR: WDL_SFT_BETA mismatch: expected={expected_beta} actual={stage2_beta}")
+if expected_beta == "0.0" and "beta0" not in train_file:
+    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 train shard: {train_file}")
+if expected_beta == "0.1" and "beta01" not in train_file:
+    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 train shard: {train_file}")
+if expected_beta == "0.0" and "/beta0/" not in merged_dir:
+    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 merged Model2 dir: {merged_dir}")
+if expected_beta == "0.1" and "/beta01/" not in merged_dir:
+    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 merged Model2 dir: {merged_dir}")
+
+p = Path(provenance_file)
+if p.exists():
+    actual = json.loads(p.read_text(encoding="utf-8"))
+    if actual.get("stage1_run_prefix") != stage1_prefix:
+        raise SystemExit(
+            "[code-s2] ERROR: provenance stage1_run_prefix mismatch: "
+            f"expected={stage1_prefix} actual={actual.get('stage1_run_prefix')}"
+        )
+    if actual.get("source_checkpoint") != stage1_ckpt:
+        raise SystemExit(
+            "[code-s2] ERROR: provenance source_checkpoint mismatch: "
+            f"expected={stage1_ckpt} actual={actual.get('source_checkpoint')}"
+        )
+    if actual.get("target_dir") != merged_dir:
+        raise SystemExit(
+            "[code-s2] ERROR: provenance target_dir mismatch: "
+            f"expected={merged_dir} actual={actual.get('target_dir')}"
+        )
+
+print(
+    "[code-s2] source guard PASS: "
+    f"stage1_prefix={stage1_prefix} stage2_beta={stage2_beta} "
+    f"merged_dir={merged_dir} train_file={train_file}"
+)
+PY
+}
+
 prepare_model2_if_needed() {
     [ "$EXTERNAL_DRY_RUN_MODEL2" = "1" ] && return 0
     local actor_dir="${STAGE1_CKPT_DIR}/global_step_${STAGE2_HANDOFF_STEP}/actor"
-    if [ ! -d "$actor_dir" ]; then
-        echo "[code-s2] ERROR: Stage1 actor dir not found: $actor_dir" >&2
-        exit 1
-    fi
-    if [ ! -f "${TRAIN_FILE%.*}.manifest.json" ] && [ ! -f "$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).with_suffix(\".manifest.json\"))' "$TRAIN_FILE")" ]; then
+    if [ ! -f "${TRAIN_FILE%.*}.manifest.json" ] && [ ! -f "$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).with_suffix(".manifest.json"))' "$TRAIN_FILE")" ]; then
+        if [ "${DRY_RUN:-0}" = "1" ]; then
+            echo "[code-s2] DRY_RUN warning: code data manifest not found for TRAIN_FILE=$TRAIN_FILE" >&2
+            print_or_check_code_provenance_dry_run
+            return 0
+        fi
         echo "[code-s2] ERROR: code data manifest not found for TRAIN_FILE=$TRAIN_FILE" >&2
         exit 1
     fi
@@ -182,6 +245,10 @@ prepare_model2_if_needed() {
     if has_merged_weights; then
         write_or_check_code_provenance
     else
+        if [ ! -d "$actor_dir" ]; then
+            echo "[code-s2] ERROR: Stage1 actor dir not found and merged Model2 weights are absent: $actor_dir" >&2
+            exit 1
+        fi
         if [ "${DRY_RUN:-0}" = "1" ]; then
             print_or_check_code_provenance_dry_run
             return 0
@@ -204,8 +271,10 @@ print_config() {
 RUN_PREFIX=$RUN_PREFIX
 TRAIN_FILE=$TRAIN_FILE
 TEST_FILES=$TEST_FILES
+BASE_MODEL_PATH=${BASE_MODEL_PATH:-}
 CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE=$CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE
 CODE_ONLINE_MBPP_PLUS_VAL_FILE=$CODE_ONLINE_MBPP_PLUS_VAL_FILE
+CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE=${CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE:-}
 CUSTOM_REWARD_FN_PATH=$CUSTOM_REWARD_FN_PATH
 CUSTOM_REWARD_FN_NAME=$CUSTOM_REWARD_FN_NAME
 CODE_EVAL_OFFICIAL_SITE=$CODE_EVAL_OFFICIAL_SITE
@@ -225,6 +294,7 @@ MODEL2_PATH=${MODEL2_PATH:-}
 JOINT_TRAINING_ROLLOUT_SOURCE=$JOINT_TRAINING_ROLLOUT_SOURCE
 LOSS_MODE=$LOSS_MODE
 WDL_SFT_BETA=$WDL_SFT_BETA
+FUSION_LAMBDA=${FUSION_LAMBDA:-0.50}
 TRAIN_PROMPT_BSZ=$TRAIN_PROMPT_BSZ
 ROLLOUT_N=$ROLLOUT_N
 TRAIN_PROMPT_MINI_BSZ=$TRAIN_PROMPT_MINI_BSZ
@@ -243,11 +313,34 @@ BEST_CKPT_STRIP_OPTIMIZER=$BEST_CKPT_STRIP_OPTIMIZER
 BEST_CKPT_METRIC_KEY=$BEST_CKPT_METRIC_KEY
 BIGCODEBENCH_MAX_AS_LIMIT=$BIGCODEBENCH_MAX_AS_LIMIT
 BIGCODEBENCH_MAX_DATA_LIMIT=$BIGCODEBENCH_MAX_DATA_LIMIT
+CODE_REWARD_TIMEOUT=$CODE_REWARD_TIMEOUT
+CODE_REWARD_STDIN_CASE_TIMEOUT=$CODE_REWARD_STDIN_CASE_TIMEOUT
+CODE_REWARD_EXEC_MAX_AS_MB=$CODE_REWARD_EXEC_MAX_AS_MB
+MAX_PROMPT_LENGTH=$MAX_PROMPT_LENGTH
+MAX_RESPONSE_LENGTH=$MAX_RESPONSE_LENGTH
+ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-}
+LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-}
+ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-}
+ACTOR_PPO_MAX_TOKEN_LEN=${ACTOR_PPO_MAX_TOKEN_LEN:-}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-}
+CALCULATE_ENTROPY=$CALCULATE_ENTROPY
+SUBMODEL_KL_ENABLED=${SUBMODEL_KL_ENABLED:-false}
+SUBMODEL_KL_MODEL1_ENABLED=${SUBMODEL_KL_MODEL1_ENABLED:-false}
+SUBMODEL_KL_MODEL1_COEF=${SUBMODEL_KL_MODEL1_COEF:-0.0}
+SUBMODEL_KL_MODEL1_TYPE=${SUBMODEL_KL_MODEL1_TYPE:-low_var_kl}
+SUBMODEL_KL_MODEL1_REF_PATH=${SUBMODEL_KL_MODEL1_REF_PATH:-${BASE_MODEL_PATH:-}}
+SUBMODEL_KL_MODEL2_ENABLED=${SUBMODEL_KL_MODEL2_ENABLED:-false}
+SUBMODEL_KL_MODEL2_COEF=${SUBMODEL_KL_MODEL2_COEF:-0.0}
+SUBMODEL_KL_MODEL2_TYPE=${SUBMODEL_KL_MODEL2_TYPE:-low_var_kl}
+SUBMODEL_KL_MODEL2_REF_PATH=${SUBMODEL_KL_MODEL2_REF_PATH:-${MERGED_MODEL2_DIR:-${MODEL2_PATH:-}}}
 EOF
 }
 
 print_config
 
+check_expected_stage2_source
 prepare_model2_if_needed
 
 if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -256,4 +349,11 @@ if [ "${DRY_RUN:-0}" = "1" ]; then
 fi
 
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/../staged_v1/_run_stage2_model2_rollout_common.sh" "$@"
+source "${SCRIPT_DIR}/../staged_v1/_run_stage2_model2_rollout_common.sh" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.CODE_REWARD_TIMEOUT="'${CODE_REWARD_TIMEOUT}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.CODE_REWARD_STDIN_CASE_TIMEOUT="'${CODE_REWARD_STDIN_CASE_TIMEOUT}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.CODE_REWARD_EXEC_MAX_AS_MB="'${CODE_REWARD_EXEC_MAX_AS_MB}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.BIGCODEBENCH_MAX_AS_LIMIT="'${BIGCODEBENCH_MAX_AS_LIMIT}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.BIGCODEBENCH_MAX_DATA_LIMIT="'${BIGCODEBENCH_MAX_DATA_LIMIT}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.BIGCODEBENCH_MAX_STACK_LIMIT="'${BIGCODEBENCH_MAX_STACK_LIMIT}'" \
+    "$@"

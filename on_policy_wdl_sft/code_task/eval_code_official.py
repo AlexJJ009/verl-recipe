@@ -7,12 +7,23 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+
+LCB_RELEASE_FILES = {
+    "release_v1": ("test.jsonl",),
+    "release_v2": ("test.jsonl", "test2.jsonl"),
+    "release_v3": ("test.jsonl", "test2.jsonl", "test3.jsonl"),
+    "release_v4": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl"),
+    "release_v5": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl"),
+    "release_v6": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl", "test6.jsonl"),
+}
 
 
 def require_module(module: str, hint: str) -> None:
@@ -30,6 +41,57 @@ def copy_input(src: Path, output_dir: Path, suffix: str, overwrite: bool = False
             dst.unlink()
         shutil.copy2(src, dst)
     return dst
+
+
+UNSAFE_BCB_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bos\.kill(?:pg)?\s*\("),
+    re.compile(r"\b(?:pkill|killall)\b"),
+    re.compile(r"os\.system\s*\([^\n]*(?:pkill|killall|kill)"),
+)
+
+
+def sanitize_bigcodebench_samples(samples: Path, report_path: Path) -> dict[str, Any]:
+    """Replace process-killing generated code with safe failing code.
+
+    BigCodeBench includes process-management tasks. Official tests usually mock
+    the dangerous calls, but model outputs can bypass those mocks by using ps,
+    pkill, or direct os.kill calls. In local evaluation that can terminate the
+    scorer itself. We keep the row in the sample set and make it fail safely.
+    """
+    rows: list[dict[str, Any]] = []
+    unsafe: list[dict[str, Any]] = []
+    with samples.open(encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            row = json.loads(line)
+            solution = str(row.get("solution", ""))
+            matched = [pattern.pattern for pattern in UNSAFE_BCB_PATTERNS if pattern.search(solution)]
+            if matched:
+                unsafe.append(
+                    {
+                        "line_no": line_no,
+                        "task_id": row.get("task_id"),
+                        "matched_patterns": matched,
+                    }
+                )
+                row["solution"] = (
+                    "def task_func(*args, **kwargs):\n"
+                    "    raise RuntimeError('unsafe generated process-control code blocked before official eval')\n"
+                )
+            rows.append(row)
+
+    report = {
+        "sample_path": str(samples),
+        "unsafe_sample_count": len(unsafe),
+        "unsafe_task_ids": sorted({str(row.get("task_id")) for row in unsafe}),
+        "unsafe_samples": unsafe,
+    }
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    if unsafe:
+        with samples.open("w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return report
 
 
 def run_command(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
@@ -105,6 +167,86 @@ def official_env() -> dict[str, str]:
     return env
 
 
+def default_lcb_snapshot_dir(env: dict[str, str]) -> Path | None:
+    hf_home = Path(env.get("HF_HOME", "/data-1/.cache/huggingface"))
+    snapshots = hf_home / "hub" / "datasets--livecodebench--code_generation_lite" / "snapshots"
+    if not snapshots.is_dir():
+        return None
+    candidates = sorted((p for p in snapshots.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def lcb_custom_evaluator_command(args: argparse.Namespace, custom_output: Path) -> tuple[list[str], dict[str, str]]:
+    env = official_env()
+    env["PYTHONPATH"] = f"{args.lcb_repo}:{env.get('PYTHONPATH', '')}"
+    snapshot_dir = Path(os.environ["LCB_JSONL_DIR"]) if os.environ.get("LCB_JSONL_DIR") else default_lcb_snapshot_dir(env)
+    if snapshot_dir is not None:
+        env["LCB_JSONL_DIR"] = str(snapshot_dir)
+    env["LCB_RELEASE_VERSION"] = args.lcb_release_version
+    env["LCB_RELEASE_FILES"] = json.dumps(LCB_RELEASE_FILES)
+
+    patch_code = r"""
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import lcb_runner.benchmarks as benchmarks
+import lcb_runner.benchmarks.code_generation as code_generation
+from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+
+
+def _local_loader(release_version="release_v1", start_date=None, end_date=None):
+    files_by_release = json.loads(os.environ["LCB_RELEASE_FILES"])
+    if release_version not in files_by_release:
+        raise ValueError(f"Unsupported local LiveCodeBench release_version={release_version}")
+    root = Path(os.environ["LCB_JSONL_DIR"])
+    rows = []
+    for name in files_by_release[release_version]:
+        path = root / name
+        if not path.is_file():
+            raise FileNotFoundError(f"LiveCodeBench JSONL missing: {path}")
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    rows.append(CodeGenerationProblem(**json.loads(line)))
+    if start_date is not None:
+        p_start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        rows = [row for row in rows if p_start_date <= row.contest_date]
+    if end_date is not None:
+        p_end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        rows = [row for row in rows if row.contest_date <= p_end_date]
+    print(f"Loaded {len(rows)} problems from local LiveCodeBench JSONL {root} release={release_version}")
+    return rows
+
+
+if os.environ.get("LCB_JSONL_DIR"):
+    code_generation.load_code_generation_dataset = _local_loader
+    benchmarks.load_code_generation_dataset = _local_loader
+
+from lcb_runner.runner.custom_evaluator import main
+
+main()
+"""
+    cmd = [
+        args.lcb_python,
+        "-c",
+        patch_code,
+        "--scenario",
+        args.lcb_scenario,
+        "--release_version",
+        args.lcb_release_version,
+        "--custom_output_file",
+        str(custom_output),
+        "--num_process_evaluate",
+        str(args.parallel),
+        "--timeout",
+        str(args.lcb_timeout),
+    ]
+    return cmd, env
+
+
 def derived_jsonl_result(path: Path) -> Path:
     if path.name.endswith(".jsonl"):
         return path.with_name(path.name[:-6] + "_eval_results.json")
@@ -178,7 +320,7 @@ def main() -> int:
     parser.add_argument("--bcb-override-path", type=Path, default=Path(os.environ.get("BIGCODEBENCH_OVERRIDE_PATH", "")))
     parser.add_argument("--lcb-repo", type=Path, default=Path(os.environ.get("LCB_REPO_DIR", "/data-1/code_eval_envs/LiveCodeBench")))
     parser.add_argument("--lcb-python", default=os.environ.get("LCB_PYTHON") or sys.executable)
-    parser.add_argument("--lcb-release-version", default=os.environ.get("LCB_RELEASE_VERSION", "release_v1"))
+    parser.add_argument("--lcb-release-version", default=os.environ.get("LCB_RELEASE_VERSION", "release_v5"))
     parser.add_argument("--lcb-scenario", default=os.environ.get("LCB_SCENARIO", "codegeneration"))
     parser.add_argument("--lcb-timeout", default=os.environ.get("LCB_TIMEOUT", "6"))
     args = parser.parse_args()
@@ -224,6 +366,7 @@ def main() -> int:
         if not args.bcb_override_path.is_file():
             raise FileNotFoundError(f"BigCodeBench official JSONL not found: {args.bcb_override_path}")
         samples = copy_input(args.samples, args.output_dir, "bigcodebench", overwrite=args.overwrite)
+        unsafe_report = sanitize_bigcodebench_samples(samples, args.output_dir / "bigcodebench_unsafe_samples_report.json")
         result_path = derived_jsonl_result(samples)
         pass_at_k_path = result_path.with_name(result_path.name.replace("eval_results.json", "pass_at_k.json"))
         if args.overwrite:
@@ -246,6 +389,7 @@ def main() -> int:
         payload["harness"] = "BigCodeBench"
         payload["calibrated"] = bool(args.bcb_calibrated)
         payload["sample_format"] = "completion" if args.bcb_calibrated else "full_source"
+        payload["unsafe_samples"] = unsafe_report
         env = official_env()
         env["BIGCODEBENCH_OVERRIDE_PATH"] = str(args.bcb_override_path)
         payload["run"] = run_command_to_log(cmd, args.output_dir / "bigcodebench_official.log", env=env)
@@ -263,24 +407,10 @@ def main() -> int:
             path = custom_output.with_name(custom_output.name[:-5] + suffix)
             if args.overwrite and path.exists():
                 path.unlink()
-        env = official_env()
-        env["PYTHONPATH"] = f"{args.lcb_repo}:{env.get('PYTHONPATH', '')}"
-        cmd = [
-            args.lcb_python,
-            "-m",
-            "lcb_runner.runner.custom_evaluator",
-            "--scenario",
-            args.lcb_scenario,
-            "--release_version",
-            args.lcb_release_version,
-            "--custom_output_file",
-            str(custom_output),
-            "--num_process_evaluate",
-            str(args.parallel),
-            "--timeout",
-            str(args.lcb_timeout),
-        ]
         payload["harness"] = "LiveCodeBench"
+        cmd, env = lcb_custom_evaluator_command(args, custom_output)
+        payload["release_version"] = args.lcb_release_version
+        payload["lcb_jsonl_dir"] = env.get("LCB_JSONL_DIR")
         payload["run"] = run_command(cmd, cwd=args.lcb_repo, env=env)
         payload["summary"] = summarize_lcb(custom_output, args.lcb_scenario)
 

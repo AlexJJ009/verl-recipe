@@ -23,6 +23,7 @@ CODE_OFFICIAL_SOURCE_ROOT=${CODE_OFFICIAL_SOURCE_ROOT:-/data-1/dataset/code/offi
 BIGCODEBENCH_OVERRIDE_PATH=${BIGCODEBENCH_OVERRIDE_PATH:-$CODE_OFFICIAL_SOURCE_ROOT/bigcodebench/BigCodeBench-v0.1.4.jsonl}
 LCB_REPO_DIR=${LCB_REPO_DIR:-/data-1/code_eval_envs/LiveCodeBench}
 LCB_PYTHON=${LCB_PYTHON:-/opt/venv/bin/python}
+LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION:-release_v5}
 VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-FLASHINFER}
 BCB_CALIBRATED=${BCB_CALIBRATED:-1}
 
@@ -163,6 +164,7 @@ run_checkpoint() {
         --env BIGCODEBENCH_OVERRIDE_PATH="${BIGCODEBENCH_OVERRIDE_PATH}" \
         --env LCB_REPO_DIR="${LCB_REPO_DIR}" \
         --env LCB_PYTHON="${LCB_PYTHON}" \
+        --env LCB_RELEASE_VERSION="${LCB_RELEASE_VERSION}" \
         --env VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND}" \
         --env BCB_CALIBRATED="${BCB_CALIBRATED}" \
         --env HF_HUB_OFFLINE=1 \
@@ -207,6 +209,7 @@ run_checkpoint() {
                 VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND}" \
                 BIGCODEBENCH_OVERRIDE_PATH="${BIGCODEBENCH_OVERRIDE_PATH}" \
                 LCB_PYTHON="${LCB_PYTHON}" \
+                LCB_RELEASE_VERSION="${LCB_RELEASE_VERSION}" \
                 BCB_CALIBRATED="${BCB_CALIBRATED}" \
                 FORCE_EVAL="${FORCE_EVAL}" \
                 WXPUSHER_NOTIFY=0 \
@@ -226,7 +229,7 @@ main() {
     mkdir -p "${LOG_DIR}" "${OUTPUT_ROOT}" "${TEMP_MODEL_ROOT}"
     validate_inputs
     log "Stage2 effective100 unified N=3 code offline eval queue start: benchmarks='${BENCHMARKS}' output=${OUTPUT_ROOT}"
-    log "settings: n=${N_SAMPLES} temperature=${TEMPERATURE} top_p=${TOP_P} max_tokens=${MAX_TOKENS} seed=${SEED} enable_thinking=${ENABLE_THINKING} tp=${TENSOR_PARALLEL} start=${START_INDEX} end=${END_INDEX}"
+    log "settings: n=${N_SAMPLES} temperature=${TEMPERATURE} top_p=${TOP_P} max_tokens=${MAX_TOKENS} seed=${SEED} enable_thinking=${ENABLE_THINKING} tp=${TENSOR_PARALLEL} lcb_release=${LCB_RELEASE_VERSION} start=${START_INDEX} end=${END_INDEX}"
     if [ "${DRY_RUN}" != "1" ] && [ "${ALLOW_CODE_STAGE2_EFFECTIVE100_OFFLINE_EVAL:-0}" != "1" ]; then
         log "ERROR: non-dry-run requires ALLOW_CODE_STAGE2_EFFECTIVE100_OFFLINE_EVAL=1"
         exit 1

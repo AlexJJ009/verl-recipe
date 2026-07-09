@@ -21,6 +21,12 @@ MAX_GPU_UTIL=${MAX_GPU_UTIL:-50}
 FINAL_STEP=${FINAL_STEP:-115}
 POLL_SEC=${POLL_SEC:-300}
 LOG_FILE=${LOG_FILE:-"${REPO_HOST}/recipe/on_policy_wdl_sft/ablation_single_model/monitor_2h_math_queue.log"}
+TRAINING_RELEASE_GATE_SHELL=${TRAINING_RELEASE_GATE_SHELL:-"${REPO_HOST}/scripts/training_release_gate_shell.sh"}
+
+if [ -f "$TRAINING_RELEASE_GATE_SHELL" ]; then
+    # shellcheck disable=SC1090
+    source "$TRAINING_RELEASE_GATE_SHELL"
+fi
 
 RUN_PREFIXES=(
     "WDL-GROUP-ADV-IS-Qwen3-4B-MATH-2H-MATHDATA-BASE-E1"
@@ -133,6 +139,9 @@ wait_for_completion() {
             ckpt_dir=$(latest_ckpt_dir "$prefix")
             step=$(latest_step "$ckpt_dir" || echo "$FINAL_STEP")
             log "complete: prefix=$prefix ckpt_dir=$ckpt_dir latest_step=$step"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "ablation_2h_math_queue" "$prefix" "success_complete" "$step" "$FINAL_STEP" "$ckpt_dir" "" "Reached configured final checkpoint." "$LOG_FILE"
+            fi
             return
         fi
 
@@ -151,6 +160,9 @@ wait_for_completion() {
 
         if [ "$tmux_state" = "missing" ]; then
             log "ERROR: tmux $tmux_name exited before final step; latest_step=$step, need=$FINAL_STEP"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "ablation_2h_math_queue" "$prefix" "failed" "$step" "$FINAL_STEP" "${ckpt_dir:-}" "" "Training tmux exited before configured final checkpoint." "$LOG_FILE"
+            fi
             exit 1
         fi
         log "waiting completion: prefix=$prefix tmux=$tmux_state latest_step=$step sleep=${POLL_SEC}s"

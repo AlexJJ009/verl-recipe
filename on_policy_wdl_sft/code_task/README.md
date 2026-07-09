@@ -71,8 +71,11 @@ Official benchmark data must be resolved from project-owned paths:
   `/data-1/dataset/code/official_sources`
 - BigCodeBench official JSONL:
   `/data-1/dataset/code/official_sources/bigcodebench/BigCodeBench-v0.1.4.jsonl`
-- LiveCodeBench `release_v1` HF dataset cache:
-  `/data-1/.cache/huggingface/datasets/livecodebench___code_generation_lite/.../code_generation_lite-test.arrow`
+- LiveCodeBench local HF snapshot JSONL cache:
+  `/data-1/.cache/huggingface/hub/datasets--livecodebench--code_generation_lite/snapshots/.../test*.jsonl`
+- LiveCodeBench validation parquets are version-separated:
+  `release_v1` uses `/data-1/dataset/code/verl_rl/online_full_livecodebench/official_livecodebench_val.parquet`;
+  `release_v5` uses `/data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet`.
 - Manifest:
   `/data-1/dataset/code/official_sources/official_cache_manifest.json`
 
@@ -80,7 +83,9 @@ Do not use `/root/.cache` as a runtime dependency. It is allowed only as a
 one-time migration source for `prepare_project_official_cache.py`. Official
 offline eval and validation preparation export `HF_HUB_OFFLINE=1` and
 `HF_DATASETS_OFFLINE=1`; missing project cache should fail instead of fetching
-from the network or another user's cache.
+from the network or another user's cache. LiveCodeBench offline eval defaults
+to `LCB_RELEASE_VERSION=release_v5`; set `LCB_RELEASE_VERSION=release_v1` to
+reproduce older v1-only results.
 
 `official_aligned_reward.py` is the default code-task reward for new runs.
 HumanEval+/MBPP+ use EvalPlus official `check_correctness`; BigCodeBench uses
@@ -144,18 +149,30 @@ QUEUE_MODE=full WXPUSHER_NOTIFY=0 timeout 2 bash recipe/on_policy_wdl_sft/code_t
 
 The train file is
 `/data-1/dataset/code/verl_rl/kodcode_light_rl_10k_train_rl_format.parquet`.
-Online validation now defaults to the full EvalPlus pair only:
+Online validation for the original KodCode Stage1 defaults to the full EvalPlus pair:
 
 - HumanEval+:
   `/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet`
 - MBPP+:
   `/data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet`
 
+The KodCode-Instruct and Qwen3-1.7B control wrappers additionally include
+LiveCodeBench v5 in online validation using the full available validation
+parquet by default:
+
+- LiveCodeBench v5 full online validation:
+  `/data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet`
+
+The older subset128 parquet remains available only for explicitly requested fast
+diagnostics or historical reproduction:
+`/data-1/dataset/code/verl_rl/online_lcb_v5_subset128/official_livecodebench_val.parquet`.
+
 The Stage1 plateau-finding curve uses `VAL_N=1`, `VAL_TEMPERATURE=0.2`,
-`VAL_TOP_P=0.95`, and reports core code accuracy as `pass@1`. BigCodeBench and
-LiveCodeBench are intentionally excluded from every online validation step; run
-them on candidate checkpoints and final reports through the offline official
-eval queue. The earlier four-file official validation set under
+`VAL_TOP_P=0.95`, and reports core code accuracy as `pass@1`. HumanEval+ remains
+the best-checkpoint metric. LCB should be read as a higher-variance online
+diagnostic unless rerun through full official offline scoring, but it should no
+longer be reduced to subset128 for routine online validation. The earlier
+four-file official validation set under
 `/data-1/dataset/code/verl_rl/official_*_val.parquet` was too small (`2/2/1/1`
 prompts) and must not be used to pick best checkpoints or compare training
 effects.
@@ -171,6 +188,35 @@ data seed is fixed by default with `DATA_SEED=20260604` and `DATA_SHUFFLE=True`.
 The retained best checkpoint is HE+-primary (`val-core/HumanEval+/acc/pass@1`);
 candidate selection must also report MBPP+-best and latest checkpoints before
 running offline BigCodeBench/LiveCodeBench.
+
+KodCode-Instruct control wrappers:
+
+```bash
+DRY_RUN=1 bash recipe/on_policy_wdl_sft/code_task/run_s1_code_kodcode_instruct2507_ctx8k_beta_0.sh
+DRY_RUN=1 bash recipe/on_policy_wdl_sft/code_task/run_s1_code_kodcode_instruct2507_ctx8k_beta_01.sh
+DRY_RUN=1 QUEUE_DRY_RUN_VALIDATE_WRAPPERS=1 bash recipe/on_policy_wdl_sft/code_task/run_code_task_kodcode_instruct2507_ctx8k_stage1_queue.sh
+```
+
+These use the same Instruct-2507 init as the DeepCoder Instruct run and keep the
+decode/eval口径 at `VAL_N=1`, `VAL_TEMPERATURE=0.2`, `VAL_TOP_P=0.95`, and
+4K generation. `ROLLOUT_MAX_MODEL_LEN=8192` is left explicit for context-capacity
+headroom; the generated response budget is 4K to match the existing online
+validation口径.
+
+KodCode-Instruct P60 Stage2 wrappers:
+
+```bash
+DRY_RUN=1 bash recipe/on_policy_wdl_sft/code_task/run_s2_code_kodcode_instruct2507_ctx8k_p60_beta0_beta0.sh
+DRY_RUN=1 bash recipe/on_policy_wdl_sft/code_task/run_s2_code_kodcode_instruct2507_ctx8k_p60_beta01_beta01.sh
+DRY_RUN=1 QUEUE_DRY_RUN_VALIDATE_WRAPPERS=1 bash recipe/on_policy_wdl_sft/code_task/run_code_task_kodcode_instruct2507_ctx8k_stage2_p60_queue.sh
+```
+
+The P60 Stage2 queue creates or verifies Docker-tokenizer-aligned non-overlap
+shards for `stage1-steps=60`, then runs matched beta `0.0 -> 0.0` and
+`0.1 -> 0.1` to step 40. It keeps online validation on HumanEval+, MBPP+, and
+full LCB v5; uses 4K response length with 8K rollout/logprob/actor token
+limits; sets `CALCULATE_ENTROPY=False`; and defaults
+`ROLLOUT_GPU_MEMORY_UTILIZATION=0.35` for the joint Stage2 memory profile.
 
 Formal queue launch after explicit approval:
 
@@ -276,6 +322,42 @@ Merged HF weights are written under
 `/data-1/model_weights/code_task/offline_eval/<label>/actor_step150/`; delete
 only those merged eval copies when disk is tight, not the source checkpoints.
 
+BigCodeBench official scoring must sanitize dangerous generated code before
+parallel scoring. The 2026-06-24 DeepCoder Instruct2507 R8K offline eval queue
+failed at `deepcoder_i2507_r8k_beta0_step120/bigcodebench` with
+`BrokenProcessPool`/child SIGTERM under `CODE_OFFICIAL_EVAL_PARALLEL=8`, and a
+33-task selected window (`BigCodeBench/340-350`) reproduced the scorer failure.
+The root cause was not all BigCodeBench parallelism: `BigCodeBench/348`
+generated process-control code that could kill scorer processes. Before
+official scoring, copied samples are sanitized so generated process-control
+code such as `os.kill`, `os.killpg`, `pkill`, or `killall` is converted into a
+safe failing stub and recorded in
+`bigcodebench_unsafe_samples_report.json`. Sanitized rows stay in the sample set
+and must count as failures, not pass credits. After sanitizer is in place,
+BigCodeBench can use the normal queue parallelism through
+`BIGCODEBENCH_OFFICIAL_EVAL_PARALLEL=${CODE_OFFICIAL_EVAL_PARALLEL}`; set it to
+`1` or `2` only as a fallback/debug setting if a fresh scorer failure appears.
+If scoring fails after generation/conversion, keep `SKIP_COMPLETED=1`, reuse
+the existing `raw_generations` and converted official samples, and retry from
+BigCodeBench scoring instead of regenerating HumanEval+/MBPP+ or checkpoint
+outputs.
+
+DeepCoder Instruct2507 R8K unified-N3 offline eval uses:
+
+```bash
+DRY_RUN=1 bash recipe/on_policy_wdl_sft/code_task/run_code_deepcoder_instruct2507_r8k_offline_n3_queue.sh
+tmux new-session -d -s deepcoder_i2507_r8k_offline_n3_eval \
+  "cd /data-1/verl07/verl && ALLOW_DEEPCODER_INSTRUCT2507_R8K_OFFLINE_EVAL=1 SKIP_COMPLETED=1 CODE_OFFICIAL_EVAL_PARALLEL=8 bash recipe/on_policy_wdl_sft/code_task/run_code_deepcoder_instruct2507_r8k_offline_n3_queue.sh"
+```
+
+The queue writes logs under
+`recipe/on_policy_wdl_sft/code_task/eval_logs/` and results under
+`/data-1/eval_outputs/code_task/deepcoder_instruct2507_r8k_unified_n3/`.
+Recovery is acceptable only when each selected benchmark case has its own
+`official_summary.json`, BigCodeBench has
+`bigcodebench_unsafe_samples_report.json`, and resumed HumanEval+/MBPP+ cases
+are recorded as `skipped-completed` rather than rerun.
+
 V2 latest unified-N3 diagnostic offline eval for Stage1 step 150:
 
 ```bash
@@ -288,7 +370,8 @@ tmux new-session -d -s code_v2_latest_n3_eval \
 This queue evaluates the V2 beta `0.0` and beta `0.1` latest step-150
 checkpoints on HumanEval+, MBPP+, BigCodeBench, and LiveCodeBench with one
 shared diagnostic setting: `N_SAMPLES=3`, `TEMPERATURE=1.0`, `TOP_P=0.95`,
-`MAX_TOKENS=4096`, `SEED=42`, and `ENABLE_THINKING=true`. Results are written
+`MAX_TOKENS=4096`, `SEED=42`, `ENABLE_THINKING=true`, and
+`LCB_RELEASE_VERSION=release_v5`. Results are written
 under `/data-1/eval_outputs/code_task/v2_latest_unified_n3/`; merged HF weights
 are written under `/data-1/model_weights/code_task/offline_eval/v2_*_latest_step150/`.
 The queue writes normalized `mean@3` and `pass@3` summaries to

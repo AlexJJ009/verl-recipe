@@ -38,6 +38,15 @@ export JOINT_TRAINING_ROLLOUT_SOURCE=${JOINT_TRAINING_ROLLOUT_SOURCE:-model2}
 export ROLLOUT_CALCULATE_LOG_PROBS=${ROLLOUT_CALCULATE_LOG_PROBS:-True}
 export CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.35}
+export SUBMODEL_KL_ENABLED=${SUBMODEL_KL_ENABLED:-false}
+export SUBMODEL_KL_MODEL1_ENABLED=${SUBMODEL_KL_MODEL1_ENABLED:-false}
+export SUBMODEL_KL_MODEL1_COEF=${SUBMODEL_KL_MODEL1_COEF:-0.0}
+export SUBMODEL_KL_MODEL1_TYPE=${SUBMODEL_KL_MODEL1_TYPE:-low_var_kl}
+export SUBMODEL_KL_MODEL1_REF_PATH=${SUBMODEL_KL_MODEL1_REF_PATH:-${BASE_MODEL_PATH:-}}
+export SUBMODEL_KL_MODEL2_ENABLED=${SUBMODEL_KL_MODEL2_ENABLED:-false}
+export SUBMODEL_KL_MODEL2_COEF=${SUBMODEL_KL_MODEL2_COEF:-0.0}
+export SUBMODEL_KL_MODEL2_TYPE=${SUBMODEL_KL_MODEL2_TYPE:-low_var_kl}
+export SUBMODEL_KL_MODEL2_REF_PATH=${SUBMODEL_KL_MODEL2_REF_PATH:-${MODEL2_PATH:-}}
 export TRAIN_PROMPT_BSZ=${TRAIN_PROMPT_BSZ:-64}
 export ROLLOUT_N=${ROLLOUT_N:-8}
 export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLLOUT_N))}
@@ -65,6 +74,7 @@ MODEL2_PATH=$MODEL2_PATH
 MODEL_PATH=$MODEL_PATH
 ROLLOUT_ENGINE_ARCHITECTURE_PATH=$MODEL_PATH
 ROLLOUT_WEIGHT_SOURCE_MODEL2_PATH=$MODEL2_PATH
+FUSION_LAMBDA=${FUSION_LAMBDA:-0.50}
 LOSS_MODE=$LOSS_MODE
 WDL_SFT_BETA=$WDL_SFT_BETA
 JOINT_TRAINING=True
@@ -73,6 +83,14 @@ ROLLOUT_SOURCE=model2-only
 ACTOR_TRAINING_MODEL=joint
 CALCULATE_ENTROPY=$CALCULATE_ENTROPY
 ROLLOUT_GPU_MEMORY_UTILIZATION=$ROLLOUT_GPU_MEMORY_UTILIZATION
+MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH:-}
+MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-}
+ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-}
+LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-}
+ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-}
+ACTOR_PPO_MAX_TOKEN_LEN=${ACTOR_PPO_MAX_TOKEN_LEN:-}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-}
 ROLLOUT_IS=$ROLLOUT_IS
 ROLLOUT_RS=$ROLLOUT_RS
 TRAIN_PROMPT_BSZ=$TRAIN_PROMPT_BSZ
@@ -96,6 +114,15 @@ actor_rollout_ref.actor.ppo_epochs=$ACTOR_PPO_EPOCHS
 actor_rollout_ref.actor.shuffle=$ACTOR_SHUFFLE
 actor_rollout_ref.model.joint_training_rollout_source=$JOINT_TRAINING_ROLLOUT_SOURCE
 actor_rollout_ref.rollout.calculate_log_probs=$ROLLOUT_CALCULATE_LOG_PROBS
+actor_rollout_ref.actor.submodel_kl.enabled=$SUBMODEL_KL_ENABLED
+actor_rollout_ref.actor.submodel_kl.model1.enabled=$SUBMODEL_KL_MODEL1_ENABLED
+actor_rollout_ref.actor.submodel_kl.model1.coef=$SUBMODEL_KL_MODEL1_COEF
+actor_rollout_ref.actor.submodel_kl.model1.kl_type=$SUBMODEL_KL_MODEL1_TYPE
+actor_rollout_ref.actor.submodel_kl.model1.ref_path=$SUBMODEL_KL_MODEL1_REF_PATH
+actor_rollout_ref.actor.submodel_kl.model2.enabled=$SUBMODEL_KL_MODEL2_ENABLED
+actor_rollout_ref.actor.submodel_kl.model2.coef=$SUBMODEL_KL_MODEL2_COEF
+actor_rollout_ref.actor.submodel_kl.model2.kl_type=$SUBMODEL_KL_MODEL2_TYPE
+actor_rollout_ref.actor.submodel_kl.model2.ref_path=$SUBMODEL_KL_MODEL2_REF_PATH
 EOF
 }
 
@@ -140,7 +167,7 @@ fi
 export STAGE1_MERGED_MODEL_ROOT=${STAGE1_MERGED_MODEL_ROOT:-/data-1/model_weights/staged_v1}
 MERGED_MODEL2_DIR=${MERGED_MODEL2_DIR:-"$MODEL2_PATH"}
 
-MODEL2_CACHE_TAG="${RUN_PREFIX}-${STAGE1_RUN_PREFIX}-$(basename "$MODEL2_PATH")"
+MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG:-"${RUN_PREFIX}-${STAGE1_RUN_PREFIX}-$(basename "$MODEL2_PATH")"}
 MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
 if [ -z "${HF_HOME+x}" ] || [ "$HF_HOME" = "/root/.cache/huggingface" ]; then
     STAGE2_HF_HOME="/data-1/.cache/huggingface"
@@ -164,6 +191,18 @@ if [ "${STAGE2_MERGE_ONLY:-0}" = "1" ]; then
 fi
 
 # shellcheck disable=SC1091
+submodel_kl_overrides=(
+    actor_rollout_ref.actor.submodel_kl.enabled=${SUBMODEL_KL_ENABLED}
+    actor_rollout_ref.actor.submodel_kl.model1.enabled=${SUBMODEL_KL_MODEL1_ENABLED}
+    actor_rollout_ref.actor.submodel_kl.model1.coef=${SUBMODEL_KL_MODEL1_COEF}
+    actor_rollout_ref.actor.submodel_kl.model1.kl_type=${SUBMODEL_KL_MODEL1_TYPE}
+    actor_rollout_ref.actor.submodel_kl.model1.ref_path="${SUBMODEL_KL_MODEL1_REF_PATH}"
+    actor_rollout_ref.actor.submodel_kl.model2.enabled=${SUBMODEL_KL_MODEL2_ENABLED}
+    actor_rollout_ref.actor.submodel_kl.model2.coef=${SUBMODEL_KL_MODEL2_COEF}
+    actor_rollout_ref.actor.submodel_kl.model2.kl_type=${SUBMODEL_KL_MODEL2_TYPE}
+    actor_rollout_ref.actor.submodel_kl.model2.ref_path="${SUBMODEL_KL_MODEL2_REF_PATH}"
+)
+
 source "${WRAPPER_SCRIPT_DIR}/../_common_wdl_sft_is_joint.sh" \
     data.seed=${DATA_SEED} \
     data.train_max_samples=${TRAIN_MAX_SAMPLES} \
@@ -172,4 +211,5 @@ source "${WRAPPER_SCRIPT_DIR}/../_common_wdl_sft_is_joint.sh" \
     actor_rollout_ref.actor.ppo_epochs=${ACTOR_PPO_EPOCHS} \
     actor_rollout_ref.actor.shuffle=${ACTOR_SHUFFLE} \
     actor_rollout_ref.rollout.calculate_log_probs=${ROLLOUT_CALCULATE_LOG_PROBS} \
+    "${submodel_kl_overrides[@]}" \
     "$@"

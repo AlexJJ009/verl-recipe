@@ -113,6 +113,43 @@ if [ ! -d "$MODEL_PATH" ]; then
         --fusion_lambda "$FUSION_LAMBDA"
 fi
 
+refresh_joint_remote_code() {
+    local src_dir="${REPO_ROOT}/verl/models/joint_model"
+    local dst_dir="$MODEL_PATH"
+    if [ ! -d "$dst_dir" ]; then
+        echo "ERROR: joint model path missing before remote-code refresh: $dst_dir" >&2
+        exit 1
+    fi
+    for fname in modeling_joint_qwen3.py configuration_joint_qwen3.py; do
+        if [ ! -f "${src_dir}/${fname}" ]; then
+            echo "ERROR: joint model source missing: ${src_dir}/${fname}" >&2
+            exit 1
+        fi
+        cp -f "${src_dir}/${fname}" "${dst_dir}/${fname}"
+    done
+    echo "Joint remote-code files refreshed from repo into $dst_dir"
+}
+refresh_joint_remote_code
+
+python3 - "$MODEL_PATH" "$FUSION_LAMBDA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+model_path = Path(sys.argv[1])
+expected = float(sys.argv[2])
+config_path = model_path / "config.json"
+if not config_path.is_file():
+    raise SystemExit(f"ERROR: joint config missing: {config_path}")
+actual = float(json.loads(config_path.read_text()).get("fusion_lambda"))
+if abs(actual - expected) > 1e-9:
+    raise SystemExit(
+        "ERROR: joint model fusion_lambda mismatch: "
+        f"path={model_path} expected={expected} actual={actual}"
+    )
+print(f"Joint fusion_lambda verified: {actual}")
+PY
+
 if [ ! -f "$TRAIN_FILE" ]; then
     echo "ERROR: TRAIN_FILE not found: $TRAIN_FILE" >&2
     exit 1
@@ -127,6 +164,7 @@ KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
 BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/acc/mean@3"}
 BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
 BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
+CHECKPOINT_SAVE_CONTENTS=${CHECKPOINT_SAVE_CONTENTS:-"[model,optimizer,extra]"}
 BASE_CKPT_DIR=${BASE_CKPT_DIR:-"${DATA_ROOT}/checkpoints"}
 
 get_df_target() {
@@ -268,6 +306,45 @@ val_before_train=${VAL_BEFORE_TRAIN:-True}
 
 cd "$REPO_ROOT"
 
+cat <<EOF
+[WDL-SFT JOINT CONFIG]
+RUN_PREFIX=${RUN_PREFIX}
+WANDB_RUN_NAME=${WANDB_RUN_NAME}
+BASE_MODEL_PATH=${BASE_MODEL_PATH}
+MODEL2_PATH=${MODEL2_PATH}
+MODEL_PATH=${MODEL_PATH}
+FUSION_LAMBDA=${FUSION_LAMBDA}
+TRAIN_FILE=${TRAIN_FILE}
+TEST_FILES=${TEST_FILES}
+LOSS_MODE=${loss_mode}
+WDL_SFT_BETA=${WDL_SFT_BETA}
+MAX_PROMPT_LENGTH=${max_prompt_length}
+MAX_RESPONSE_LENGTH=${max_response_length}
+ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN}
+ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS}
+LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}
+ACTOR_PPO_MAX_TOKEN_LEN=${actor_ppo_max_token_len}
+TRAIN_PROMPT_BSZ=${train_prompt_bsz}
+ROLLOUT_N=${n_resp_per_prompt}
+TRAIN_PROMPT_MINI_BSZ=${train_prompt_mini_bsz}
+GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE}
+LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE}
+ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION}
+CALCULATE_ENTROPY=${calculate_entropy}
+ENTROPY_COEFF=0
+VAL_N=${VAL_N}
+VAL_TEMPERATURE=${val_temperature}
+VAL_TOP_P=${val_top_p}
+VAL_BEFORE_TRAIN=${val_before_train}
+TEST_FREQ=${test_freq}
+SAVE_FREQ=${save_freq}
+MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP}
+KEEP_BEST_CKPT=${KEEP_BEST_CKPT}
+BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY}
+BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER}
+CHECKPOINT_SAVE_CONTENTS=${CHECKPOINT_SAVE_CONTENTS}
+EOF
+
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=${adv_estimator} \
     algorithm.use_kl_in_reward=${use_kl_in_reward} \
@@ -369,6 +446,8 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="${CKPTS_DIR}" \
     trainer.max_actor_ckpt_to_keep=${MAX_ACTOR_CKPTS_TO_KEEP} \
     trainer.max_critic_ckpt_to_keep=${MAX_CRITIC_CKPTS_TO_KEEP} \
+    actor_rollout_ref.actor.checkpoint.save_contents=${CHECKPOINT_SAVE_CONTENTS} \
+    actor_rollout_ref.actor.checkpoint.load_contents=${CHECKPOINT_SAVE_CONTENTS} \
     +trainer.keep_best_ckpt=${KEEP_BEST_CKPT} \
     +trainer.best_ckpt_metric_key="${BEST_CKPT_METRIC_KEY}" \
     +trainer.best_ckpt_metric_mode=${BEST_CKPT_METRIC_MODE} \

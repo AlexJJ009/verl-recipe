@@ -10,6 +10,7 @@ BENCHMARKS=${BENCHMARKS:-"humaneval mbpp bigcodebench livecodebench"}
 OFFICIAL_SITE=${OFFICIAL_SITE:-/data-1/code_eval_envs/official_site}
 LCB_REPO_DIR=${LCB_REPO_DIR:-/data-1/code_eval_envs/LiveCodeBench}
 LCB_PYTHON=${LCB_PYTHON:-/opt/venv/bin/python}
+LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION:-release_v5}
 export PYTHONPATH="${OFFICIAL_SITE}:${LCB_REPO_DIR}:${PYTHONPATH:-}"
 
 if [ "${DRY_RUN:-0}" != "1" ]; then
@@ -19,7 +20,7 @@ if [ "${DRY_RUN:-0}" != "1" ]; then
 fi
 
 mkdir -p "$OUTPUT_ROOT"
-echo "[code-eval] MODEL_DIR=$MODEL_DIR OUTPUT_ROOT=$OUTPUT_ROOT BENCHMARKS=$BENCHMARKS OFFICIAL_SITE=$OFFICIAL_SITE LCB_REPO_DIR=$LCB_REPO_DIR LCB_PYTHON=$LCB_PYTHON"
+echo "[code-eval] MODEL_DIR=$MODEL_DIR OUTPUT_ROOT=$OUTPUT_ROOT BENCHMARKS=$BENCHMARKS OFFICIAL_SITE=$OFFICIAL_SITE LCB_REPO_DIR=$LCB_REPO_DIR LCB_PYTHON=$LCB_PYTHON LCB_RELEASE_VERSION=$LCB_RELEASE_VERSION"
 if [ "${DRY_RUN:-0}" = "1" ]; then
     exit 0
 fi
@@ -61,6 +62,7 @@ for bench in $BENCHMARKS; do
                 --output-dir "$OUTPUT_ROOT/livecodebench" \
                 --summary "$OUTPUT_ROOT/livecodebench_official_summary.json" \
                 --lcb-python "$LCB_PYTHON" \
+                --lcb-release-version "$LCB_RELEASE_VERSION" \
                 --overwrite
             ;;
         *)

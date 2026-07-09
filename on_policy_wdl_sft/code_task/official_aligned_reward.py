@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import functools
 import inspect
 import json
 import os
@@ -54,6 +55,15 @@ OFFICIAL_METHODS = {
     "MBPP+": "evalplus",
     "BigCodeBench": "bigcodebench",
     "LiveCodeBench": "livecodebench",
+}
+
+LCB_RELEASE_FILES = {
+    "release_v1": ("test.jsonl",),
+    "release_v2": ("test.jsonl", "test2.jsonl"),
+    "release_v3": ("test.jsonl", "test2.jsonl", "test3.jsonl"),
+    "release_v4": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl"),
+    "release_v5": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl"),
+    "release_v6": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl", "test6.jsonl"),
 }
 
 
@@ -109,6 +119,62 @@ def _parse_tests(ground_truth: Any, extra_info: dict[str, Any] | None = None) ->
             if key in extra_info:
                 return _parse_tests(extra_info[key])
     return None
+
+
+def _default_lcb_snapshot_dir() -> Path | None:
+    if os.environ.get("LCB_JSONL_DIR"):
+        path = Path(os.environ["LCB_JSONL_DIR"])
+        return path if path.is_dir() else None
+    hf_home = Path(os.environ.get("HF_HOME", "/data-1/.cache/huggingface"))
+    snapshots = hf_home / "hub" / "datasets--livecodebench--code_generation_lite" / "snapshots"
+    if not snapshots.is_dir():
+        return None
+    candidates = sorted((p for p in snapshots.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+@functools.lru_cache(maxsize=8)
+def _lcb_input_output_by_question_id(release_version: str) -> dict[str, Any]:
+    snapshot_dir = _default_lcb_snapshot_dir()
+    if snapshot_dir is None:
+        raise FileNotFoundError(
+            "LiveCodeBench JSONL snapshot not found; set LCB_JSONL_DIR or HF_HOME with code_generation_lite snapshot"
+        )
+    files = LCB_RELEASE_FILES.get(release_version)
+    if files is None:
+        raise ValueError(f"unsupported LiveCodeBench release_version={release_version}")
+    try:
+        from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+    except Exception as exc:
+        raise RuntimeError(f"LiveCodeBench loader unavailable. {_official_env_hint()}") from exc
+
+    output_by_id: dict[str, Any] = {}
+    for name in files:
+        path = snapshot_dir / name
+        if not path.is_file():
+            raise FileNotFoundError(f"LiveCodeBench local JSONL missing for {release_version}: {path}")
+        with path.open(encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                problem = json.loads(line)
+                sample = CodeGenerationProblem(**problem).get_evaluation_sample()
+                output_by_id[str(problem["question_id"])] = _restore_jsonable(sample["input_output"])
+    return output_by_id
+
+
+def _resolve_livecodebench_input_output(test_case: dict[str, Any]) -> Any:
+    if "input_output" in test_case:
+        return test_case["input_output"]
+    question_id = test_case.get("question_id")
+    if question_id is None:
+        raise KeyError("input_output")
+    release_version = str(test_case.get("release_version") or os.environ.get("LCB_RELEASE_VERSION") or "release_v5")
+    output_by_id = _lcb_input_output_by_question_id(release_version)
+    key = str(question_id)
+    if key not in output_by_id:
+        raise KeyError(f"LiveCodeBench question_id not found in {release_version}: {key}")
+    return output_by_id[key]
 
 
 def _restore_jsonable(obj: Any) -> Any:
@@ -966,7 +1032,7 @@ def score_livecodebench_official(code: str, test_case: dict[str, Any]) -> dict[s
     except Exception as exc:
         raise RuntimeError(f"LiveCodeBench official evaluator is unavailable. {_official_env_hint()}") from exc
 
-    sample = {"input_output": test_case["input_output"]}
+    sample = {"input_output": _resolve_livecodebench_input_output(test_case)}
     result, metadata = check_correctness(
         sample,
         code,

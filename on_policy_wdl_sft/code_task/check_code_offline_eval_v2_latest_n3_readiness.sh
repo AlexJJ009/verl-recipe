@@ -10,8 +10,22 @@ BIGCODEBENCH_OVERRIDE_PATH=${BIGCODEBENCH_OVERRIDE_PATH:-$CODE_OFFICIAL_SOURCE_R
 CODE_EVAL_OFFICIAL_SITE=${CODE_EVAL_OFFICIAL_SITE:-/data-1/code_eval_envs/official_site}
 LCB_REPO_DIR=${LCB_REPO_DIR:-/data-1/code_eval_envs/LiveCodeBench}
 LCB_PYTHON=${LCB_PYTHON:-/opt/venv/bin/python}
+LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION:-release_v5}
+LCB_JSONL_DIR=${LCB_JSONL_DIR:-$PROJECT_CACHE_ROOT/huggingface/hub/datasets--livecodebench--code_generation_lite/snapshots/0fe84c3912ea0c4d4a78037083943e8f0c4dd505}
 DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness}
 MIN_FREE_GB=${MIN_FREE_GB:-80}
+
+case "${LCB_RELEASE_VERSION}" in
+    release_v1)
+        LCB_VALIDATION_PARQUET=${LCB_VALIDATION_PARQUET:-/data-1/dataset/code/verl_rl/online_full_livecodebench/official_livecodebench_val.parquet}
+        ;;
+    release_v5)
+        LCB_VALIDATION_PARQUET=${LCB_VALIDATION_PARQUET:-/data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet}
+        ;;
+    *)
+        LCB_VALIDATION_PARQUET=${LCB_VALIDATION_PARQUET:-/data-1/dataset/code/verl_rl/online_full_livecodebench_${LCB_RELEASE_VERSION}/official_livecodebench_val.parquet}
+        ;;
+esac
 
 paths=(
     "/data-1/checkpoints/ONPOLICY-SFT-Qwen3-4B-CODE-KODCODE-S1-BETA0-V2_1780685616/global_step_150/actor"
@@ -19,16 +33,20 @@ paths=(
     "/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet"
     "/data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet"
     "/data-1/dataset/code/verl_rl/online_full_bigcodebench/official_bigcodebench_val.parquet"
-    "/data-1/dataset/code/verl_rl/online_full_livecodebench/official_livecodebench_val.parquet"
+    "${LCB_VALIDATION_PARQUET}"
     "${EVALPLUS_CACHE_HOST}"
     "${BIGCODEBENCH_OVERRIDE_PATH}"
     "${CODE_EVAL_OFFICIAL_SITE}"
     "${LCB_REPO_DIR}"
+    "${LCB_JSONL_DIR}"
 )
 
 status=0
 echo "[readiness] repo=${REPO_HOST}"
 echo "[readiness] min_free_gb=${MIN_FREE_GB}"
+echo "[readiness] lcb_release=${LCB_RELEASE_VERSION}"
+echo "[readiness] lcb_validation_parquet=${LCB_VALIDATION_PARQUET}"
+echo "[readiness] lcb_jsonl_dir=${LCB_JSONL_DIR}"
 free_gb=$(df -Pk /data-1 | awk 'NR==2 {print int($4 / 1024 / 1024)}')
 echo "[readiness] /data-1 free=${free_gb}G"
 if [ "${free_gb}" -lt "${MIN_FREE_GB}" ]; then
@@ -71,12 +89,52 @@ if docker run --rm \
     -w /workspace/verl \
     --env LCB_REPO_DIR="${LCB_REPO_DIR}" \
     --env LCB_PYTHON="${LCB_PYTHON}" \
+    --env LCB_RELEASE_VERSION="${LCB_RELEASE_VERSION}" \
+    --env LCB_JSONL_DIR="${LCB_JSONL_DIR}" \
+    --env PROJECT_CACHE_ROOT="${PROJECT_CACHE_ROOT}" \
+    --env HF_HOME="${PROJECT_CACHE_ROOT}/huggingface" \
+    --env HF_DATASETS_CACHE="${PROJECT_CACHE_ROOT}/huggingface/datasets" \
+    --env HUGGINGFACE_HUB_CACHE="${PROJECT_CACHE_ROOT}/huggingface/hub" \
+    --env TRANSFORMERS_CACHE="${PROJECT_CACHE_ROOT}/huggingface" \
+    --env XDG_CACHE_HOME="${PROJECT_CACHE_ROOT}" \
+    --env HF_HUB_OFFLINE=1 \
+    --env HF_DATASETS_OFFLINE=1 \
     "${DOCKER_IMAGE}" \
-    bash -lc 'test -x "${LCB_PYTHON}" && cd "${LCB_REPO_DIR}" && PYTHONPATH="${LCB_REPO_DIR}:${PYTHONPATH:-}" "${LCB_PYTHON}" -c "import lcb_runner.runner.custom_evaluator"' \
+    bash -lc 'test -x "${LCB_PYTHON}" && cd "${LCB_REPO_DIR}" && PYTHONPATH="${LCB_REPO_DIR}:${PYTHONPATH:-}" "${LCB_PYTHON}" - <<'"'"'PY'"'"'
+import json
+import os
+from pathlib import Path
+
+import lcb_runner.runner.custom_evaluator
+from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+
+release_files = {
+    "release_v1": ["test.jsonl"],
+    "release_v5": ["test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl"],
+}
+files = release_files[os.environ["LCB_RELEASE_VERSION"]]
+root = Path(os.environ["LCB_JSONL_DIR"])
+rows = []
+total = 0
+for name in files:
+    path = root / name
+    assert path.is_file(), path
+    with path.open(encoding="utf-8") as f:
+        first_line = ""
+        for line in f:
+            if line.strip():
+                total += 1
+                if not first_line:
+                    first_line = line
+        assert first_line, path
+        rows.append(CodeGenerationProblem(**json.loads(first_line)))
+assert rows and total > 0, "empty LiveCodeBench local JSONL loader"
+print(total, rows[0].question_id, rows[-1].question_id)
+PY' \
     >/dev/null 2>&1; then
-    echo "[readiness] OK LiveCodeBench custom evaluator import in container via ${LCB_PYTHON}"
+    echo "[readiness] OK LiveCodeBench custom evaluator and local ${LCB_RELEASE_VERSION} JSONL loader in container via ${LCB_PYTHON}"
 else
-    echo "[readiness] ERROR: LiveCodeBench import probe failed in container via ${LCB_PYTHON}" >&2
+    echo "[readiness] ERROR: LiveCodeBench import/local-loader probe failed in container via ${LCB_PYTHON} release=${LCB_RELEASE_VERSION}" >&2
     status=1
 fi
 

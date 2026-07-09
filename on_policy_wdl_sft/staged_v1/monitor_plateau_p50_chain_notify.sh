@@ -13,6 +13,12 @@ POLL_SEC=${POLL_SEC:-300}
 QUEUE_TMUX=${QUEUE_TMUX:-staged_v1_plateau_p50_chain_queue}
 LOG_FILE=${LOG_FILE:-/data-1/verl07/verl/recipe/on_policy_wdl_sft/staged_v1/monitor_plateau_p50_chain_notify.log}
 WXPUSHER_SCRIPT=${WXPUSHER_SCRIPT:-/root/agent-core/skills/wxpusher-notify/scripts/wxpusher_notify.py}
+TRAINING_RELEASE_GATE_SHELL=${TRAINING_RELEASE_GATE_SHELL:-/data-1/verl07/verl/scripts/training_release_gate_shell.sh}
+
+if [ -f "$TRAINING_RELEASE_GATE_SHELL" ]; then
+    # shellcheck disable=SC1090
+    source "$TRAINING_RELEASE_GATE_SHELL"
+fi
 
 BETA_LABELS=("P50-B0" "P50-B01")
 STAGE1_PREFIXES=(
@@ -140,6 +146,9 @@ while true; do
         if [ "${s1_done[$beta]}" = "0" ] && [ -n "$s1_step" ] && [ "$s1_step" -ge "$STAGE1_FINAL_STEP" ]; then
             s1_done["$beta"]=1
             log "Stage1 complete: beta=${beta} step=${s1_step} ckpt=${s1_ckpt}"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "plateau_p50_chain" "$s1_prefix" "success_complete" "$s1_step" "$STAGE1_FINAL_STEP" "$s1_ckpt" "$(metrics_path_for_ckpt "$s1_ckpt")" "Stage1 reached configured final checkpoint." "$LOG_FILE"
+            fi
             notify "Plateau P50 WDL-SFT Stage1 complete" "Status: completed
 What happened: Stage1 reached final checkpoint for ${beta}.
 Evidence: step=${s1_step}; checkpoint=${s1_ckpt}
@@ -178,6 +187,9 @@ Next action: Waiting for final checkpoint and metrics."
         if [ "${s2_done[$beta]}" = "0" ] && [ -n "$s2_step" ] && [ "$s2_step" -ge "$STAGE2_FINAL_STEP" ] && [ "$metrics_state" = "final" ]; then
             s2_done["$beta"]=1
             log "Stage2 complete: beta=${beta} step=${s2_step} metrics=${metrics_state} ckpt=${s2_ckpt}"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "plateau_p50_chain" "$s2_prefix" "success_complete" "$s2_step" "$STAGE2_FINAL_STEP" "$s2_ckpt" "$(metrics_path_for_ckpt "$s2_ckpt")" "Stage2 reached configured final checkpoint with final metrics evidence." "$LOG_FILE"
+            fi
             notify "Plateau P50 WDL-SFT Stage2 complete" "Status: completed
 What happened: Stage2 reached final checkpoint and metrics for ${beta}.
 Evidence: step=${s2_step}; metrics=$(metrics_path_for_ckpt "$s2_ckpt"); checkpoint=${s2_ckpt}
@@ -194,6 +206,13 @@ Next action: Queue will continue or finish."
             && [ "${s2_done[$beta]}" = "0" ] \
             && { [ -n "$s1_ckpt" ] || [ -n "$s2_ckpt" ]; }; then
             log "failed/stopped: beta=${beta} s1_step=${s1_step:-none} s2_step=${s2_step:-none} metrics=${metrics_state}"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                if [ -n "$s2_ckpt" ]; then
+                    training_release_gate_record_event "plateau_p50_chain" "$s2_prefix" "failed" "${s2_step:-none}" "$STAGE2_FINAL_STEP" "$s2_ckpt" "$(metrics_path_for_ckpt "$s2_ckpt")" "Stage2 stopped before configured final checkpoint/final metrics." "$LOG_FILE"
+                elif [ -n "$s1_ckpt" ]; then
+                    training_release_gate_record_event "plateau_p50_chain" "$s1_prefix" "failed" "${s1_step:-none}" "$STAGE1_FINAL_STEP" "$s1_ckpt" "$(metrics_path_for_ckpt "$s1_ckpt")" "Stage1 stopped before downstream chain completion." "$LOG_FILE"
+                fi
+            fi
             notify "Plateau P50 WDL-SFT chain stopped" "Status: failed
 What happened: Queue and training tmux sessions are gone before ${beta} completed Stage2.
 Evidence: s1_step=${s1_step:-none}; s2_step=${s2_step:-none}; metrics=${metrics_state}

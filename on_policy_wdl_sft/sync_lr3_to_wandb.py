@@ -8,6 +8,8 @@ DRY RUN mode: prints summary without calling wandb.init.
 import json
 import re
 import ast
+import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -18,6 +20,11 @@ JSONL_PATH = TEXT_LOG_DIR / "metrics/OnPolicyWDLSFT/WDL-SFT-Qwen3-4B-MATH-LR3_17
 ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*m|\[36m|\[0m")
 RUN_NAME = "WDL-SFT-Qwen3-4B-MATH-LR3_1776359574"
 PROJECT_NAME = "OnPolicyWDLSFT"
+RELEASE_GATE_SCRIPT = Path("/data-1/verl07/verl/scripts/training_result_release_gate.py")
+
+def check_release_gate():
+    """Block cloud upload unless the deterministic release gate allows it."""
+    subprocess.check_call([sys.executable, str(RELEASE_GATE_SCRIPT), "check", "--run-name", RUN_NAME])
 
 def parse_text_logs() -> Dict[int, Dict]:
     """
@@ -221,12 +228,12 @@ def upload_to_wandb(data: Dict[int, Dict]):
         return False
 
 if __name__ == "__main__":
-    import sys
-
     if "--upload" in sys.argv:
         print("=" * 60)
         print("UPLOAD MODE: Syncing to WandB cloud")
         print("=" * 60)
+        if "--skip-release-gate" not in sys.argv:
+            check_release_gate()
         text_logs = parse_text_logs()
         jsonl_data = parse_jsonl()
         merged = merge_sources(text_logs, jsonl_data)

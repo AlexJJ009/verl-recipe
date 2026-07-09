@@ -356,7 +356,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
-    actor_rollout_ref.actor.calculate_entropy=True \
+    actor_rollout_ref.actor.calculate_entropy=${ACTOR_CALCULATE_ENTROPY:-True} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
     actor_rollout_ref.actor.grad_clip=500.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \

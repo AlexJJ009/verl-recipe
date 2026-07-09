@@ -21,6 +21,8 @@ XDG_CACHE_HOME=${CODE_TASK_XDG_CACHE_HOME:-$PROJECT_CACHE_ROOT}
 EVALPLUS_CACHE_HOST=${EVALPLUS_CACHE_HOST:-$PROJECT_CACHE_ROOT/evalplus}
 CODE_OFFICIAL_SOURCE_ROOT=${CODE_OFFICIAL_SOURCE_ROOT:-/data-1/dataset/code/official_sources}
 LCB_REPO_DIR=${LCB_REPO_DIR:-/data-1/code_eval_envs/LiveCodeBench}
+LCB_PYTHON=${LCB_PYTHON:-/opt/venv/bin/python}
+LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION:-release_v5}
 VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-FLASHINFER}
 
 N_SAMPLES=${N_SAMPLES:-1}
@@ -174,6 +176,8 @@ run_checkpoint() {
         --env XDG_CACHE_HOME="${XDG_CACHE_HOME}" \
         --env CODE_OFFICIAL_SOURCE_ROOT="${CODE_OFFICIAL_SOURCE_ROOT}" \
         --env LCB_REPO_DIR="${LCB_REPO_DIR}" \
+        --env LCB_PYTHON="${LCB_PYTHON}" \
+        --env LCB_RELEASE_VERSION="${LCB_RELEASE_VERSION}" \
         --env VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND}" \
         --env HF_HUB_OFFLINE=1 \
         --env HF_DATASETS_OFFLINE=1 \
@@ -215,6 +219,8 @@ run_checkpoint() {
                 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION}" \
                 CODE_OFFICIAL_EVAL_PARALLEL="${CODE_OFFICIAL_EVAL_PARALLEL}" \
                 VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND}" \
+                LCB_PYTHON="${LCB_PYTHON}" \
+                LCB_RELEASE_VERSION="${LCB_RELEASE_VERSION}" \
                 FORCE_EVAL="${FORCE_EVAL}" \
                 WXPUSHER_NOTIFY=0 \
                     bash recipe/on_policy_wdl_sft/code_task/run_code_offline_eval_case.sh

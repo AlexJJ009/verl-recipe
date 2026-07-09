@@ -10,6 +10,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 : "${FSDP_ACTOR_DIR:?FSDP_ACTOR_DIR is required}"
 
 BENCHMARK=${BENCHMARK:-humaneval}
+LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION:-release_v5}
 case "$BENCHMARK" in
     humaneval)
         DATASET_NAME="HumanEval+"
@@ -25,7 +26,18 @@ case "$BENCHMARK" in
         ;;
     livecodebench)
         DATASET_NAME="LiveCodeBench"
-        VALIDATION_PARQUET=${VALIDATION_PARQUET:-/data-1/dataset/code/verl_rl/online_full_livecodebench/official_livecodebench_val.parquet}
+        case "${LCB_RELEASE_VERSION}" in
+            release_v1)
+                DEFAULT_LCB_PARQUET=/data-1/dataset/code/verl_rl/online_full_livecodebench/official_livecodebench_val.parquet
+                ;;
+            release_v5)
+                DEFAULT_LCB_PARQUET=/data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet
+                ;;
+            *)
+                DEFAULT_LCB_PARQUET=/data-1/dataset/code/verl_rl/online_full_livecodebench_${LCB_RELEASE_VERSION}/official_livecodebench_val.parquet
+                ;;
+        esac
+        VALIDATION_PARQUET=${VALIDATION_PARQUET:-${DEFAULT_LCB_PARQUET}}
         ;;
     *)
         echo "ERROR: unsupported BENCHMARK=${BENCHMARK}" >&2
@@ -89,8 +101,14 @@ echo "[code-offline-eval] CODE_OFFICIAL_SOURCE_ROOT=${CODE_OFFICIAL_SOURCE_ROOT}
 echo "[code-offline-eval] BIGCODEBENCH_OVERRIDE_PATH=${BIGCODEBENCH_OVERRIDE_PATH}"
 echo "[code-offline-eval] LCB_REPO_DIR=${LCB_REPO_DIR}"
 echo "[code-offline-eval] LCB_PYTHON=${LCB_PYTHON}"
+echo "[code-offline-eval] LCB_RELEASE_VERSION=${LCB_RELEASE_VERSION}"
 echo "[code-offline-eval] ENABLE_THINKING=${ENABLE_THINKING:-<default>}"
 echo "[code-offline-eval] ALLOW_EXTRACTION_FAILURES=${ALLOW_EXTRACTION_FAILURES}"
+
+if [ ! -f "${VALIDATION_PARQUET}" ]; then
+    echo "[code-offline-eval] ERROR: validation parquet not found: ${VALIDATION_PARQUET}" >&2
+    exit 2
+fi
 
 if [ ! -f "${MERGED_MODEL_DIR}/model.safetensors.index.json" ] && [ ! -f "${MERGED_MODEL_DIR}/model.safetensors" ]; then
     CUDA_VISIBLE_DEVICES="${MERGE_CUDA_VISIBLE_DEVICES:-0}" PYTHONPATH="${REPO_PYTHONPATH}" python3 -u -m verl.model_merger merge \
@@ -155,6 +173,7 @@ if [ "$BENCHMARK" = "livecodebench" ]; then
         --summary "${CASE_DIR}/official_summary.json" \
         --parallel "${CODE_OFFICIAL_EVAL_PARALLEL:-8}" \
         --lcb-python "${LCB_PYTHON}" \
+        --lcb-release-version "${LCB_RELEASE_VERSION}" \
         --overwrite
 else
     EXTRA_OFFICIAL_ARGS=()

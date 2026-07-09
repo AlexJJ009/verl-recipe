@@ -13,12 +13,32 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from recipe.on_policy_wdl_sft.code_task.prepare_code_rl_dataset import PROMPT_TEMPLATE_VERSION, build_prompt
+
+
+LCB_RELEASE_FILES = {
+    "release_v1": ("test.jsonl",),
+    "release_v2": ("test.jsonl", "test2.jsonl"),
+    "release_v3": ("test.jsonl", "test2.jsonl", "test3.jsonl"),
+    "release_v4": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl"),
+    "release_v5": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl"),
+    "release_v6": ("test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5.jsonl", "test6.jsonl"),
+}
+
+
+def default_lcb_snapshot_dir(hf_home: Path) -> Path | None:
+    snapshots = hf_home / "hub" / "datasets--livecodebench--code_generation_lite" / "snapshots"
+    if not snapshots.is_dir():
+        return None
+    candidates = sorted((p for p in snapshots.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
 
 
 def configure_project_cache(project_cache_root: Path, hf_home: Path, official_source_root: Path) -> None:
@@ -135,11 +155,40 @@ def load_livecodebench_problems(
     lcb_python: Path,
     lcb_repo: Path,
     include_io: bool,
+    lcb_snapshot_dir: Path | None,
 ) -> list[dict[str, Any]]:
     if not lcb_python.is_file():
         raise FileNotFoundError(f"LiveCodeBench python not found: {lcb_python}")
     if not lcb_repo.is_dir():
         raise FileNotFoundError(f"LiveCodeBench repo not found: {lcb_repo}")
+    if lcb_snapshot_dir is not None:
+        files = LCB_RELEASE_FILES.get(release_version)
+        if files is None:
+            raise ValueError(f"unsupported local LiveCodeBench release_version={release_version}")
+        rows = []
+        for name in files:
+            path = lcb_snapshot_dir / name
+            if not path.is_file():
+                raise FileNotFoundError(f"LiveCodeBench local JSONL missing for {release_version}: {path}")
+            with path.open(encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        problem = json.loads(line)
+                        row = {
+                            "question_id": problem["question_id"],
+                            "question_content": problem["question_content"],
+                            "starter_code": problem.get("starter_code") or "",
+                        }
+                        if include_io:
+                            from lcb_runner.benchmarks.code_generation import CodeGenerationProblem
+
+                            sample = CodeGenerationProblem(**problem).get_evaluation_sample()
+                            row["input_output"] = sample["input_output"]
+                        rows.append(row)
+                        if len(rows) >= limit:
+                            return rows
+        return rows
+
     code = r"""
 import json
 import sys
@@ -191,8 +240,9 @@ def build_livecodebench_records(
     lcb_python: Path,
     lcb_repo: Path,
     include_io: bool,
+    lcb_snapshot_dir: Path | None,
 ) -> list[dict[str, Any]]:
-    problems = load_livecodebench_problems(limit, release_version, lcb_python, lcb_repo, include_io)
+    problems = load_livecodebench_problems(limit, release_version, lcb_python, lcb_repo, include_io, lcb_snapshot_dir)
 
     records = []
     for problem in problems:
@@ -241,8 +291,28 @@ def build_livecodebench_prompt(question_content: str, starter_code: str) -> str:
 
 def write_parquet(path: Path, records: list[dict[str, Any]]) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(records).to_parquet(path, index=False)
+    table = pa.Table.from_pandas(pd.DataFrame(records), preserve_index=False)
+    columns = []
+    for name in table.schema.names:
+        column = table[name]
+        if name in {"data_source", "ability", "split"}:
+            column = column.cast(pa.large_string())
+        columns.append(column)
+    pq.write_table(pa.table(columns, names=table.schema.names), path)
     return {"path": str(path), "row_count": len(records)}
+
+
+def livecodebench_output_root(output_root: Path, release_version: str) -> Path:
+    if release_version == "release_v1":
+        return output_root
+    suffix = "v5" if release_version == "release_v5" else release_version
+    if output_root.name == "online_full_livecodebench":
+        return output_root.parent / f"{output_root.name}_{suffix}"
+    if output_root.name.startswith("online_full_livecodebench_"):
+        return output_root
+    if output_root.name.startswith("online_lcb_") or output_root.name.startswith("online_livecodebench_"):
+        return output_root
+    return output_root / f"online_full_livecodebench_{suffix}"
 
 
 def existing_official_datasets(output_root: Path) -> dict[str, dict[str, Any]]:
@@ -264,19 +334,21 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, default=Path("/data-1/dataset/code/verl_rl"))
     parser.add_argument("--limit", type=int, default=16)
     parser.add_argument("--bcb-subset", default="full")
-    parser.add_argument("--lcb-release-version", default="release_v1")
+    parser.add_argument("--lcb-release-version", default="release_v5")
     parser.add_argument("--benchmarks", default="humaneval_plus,mbpp_plus,bigcodebench,livecodebench")
     parser.add_argument("--project-cache-root", type=Path, default=Path("/data-1/.cache"))
     parser.add_argument("--hf-home", type=Path, default=Path("/data-1/.cache/huggingface"))
     parser.add_argument("--official-source-root", type=Path, default=Path("/data-1/dataset/code/official_sources"))
     parser.add_argument("--lcb-python", type=Path, default=Path(os.environ.get("LCB_PYTHON") or sys.executable))
     parser.add_argument("--lcb-repo", type=Path, default=Path("/data-1/code_eval_envs/LiveCodeBench"))
+    parser.add_argument("--lcb-snapshot-dir", type=Path)
     parser.add_argument("--lcb-include-io", action="store_true")
     args = parser.parse_args()
     configure_project_cache(args.project_cache_root, args.hf_home, args.official_source_root)
 
     datasets: dict[str, Any] = {}
     requested = {item.strip() for item in args.benchmarks.split(",") if item.strip()}
+    lcb_snapshot_dir = args.lcb_snapshot_dir or default_lcb_snapshot_dir(args.hf_home)
     if "humaneval_plus" in requested:
         evalplus = build_evalplus_records(args.limit)
         if "humaneval_plus" in requested:
@@ -290,14 +362,16 @@ def main() -> int:
             args.output_root / "official_bigcodebench_val.parquet", build_bigcodebench_records(args.limit, args.bcb_subset)
         )
     if "livecodebench" in requested:
+        lcb_output_root = livecodebench_output_root(args.output_root, args.lcb_release_version)
         datasets["LiveCodeBench"] = write_parquet(
-            args.output_root / "official_livecodebench_val.parquet",
+            lcb_output_root / "official_livecodebench_val.parquet",
             build_livecodebench_records(
                 args.limit,
                 args.lcb_release_version,
                 args.lcb_python,
                 args.lcb_repo,
                 args.lcb_include_io,
+                lcb_snapshot_dir,
             ),
         )
     manifest = {
@@ -311,10 +385,14 @@ def main() -> int:
         "bigcodebench_override_path": os.environ["BIGCODEBENCH_OVERRIDE_PATH"],
         "lcb_python": str(args.lcb_python),
         "lcb_repo": str(args.lcb_repo),
+        "lcb_release_version": args.lcb_release_version,
+        "lcb_snapshot_dir": str(lcb_snapshot_dir) if lcb_snapshot_dir else None,
         "lcb_include_io": args.lcb_include_io,
         "datasets": {**existing_official_datasets(args.output_root), **datasets},
     }
-    manifest_path = args.output_root / "official_only_validation.manifest.json"
+    manifest_root = livecodebench_output_root(args.output_root, args.lcb_release_version) if requested == {"livecodebench"} else args.output_root
+    manifest_path = manifest_root / "official_only_validation.manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

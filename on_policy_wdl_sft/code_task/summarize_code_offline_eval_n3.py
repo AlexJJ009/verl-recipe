@@ -151,11 +151,11 @@ def pct(value: Any) -> str:
     return f"{float(value) * 100:.2f}"
 
 
-def render_markdown(rows: list[dict[str, Any]]) -> str:
+def render_markdown(rows: list[dict[str, Any]], title: str, setting_description: str) -> str:
     lines = [
-        "# Code Task V2 Latest Unified N=3 Offline Eval",
+        f"# {title}",
         "",
-        "Generation setting: n=3, temperature=1.0, top_p=0.95, max_tokens=4096, seed=42, enable_thinking=true.",
+        setting_description,
         "",
         "| label | benchmark | mean@3 (%) | pass@3 (%) | tasks | samples | harness | ok |",
         "|---|---:|---:|---:|---:|---:|---|---|",
@@ -175,19 +175,25 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-root", type=Path, default=Path("/data-1/eval_outputs/code_task/v2_latest_unified_n3"))
     parser.add_argument("--labels", nargs="+", default=["v2_beta0_latest_step150", "v2_beta01_latest_step150"])
+    parser.add_argument("--benchmarks", nargs="+", choices=BENCHMARKS, default=list(BENCHMARKS))
     parser.add_argument("--summary-json", type=Path)
     parser.add_argument("--summary-md", type=Path)
+    parser.add_argument("--title", default="Code Task V2 Latest Unified N=3 Offline Eval")
+    parser.add_argument(
+        "--setting-description",
+        default="Generation setting: n=3, temperature=1.0, top_p=0.95, max_tokens=4096, seed=42, enable_thinking=true.",
+    )
     args = parser.parse_args()
 
-    rows = [summarize_case(args.output_root, label, benchmark) for label in args.labels for benchmark in BENCHMARKS]
-    payload = {"output_root": str(args.output_root), "labels": args.labels, "benchmarks": list(BENCHMARKS), "rows": rows}
+    rows = [summarize_case(args.output_root, label, benchmark) for label in args.labels for benchmark in args.benchmarks]
+    payload = {"output_root": str(args.output_root), "labels": args.labels, "benchmarks": args.benchmarks, "rows": rows}
     if args.summary_json:
         args.summary_json.parent.mkdir(parents=True, exist_ok=True)
         args.summary_json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if args.summary_md:
         args.summary_md.parent.mkdir(parents=True, exist_ok=True)
-        args.summary_md.write_text(render_markdown(rows), encoding="utf-8")
-    print(render_markdown(rows))
+        args.summary_md.write_text(render_markdown(rows, args.title, args.setting_description), encoding="utf-8")
+    print(render_markdown(rows, args.title, args.setting_description))
     return 0
 
 

@@ -11,6 +11,12 @@ POLL_SEC=${POLL_SEC:-300}
 QUEUE_TMUX=${QUEUE_TMUX:-staged_v1_s2_queue}
 LOG_FILE=${LOG_FILE:-/data-1/verl07/verl/recipe/on_policy_wdl_sft/staged_v1/monitor_stage2_fast_validation_queue_notify.log}
 WXPUSHER_SCRIPT=${WXPUSHER_SCRIPT:-/root/agent-core/skills/wxpusher-notify/scripts/wxpusher_notify.py}
+TRAINING_RELEASE_GATE_SHELL=${TRAINING_RELEASE_GATE_SHELL:-/data-1/verl07/verl/scripts/training_release_gate_shell.sh}
+
+if [ -f "$TRAINING_RELEASE_GATE_SHELL" ]; then
+    # shellcheck disable=SC1090
+    source "$TRAINING_RELEASE_GATE_SHELL"
+fi
 
 RUN_PREFIXES=(
     "WDL-SFT-STAGED-V1-S2-BOXED-FROM-S1-BETA0-BETA0"
@@ -141,6 +147,9 @@ Next action: Monitor will notify again when this run reaches final_step=${FINAL_
             done["$prefix"]=1
             completed_count=$((completed_count + 1))
             log "complete: prefix=${prefix} step=${step} metrics=${metrics_state} ckpt=${ckpt_dir}"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "stage2_fast_validation" "$prefix" "success_complete" "$step" "$FINAL_STEP" "$ckpt_dir" "$(metrics_path_for_ckpt "$ckpt_dir")" "Reached configured final checkpoint with final metrics evidence." "$LOG_FILE"
+            fi
             notify "Stage2 WDL-SFT run complete" "Status: completed
 What happened: ${prefix} reached final_step=${FINAL_STEP} and final metrics are logged.
 Evidence: latest_step=${step}; metrics=$(metrics_path_for_ckpt "$ckpt_dir"); checkpoint=${ckpt_dir}
@@ -152,6 +161,9 @@ Next action: The queue/monitor will continue to the next run or finish."
             && ! tmux has-session -t "$tmux_name" 2>/dev/null \
             && ! tmux has-session -t "$QUEUE_TMUX" 2>/dev/null; then
             log "failed: prefix=${prefix} latest_step=${step:-none} metrics=${metrics_state} ckpt=${ckpt_dir}"
+            if declare -F training_release_gate_record_event >/dev/null 2>&1; then
+                training_release_gate_record_event "stage2_fast_validation" "$prefix" "failed" "${step:-none}" "$FINAL_STEP" "$ckpt_dir" "$(metrics_path_for_ckpt "$ckpt_dir")" "Run stopped before configured final checkpoint/final metrics." "$LOG_FILE"
+            fi
             notify "Stage2 WDL-SFT run failed" "Status: failed
 What happened: ${prefix} stopped before final_step=${FINAL_STEP} and final metrics were verified.
 Evidence: latest_step=${step:-none}; metrics=${metrics_state}; checkpoint=${ckpt_dir}
