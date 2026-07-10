@@ -54,6 +54,7 @@ run_shard_script() {
     if [ "${SHARD_IN_DOCKER:-1}" = "1" ]; then
         docker run --rm --ipc=host --network=host --shm-size=32g \
             -v /data-1:/data-1 \
+            -v /data-2:/data-2 \
             -v /data-1/verl07/verl:/workspace/verl \
             -w /workspace/verl \
             "$SHARD_DOCKER_IMAGE" \

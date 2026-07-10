@@ -186,7 +186,7 @@ launch_train() {
     [ "$save_freq" = "0" ] && save_freq="$final"
     log "launch training ${label}: tmux=${tmux_name} steps=${final} samples=${RUN_SAMPLES[$idx]} train_file=${train_file}"
     tmux new-session -d -s "$tmux_name" \
-        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"ALLOW_FORMAT_COLD_START_SFT=1 MODEL_PATH='$MODEL_PATH' TRAIN_FILE='$train_file' RUN_PREFIX='$prefix' CKPT_ROOT='$CKPT_ROOT' TOTAL_TRAINING_STEPS='$final' TRAIN_BATCH_SIZE='$TRAIN_BATCH_SIZE' SAVE_FREQ='$save_freq' MAX_CKPT_TO_KEEP='$MAX_CKPT_TO_KEEP' bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
+        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v /data-2:/data-2 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"ALLOW_FORMAT_COLD_START_SFT=1 MODEL_PATH='$MODEL_PATH' TRAIN_FILE='$train_file' RUN_PREFIX='$prefix' CKPT_ROOT='$CKPT_ROOT' TOTAL_TRAINING_STEPS='$final' TRAIN_BATCH_SIZE='$TRAIN_BATCH_SIZE' SAVE_FREQ='$save_freq' MAX_CKPT_TO_KEEP='$MAX_CKPT_TO_KEEP' bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
 }
 
 wait_train() {
@@ -236,6 +236,7 @@ merge_model() {
     [ "$ALLOW_OVERWRITE_MERGED" = "1" ] && overwrite+=(--overwrite)
     docker run --rm --ipc=host --network=host --shm-size=64g \
         -v /data-1:/data-1 \
+        -v /data-2:/data-2 \
         -v "$REPO_HOST":"$REPO_CONTAINER" \
         -w "$REPO_CONTAINER" \
         "$DOCKER_IMAGE" \
@@ -271,6 +272,7 @@ eval_model() {
         log "eval start ${label}/${benchmark}: merged=${merged}"
         docker run --rm --gpus all --ipc=host --network=host --shm-size=64g \
             -v /data-1:/data-1 \
+            -v /data-2:/data-2 \
             -v "$REPO_HOST":"$REPO_CONTAINER" \
             -w "$REPO_CONTAINER" \
             "$DOCKER_IMAGE" \

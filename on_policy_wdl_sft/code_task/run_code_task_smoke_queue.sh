@@ -637,7 +637,7 @@ launch_container() {
     if [ -x "$LAUNCHER" ]; then
         tmux new-session -d -s "$tmux_name" "cd '$REPO_HOST' && ${clean_env} bash '$LAUNCHER' '$container_script' 2>&1 | tee -a '$LOG_FILE'"
     else
-        tmux new-session -d -s "$tmux_name" "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"${clean_env} bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
+        tmux new-session -d -s "$tmux_name" "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v /data-2:/data-2 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"${clean_env} bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
     fi
 }
 

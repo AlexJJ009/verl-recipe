@@ -181,7 +181,7 @@ launch_container() {
     fi
     log "launching ${tmux_name}: prefix=${prefix} init=${init_model_path}"
     tmux new-session -d -s "$tmux_name" \
-        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"${extra_env} bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
+        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v /data-2:/data-2 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"${extra_env} bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
 }
 
 log "kodcode qwen3 1p7b coldstart fraction stage1 queue start START_INDEX=${START_INDEX} END_INDEX=${END_INDEX} DRY_RUN=${DRY_RUN:-0} MIN_FREE_GB=${MIN_FREE_GB} PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS_DEFAULT}"
