@@ -1,0 +1,83 @@
+schema_version: 1
+experiment_id: qwen3_1p7b_stage123_p40
+resource_profile:
+  name: l40s8x46g_ram582g_cpu176_ctx9k_v1
+  sha256: f1bb99873e16bc2398e40cfe2b7597633f8ced2085827e6ad7cef308c5cae817
+  max_response_length: 8192
+semantics:
+  formal_validation_scope: full
+  validation_datasets: [HumanEval+, MBPP+, LiveCodeBench]
+  stage2_topology: fixed_model2_rollout_joint_fused_loss
+paths:
+  checkpoint_root: /data-1/checkpoints
+  checkpoint_physical_root: /data-2/checkpoints
+  artifact_root: /data-2/model_weights/code_task/qwen3_1p7b_stage123
+  scratch_root: /data-1/tmp/verl_agent_scratch/qwen3_1p7b_stage123
+  base_model: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  source_train_file: /data-1/dataset/code/verl_rl/kodcode_light_rl_10k_train_rl_format.parquet
+preflight:
+  policy: tests/experiment_workflow/fixtures/preflight_policy.json
+  receipt_max_age_seconds: 3600
+  report_root: /data-2/experiment_registry/preflight_reports
+monitor:
+  name: code_task_qwen3_1p7b_stage123
+  queue_tmux: code_task_qwen3_1p7b_stage123_queue
+  poll_seconds: 300
+  metrics_root: recipe/on_policy_wdl_sft/code_task/metrics
+release:
+  project: OnPolicyWDLSFT-CodeTask
+  registry_db: /data-1/experiment_registry/experiment_registry.sqlite
+  wandb_root: /data-1/wandb_runs
+runs:
+  - id: frac25-stage2
+    chain: frac25_p40_s220_s340
+    fraction: frac25
+    phase: stage2
+    order: 10
+    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-LAMBDA08-V1
+    final_step: 20
+    tmux_name: stage123_frac25_s2
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet
+    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+    source: {type: stage1_checkpoint, fraction: frac25, handoff_step: 40}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage2.provenance.json
+  - id: frac25-stage3
+    chain: frac25_p40_s220_s340
+    fraction: frac25
+    phase: stage3
+    order: 20
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-V1
+    final_step: 40
+    tmux_name: stage123_frac25_s3
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_model2, run_id: frac25-stage2}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage3.provenance.json
+  - id: frac50-stage2
+    chain: frac50_p40_s220_s340
+    fraction: frac50
+    phase: stage2
+    order: 30
+    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-LAMBDA08-V1
+    final_step: 20
+    tmux_name: stage123_frac50_s2
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_handoff_s2steps20.parquet
+    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+    source: {type: stage1_checkpoint, fraction: frac50, handoff_step: 40}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage2.provenance.json
+  - id: frac50-stage3
+    chain: frac50_p40_s220_s340
+    fraction: frac50
+    phase: stage3
+    order: 40
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-V1
+    final_step: 40
+    tmux_name: stage123_frac50_s3
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_model2, run_id: frac50-stage2}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage3.provenance.json

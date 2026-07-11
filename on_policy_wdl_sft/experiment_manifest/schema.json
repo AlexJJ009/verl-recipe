@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "experiment_id", "resource_profile", "semantics", "paths", "runs", "monitor", "release", "preflight"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "experiment_id": {"type": "string", "minLength": 1},
+    "resource_profile": {
+      "type": "object",
+      "required": ["name", "sha256", "max_response_length"],
+      "properties": {
+        "name": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "max_response_length": {"const": 8192}
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "required": ["formal_validation_scope", "validation_datasets", "stage2_topology"],
+      "properties": {
+        "formal_validation_scope": {"const": "full"},
+        "validation_datasets": {"const": ["HumanEval+", "MBPP+", "LiveCodeBench"]},
+        "stage2_topology": {"const": "fixed_model2_rollout_joint_fused_loss"}
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": ["checkpoint_root", "checkpoint_physical_root", "artifact_root", "scratch_root", "base_model", "source_train_file"],
+      "properties": {
+        "checkpoint_physical_root": {"const": "/data-2/checkpoints"}
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "required": ["policy", "receipt_max_age_seconds", "report_root"],
+      "properties": {"receipt_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400}}
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "chain", "fraction", "phase", "order", "run_prefix", "final_step", "tmux_name", "train_file", "train_file_sha256", "source", "artifact_dir", "provenance_file"],
+        "properties": {
+          "phase": {"enum": ["stage2", "stage3"]},
+          "final_step": {"type": "integer", "minimum": 1},
+          "train_file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}
