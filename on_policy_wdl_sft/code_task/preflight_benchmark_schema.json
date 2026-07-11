@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "evidence_class", "contract", "phases", "semantic_hash"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "evidence_class": {"const": "infrastructure_preflight"},
+    "semantic_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "contract": {
+      "type": "object",
+      "required": ["warmup_repetitions", "measured_repetitions", "rss_sample_interval_seconds", "gpu_idle_threshold_pct", "max_response_length", "validation_datasets"],
+      "properties": {
+        "warmup_repetitions": {"const": 1},
+        "measured_repetitions": {"const": 3},
+        "rss_sample_interval_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "gpu_idle_threshold_pct": {"const": 2},
+        "max_response_length": {"const": 8192},
+        "validation_datasets": {"const": ["HumanEval+", "MBPP+", "LiveCodeBench"]}
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["phase", "model_topology", "profile_hash", "datasets", "metrics", "repetitions"],
+        "properties": {
+          "phase": {"enum": ["stage1", "stage2", "stage3"]},
+          "model_topology": {"type": "string"},
+          "profile_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "datasets": {"type": "array", "minItems": 3, "maxItems": 3},
+          "repetitions": {"type": "array", "minItems": 4, "maxItems": 4},
+          "metrics": {
+            "type": "object",
+            "required": ["rollout_latency_seconds", "rollout_tokens_per_second", "scorer_latency_p50_seconds", "scorer_latency_p95_seconds", "timeout_rate", "invalid_score_rate", "valid_score_rate", "valid_scores_per_minute", "score_distribution", "peak_rss_gib", "gpu_wait_fraction", "validation_elapsed_seconds", "complete_validation_metrics"]
+          }
+        }
+      }
+    }
+  }
+}
