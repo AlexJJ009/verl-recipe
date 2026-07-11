@@ -92,10 +92,29 @@ MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
 DEFAULT_MODEL_PATH="${HF_HOME}/QwenJoint-4B-WDL-SFT-${MODEL2_CACHE_TAG}"
 MODEL_PATH=${MODEL_PATH:-"$DEFAULT_MODEL_PATH"}
 
+joint_module_name=$(basename "$MODEL_PATH")
+joint_module_name=${joint_module_name//-/_hyphen_}
+if [ "${#joint_module_name}" -gt 180 ]; then
+    echo "ERROR: joint model cache basename is too long for Transformers dynamic modules (${#joint_module_name} > 180): $MODEL_PATH" >&2
+    echo "       Set MODEL_PATH to a shorter, run-unique cache path." >&2
+    exit 1
+fi
+
 TRAIN_FILE=${TRAIN_FILE:-"${DATA_ROOT}/dataset/EnsembleLLM-data-processed/staged_v1/train_rl_format_boxed_prompt.parquet"}
 TEST_FILES=${TEST_FILES:-"['${DATA_ROOT}/dataset/MATH-500/math500-test_with_system_prompt.parquet','${DATA_ROOT}/dataset/AIME-2025/aime-2025_with_system_prompt.parquet']"}
 
-if [ ! -d "$MODEL_PATH" ]; then
+joint_cache_complete() {
+    [ -f "$MODEL_PATH/config.json" ] && {
+        [ -f "$MODEL_PATH/model.safetensors" ] || [ -f "$MODEL_PATH/model.safetensors.index.json" ]
+    }
+}
+
+if [ -d "$MODEL_PATH" ] && ! joint_cache_complete; then
+    echo "Incomplete joint model cache found at $MODEL_PATH. Removing it before rebuild."
+    rm -rf -- "$MODEL_PATH"
+fi
+
+if ! joint_cache_complete; then
     echo "Joint model not found at $MODEL_PATH. Preparing from base + model2..."
     if [ ! -d "$BASE_MODEL_PATH" ]; then
         echo "ERROR: BASE_MODEL_PATH not found: $BASE_MODEL_PATH" >&2
@@ -303,6 +322,7 @@ save_freq=${SAVE_FREQ:-25}
 total_epochs=${TOTAL_EPOCHS:-2}
 total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
+val_only=${VAL_ONLY:-False}
 
 cd "$REPO_ROOT"
 
@@ -336,6 +356,7 @@ VAL_N=${VAL_N}
 VAL_TEMPERATURE=${val_temperature}
 VAL_TOP_P=${val_top_p}
 VAL_BEFORE_TRAIN=${val_before_train}
+VAL_ONLY=${val_only}
 TEST_FREQ=${test_freq}
 SAVE_FREQ=${save_freq}
 MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP}
@@ -439,6 +460,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node="${NGPUS_PER_NODE}" \
     trainer.nnodes="${NNODES}" \
     trainer.val_before_train=${val_before_train} \
+    trainer.val_only=${val_only} \
     trainer.test_freq=${test_freq} \
     trainer.save_freq=${save_freq} \
     trainer.total_epochs=${total_epochs} \
