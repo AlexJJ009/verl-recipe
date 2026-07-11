@@ -166,12 +166,52 @@ PY
     launch_and_wait() {
         local tmux_name=$1 prefix=$2 final_step=$3 wrapper=$4; shift 4
         local log_file="${SCRIPT_DIR}/${prefix}.log"
+        local deadline_root="${STAGE123_DEADLINE_ROOT:-/data-2/experiment_registry/validation_deadlines}"
+        local ownership_file="${deadline_root}/${prefix}.ownership.json"
+        local deadline_report="${deadline_root}/${prefix}.deadline.json"
+        local validation_ready_epoch=""
         local env_cmd="" item
         for item in "$@"; do printf -v env_cmd '%s %q' "$env_cmd" "$item"; done
         tmux has-session -t "$tmux_name" 2>/dev/null && { echo "ERROR: tmux already exists: $tmux_name" >&2; return 1; }
         tmux new-session -d -s "$tmux_name" \
             "cd '$REPO_ROOT' && env $env_cmd /data-1/verl07/run_train.sh bash '$wrapper' 2>&1 | tee -a '$log_file'"
-        while tmux has-session -t "$tmux_name" 2>/dev/null; do sleep "${QUEUE_POLL_SEC:-30}"; done
+        mkdir -p "$deadline_root"
+        while tmux has-session -t "$tmux_name" 2>/dev/null; do
+            if [ -z "$validation_ready_epoch" ] && grep -Eq 'validation batch [0-9]+/[0-9]+ start:' "$log_file" 2>/dev/null; then
+                validation_ready_epoch=$(date +%s)
+                local pane_pid descendants gpu_pids
+                pane_pid=$(tmux list-panes -t "$tmux_name" -F '#{pane_pid}' | head -1)
+                descendants=$(python3 - "$pane_pid" <<'PY'
+import subprocess,sys
+root=int(sys.argv[1]); seen=set(); frontier=[root]
+while frontier:
+    parent=frontier.pop()
+    out=subprocess.run(['pgrep','-P',str(parent)],text=True,capture_output=True).stdout.split()
+    for value in out:
+        pid=int(value)
+        if pid not in seen: seen.add(pid); frontier.append(pid)
+print(','.join(map(str,sorted(seen))))
+PY
+)
+                gpu_pids=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null | tr -dc '0-9\n' | paste -sd, - || true)
+                python3 - "$ownership_file" "$prefix" "$validation_ready_epoch" "$tmux_name" "$pane_pid" "$descendants" "$gpu_pids" <<'PY'
+import json,sys
+out,run_id,ready,tmux_name,pane,desc,gpu=sys.argv[1:]
+descendants={int(x) for x in desc.split(',') if x}; descendants.add(int(pane))
+gpu_set={int(x) for x in gpu.split(',') if x}
+data={'schema_version':1,'run_id':run_id,'validation_ready_epoch_s':int(ready),'deadline_seconds':1800,'first_training_step':0,'complete_validation_metrics':False,'tmux_sessions':[tmux_name],'descendant_pids':sorted(descendants),'gpu_pids':sorted(descendants & gpu_set),'docker_containers':[]}
+open(out,'w').write(json.dumps(data,indent=2,sort_keys=True)+'\n')
+PY
+                record "$prefix" validation deadline_started "ownership=$ownership_file deadline_seconds=1800"
+            fi
+            if [ -n "$validation_ready_epoch" ] && [ $(( $(date +%s) - validation_ready_epoch )) -ge 1800 ]; then
+                python3 "$REPO_ROOT/scripts/validation_deadline_controller.py" --ownership "$ownership_file" --report "$deadline_report" --grace-seconds "${STAGE123_VALIDATION_GRACE_SECONDS:-30}" || true
+                record "$prefix" validation blocked "deadline_report=$deadline_report"
+                echo "ERROR: $prefix validation exceeded 30-minute hard wall; evidence=$deadline_report" >&2
+                return 124
+            fi
+            sleep "${QUEUE_POLL_SEC:-30}"
+        done
         local ckpt step metrics
         ckpt=$(find "$(readlink -f "$BASE_CKPT_DIR")" -maxdepth 1 -type d -name "${prefix}_*" | sort | tail -1)
         [ -n "$ckpt" ] || { echo "ERROR: no checkpoint for $prefix" >&2; return 1; }
