@@ -8,11 +8,12 @@ source "${SCRIPT_DIR}/stage123_manifest_gate.sh"
 
 export STAGE123_MANIFEST=${STAGE123_MANIFEST:-${REPO_ROOT}/recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml}
 export STAGE123_MANIFEST_TOOL=${STAGE123_MANIFEST_TOOL:-${REPO_ROOT}/scripts/experiment_manifest.py}
+export STAGE123_MANIFEST_PYTHON=${STAGE123_MANIFEST_PYTHON:-python3}
 export DRY_RUN=${DRY_RUN:-1}
 export STAGE123_SCRATCH_ROOT=${STAGE123_SCRATCH_ROOT:-/data-1/tmp/verl_agent_scratch/qwen3_1p7b_stage123}
 mkdir -p "$STAGE123_SCRATCH_ROOT"
 export STAGE123_NORMALIZED_MANIFEST=${STAGE123_NORMALIZED_MANIFEST:-${STAGE123_SCRATCH_ROOT}/stage123.normalized.json}
-python3 "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format json > "$STAGE123_NORMALIZED_MANIFEST"
+"$STAGE123_MANIFEST_PYTHON" "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format json > "$STAGE123_NORMALIZED_MANIFEST"
 manifest_get() { python3 - "$STAGE123_NORMALIZED_MANIFEST" "$1" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1])); v=d
@@ -66,6 +67,15 @@ d={'schema_version':1,'run_id':run_id,'run_prefix':prefix,'manifest_sha256':m['m
 Path(out).parent.mkdir(parents=True,exist_ok=True); Path(out).write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
 PY
 }
+json_object() {
+    "$STAGE123_MANIFEST_PYTHON" - "$@" <<'PY'
+import json,sys
+items=sys.argv[1:]; data={}
+for key,value,kind in zip(items[0::3],items[1::3],items[2::3]):
+    data[key]=int(value) if kind=='int' else value
+print(json.dumps(data,separators=(',',':')))
+PY
+}
 
 find_s1() {
     local fraction=$1
@@ -95,9 +105,31 @@ prepare_nonoverlap_shard() {
         --max-prompt-length "$MAX_PROMPT_LENGTH"
     )
     if [ -f "$output" ] && [ -f "${output%.parquet}.manifest.json" ]; then
-        /data-1/verl07/run_train.sh /opt/venv/bin/python \
-            recipe/on_policy_wdl_sft/code_task/create_code_stage2_nonoverlap_shard.py \
-            "${args[@]}" --verify-only
+        if [ "$DRY_RUN" = 1 ]; then
+            "$STAGE123_MANIFEST_PYTHON" - "$output" "$STAGE2_SOURCE_TRAIN_FILE" "$consumed_steps" "$selected_steps" "$TRAIN_PROMPT_BSZ" "$MAX_PROMPT_LENGTH" <<'PY'
+import hashlib,json,sys
+from pathlib import Path
+output,source,consumed_steps,selected_steps,batch_size,max_prompt=sys.argv[1:]
+output=Path(output); manifest=Path(str(output).removesuffix('.parquet')+'.manifest.json')
+d=json.loads(manifest.read_text()); sha=hashlib.sha256(output.read_bytes()).hexdigest()
+expected_rows=int(selected_steps)*int(batch_size); expected_consumed=int(consumed_steps)*int(batch_size)
+checks={
+ 'output path': d.get('output_path')==str(output), 'source path': d.get('source_path')==source,
+ 'output hash': d.get('output_sha256')==sha, 'selected rows': d.get('selected_row_count')==expected_rows,
+ 'stage1 consumed': d.get('stage1',{}).get('consumed_rows')==expected_consumed,
+ 'stage2 steps': d.get('stage2',{}).get('steps')==int(selected_steps),
+ 'stage2 batch': d.get('stage2',{}).get('train_batch_size')==int(batch_size),
+ 'max prompt': d.get('filter_settings',{}).get('max_prompt_length')==int(max_prompt),
+}
+failed=[name for name,ok in checks.items() if not ok]
+if failed: raise SystemExit('dry-run shard manifest mismatch: '+', '.join(failed))
+print(json.dumps({'status':'PASS','mode':'content-addressed-dry-run','output':str(output),'sha256':sha,'row_count':expected_rows},sort_keys=True))
+PY
+        else
+            /data-1/verl07/run_train.sh /opt/venv/bin/python \
+                recipe/on_policy_wdl_sft/code_task/create_code_stage2_nonoverlap_shard.py \
+                "${args[@]}" --verify-only
+        fi
     elif [ "$DRY_RUN" = 1 ]; then
         echo "ERROR: dry-run requires a prebuilt exact-budget Stage2 shard: $output" >&2
         return 1
@@ -108,18 +140,15 @@ prepare_nonoverlap_shard() {
     fi
 }
 
-mapfile -t stage2_rows < <(python3 "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format tsv | awk -F '\t' 'NR>1 && $4=="stage2"')
+mapfile -t stage2_rows < <("$STAGE123_MANIFEST_PYTHON" "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format tsv | awk -F '\t' 'NR>1 && $4=="stage2"')
 for row in "${stage2_rows[@]}"; do
     IFS=$'\t' read -r stage2_id chain fraction _phase _order stage2_prefix STAGE2_STEPS stage2_tmux stage2_train_file stage2_sha chain_root provenance <<<"$row"
-    stage3_json=$(python3 - "$STAGE123_NORMALIZED_MANIFEST" "$chain" <<'PY'
+    IFS=$'\t' read -r stage3_id stage3_prefix STAGE3_STEPS stage3_tmux stage3_train_file stage3_provenance < <("$STAGE123_MANIFEST_PYTHON" - "$STAGE123_NORMALIZED_MANIFEST" "$chain" <<'PY'
 import json,sys
-d=json.load(open(sys.argv[1])); r=next(x for x in d['runs'] if x['chain']==sys.argv[2] and x['phase']=='stage3'); print(json.dumps(r))
+d=json.load(open(sys.argv[1])); r=next(x for x in d['runs'] if x['chain']==sys.argv[2] and x['phase']=='stage3')
+print('\t'.join(str(r[key]) for key in ('id','run_prefix','final_step','tmux_name','train_file','provenance_file')))
 PY
 )
-    stage3_id=$(jq -r .id <<<"$stage3_json"); stage3_prefix=$(jq -r .run_prefix <<<"$stage3_json")
-    STAGE3_STEPS=$(jq -r .final_step <<<"$stage3_json"); stage3_tmux=$(jq -r .tmux_name <<<"$stage3_json")
-    stage3_train_file=$(jq -r .train_file <<<"$stage3_json")
-    stage3_provenance=$(jq -r .provenance_file <<<"$stage3_json")
     trigger=$(python3 - "$STAGE123_NORMALIZED_MANIFEST" "$stage2_id" <<'PY'
 import json,sys
 d=json.load(open(sys.argv[1])); print(next(x for x in d['runs'] if x['id']==sys.argv[2])['source']['handoff_step'])
@@ -138,7 +167,7 @@ PY
     prepare_nonoverlap_shard "$stage3_offset" "$STAGE3_STEPS" "$stage3_train_file"
     mkdir -p "$(dirname "$provenance")"
     write_run_provenance "$provenance" "$stage2_id" "$stage2_prefix" "$stage2_train_file" false \
-      "$(jq -cn --arg checkpoint "$s1_dir/global_step_$trigger" --argjson step "$trigger" '{type:"stage1_checkpoint",checkpoint:$checkpoint,handoff_step:$step}')"
+      "$(json_object type stage1_checkpoint str checkpoint "$s1_dir/global_step_$trigger" str handoff_step "$trigger" int)"
 
     echo "[STAGE123 CHAIN] $chain"
     record "$chain" stage1 source_verified "checkpoint=$s1_dir/global_step_$trigger"
@@ -154,9 +183,9 @@ PY
       dry_stage2_model2="${chain_root}/stage2_final_model2"
       mkdir -p "$dry_stage2_model2"; touch "$dry_stage2_model2/config.json" "$dry_stage2_model2/model.safetensors"
       write_run_provenance "$provenance" "$stage2_id" "$stage2_prefix" "$stage2_train_file" false \
-        "$(jq -cn --arg checkpoint "$s1_dir/global_step_$trigger" --arg model2 "$dry_stage2_model2" '{type:"stage1_checkpoint",checkpoint:$checkpoint,extracted_model2:$model2}')"
+        "$(json_object type stage1_checkpoint str checkpoint "$s1_dir/global_step_$trigger" str extracted_model2 "$dry_stage2_model2" str)"
       write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" false \
-        "$(jq -cn --arg run_id "$stage2_id" --arg model2 "$dry_stage2_model2" '{type:"stage2_model2",run_id:$run_id,model2:$model2}')"
+        "$(json_object type stage2_model2 str run_id "$stage2_id" str model2 "$dry_stage2_model2" str)"
       run_phase_dry STAGE3 env STAGE123_RUN_ID="$stage3_id" RUN_PREFIX="$stage3_prefix" STAGE2_MODEL2_PATH="$dry_stage2_model2" STAGE2_PROVENANCE_FILE="$provenance" \
         CODE_TRAIN_FILE="$stage3_train_file" TRAIN_FILE="$stage3_train_file" DATA_SHUFFLE=False \
         TOTAL_TRAINING_STEPS="$STAGE3_STEPS" bash "${SCRIPT_DIR}/run_s3_code_qwen3_1p7b_stage123_common.sh"
@@ -170,18 +199,25 @@ PY
         local ownership_file="${deadline_root}/${prefix}.ownership.json"
         local deadline_report="${deadline_root}/${prefix}.deadline.json"
         local validation_ready_epoch=""
+        local container_name="stage123-${tmux_name//_/-}"
         local env_cmd="" item
         for item in "$@"; do printf -v env_cmd '%s %q' "$env_cmd" "$item"; done
         tmux has-session -t "$tmux_name" 2>/dev/null && { echo "ERROR: tmux already exists: $tmux_name" >&2; return 1; }
         tmux new-session -d -s "$tmux_name" \
-            "cd '$REPO_ROOT' && env $env_cmd /data-1/verl07/run_train.sh bash '$wrapper' 2>&1 | tee -a '$log_file'"
+            "cd '$REPO_ROOT' && env DOCKER_CONTAINER_NAME='$container_name' $env_cmd /data-1/verl07/run_train.sh bash '$wrapper' 2>&1 | tee -a '$log_file'"
         mkdir -p "$deadline_root"
         while tmux has-session -t "$tmux_name" 2>/dev/null; do
             if [ -z "$validation_ready_epoch" ] && grep -Eq 'validation batch [0-9]+/[0-9]+ start:' "$log_file" 2>/dev/null; then
                 validation_ready_epoch=$(date +%s)
-                local pane_pid descendants gpu_pids
+                local pane_pid container_pid descendants gpu_pids
                 pane_pid=$(tmux list-panes -t "$tmux_name" -F '#{pane_pid}' | head -1)
-                descendants=$(python3 - "$pane_pid" <<'PY'
+                container_pid=$(docker inspect -f '{{.State.Pid}}' "$container_name" 2>/dev/null || true)
+                [ -n "$container_pid" ] && [ "$container_pid" != 0 ] || {
+                    echo "ERROR: cannot establish Docker ownership for $prefix container=$container_name" >&2
+                    record "$prefix" validation blocked "docker_ownership_unproven container=$container_name"
+                    return 125
+                }
+                descendants=$(python3 - "$container_pid" <<'PY'
 import subprocess,sys
 root=int(sys.argv[1]); seen=set(); frontier=[root]
 while frontier:
@@ -190,16 +226,16 @@ while frontier:
     for value in out:
         pid=int(value)
         if pid not in seen: seen.add(pid); frontier.append(pid)
-print(','.join(map(str,sorted(seen))))
+seen.add(root); print(','.join(map(str,sorted(seen))))
 PY
 )
                 gpu_pids=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null | tr -dc '0-9\n' | paste -sd, - || true)
-                python3 - "$ownership_file" "$prefix" "$validation_ready_epoch" "$tmux_name" "$pane_pid" "$descendants" "$gpu_pids" <<'PY'
+                python3 - "$ownership_file" "$prefix" "$validation_ready_epoch" "$tmux_name" "$pane_pid" "$container_name" "$container_pid" "$descendants" "$gpu_pids" <<'PY'
 import json,sys
-out,run_id,ready,tmux_name,pane,desc,gpu=sys.argv[1:]
+out,run_id,ready,tmux_name,pane,container,container_pid,desc,gpu=sys.argv[1:]
 descendants={int(x) for x in desc.split(',') if x}; descendants.add(int(pane))
 gpu_set={int(x) for x in gpu.split(',') if x}
-data={'schema_version':1,'run_id':run_id,'validation_ready_epoch_s':int(ready),'deadline_seconds':1800,'first_training_step':0,'complete_validation_metrics':False,'tmux_sessions':[tmux_name],'descendant_pids':sorted(descendants),'gpu_pids':sorted(descendants & gpu_set),'docker_containers':[]}
+data={'schema_version':1,'run_id':run_id,'validation_ready_epoch_s':int(ready),'deadline_seconds':1800,'first_training_step':0,'complete_validation_metrics':False,'tmux_sessions':[tmux_name],'process_group_id':0,'container_init_pid':int(container_pid),'descendant_pids':sorted(descendants),'gpu_pids':sorted(descendants & gpu_set),'docker_containers':[container]}
 open(out,'w').write(json.dumps(data,indent=2,sort_keys=True)+'\n')
 PY
                 record "$prefix" validation deadline_started "ownership=$ownership_file deadline_seconds=1800"
@@ -239,9 +275,9 @@ PY
     /data-1/verl07/run_train.sh /opt/venv/bin/python recipe/joint_training/extract_sub_model.py \
         --joint_model_path "$joint_dir" --output_path "$stage2_model2" --sub_model_index 1
     write_run_provenance "$provenance" "$stage2_id" "$stage2_prefix" "$stage2_train_file" true \
-      "$(jq -cn --arg checkpoint "$stage2_ckpt" --arg model2 "$stage2_model2" '{type:"stage2_complete",checkpoint:$checkpoint,extracted_model2:$model2}')"
+      "$(json_object type stage2_complete str checkpoint "$stage2_ckpt" str extracted_model2 "$stage2_model2" str)"
     write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" false \
-      "$(jq -cn --arg run_id "$stage2_id" --arg model2 "$stage2_model2" '{type:"stage2_model2",run_id:$run_id,model2:$model2}')"
+      "$(json_object type stage2_model2 str run_id "$stage2_id" str model2 "$stage2_model2" str)"
 
     stage123_require_preflight_receipt "$stage3_id"
     launch_and_wait "$stage3_tmux" "$stage3_prefix" "$STAGE3_STEPS" \
@@ -250,7 +286,7 @@ PY
         CODE_TRAIN_FILE="$stage3_train_file" TRAIN_FILE="$stage3_train_file" DATA_SHUFFLE=False TOTAL_TRAINING_STEPS="$STAGE3_STEPS" \
         STAGE123_RUN_ID="$stage3_id" STAGE123_MANIFEST="$STAGE123_MANIFEST" STAGE123_NORMALIZED_MANIFEST="$STAGE123_NORMALIZED_MANIFEST" STAGE123_PREFLIGHT_REPORT="$STAGE123_PREFLIGHT_REPORT" STAGE123_PREFLIGHT_RECEIPT="$STAGE123_PREFLIGHT_RECEIPT" STAGE123_PREFLIGHT_POLICY="$STAGE123_PREFLIGHT_POLICY" STAGE123_RECEIPT_MAX_AGE_SECONDS="$STAGE123_RECEIPT_MAX_AGE_SECONDS" STAGE123_EXPECTED_PROFILE_HASH="$profile_hash" >/dev/null
     write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" true \
-      "$(jq -cn --arg run_id "$stage2_id" --arg model2 "$stage2_model2" '{type:"stage3_complete",source_run_id:$run_id,init_model2:$model2}')"
+      "$(json_object type stage3_complete str source_run_id "$stage2_id" str init_model2 "$stage2_model2" str)"
     record "$chain" all completed "profile_hash=$profile_hash"
 done
 echo "[STAGE123 QUEUE] DRY_RUN PASS manifest_hash=$manifest_hash profile_hash=$profile_hash status=$QUEUE_STATUS_FILE"
