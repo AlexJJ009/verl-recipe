@@ -9,15 +9,14 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROFILE = SCRIPT_DIR / "qwen3_1p7b_stage123_resource_profile.sh"
-MODEL = Path(
-    "/data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/"
-    "snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
-)
+MANIFEST = REPO / "recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml"
+MANIFEST_TOOL = REPO / "scripts/experiment_manifest.py"
 DATA_DIR = Path("/data-1/dataset/code/verl_rl")
 SHARDS = (
     "kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet",
@@ -47,6 +46,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-active", action="store_true")
     parser.add_argument("--output")
+    parser.add_argument("--normalized-manifest")
     args = parser.parse_args()
     checks: list[dict[str, object]] = []
 
@@ -70,14 +70,35 @@ def main() -> int:
     profile_hash = hashlib.sha256(profile_text.encode()).hexdigest()
     add(checks, "resource_profile", profile.returncode == 0, {"sha256": profile_hash})
 
-    required_model_files = (
-        "config.json",
-        "tokenizer.json",
-        "generation_config.json",
-        "model.safetensors.index.json",
-    )
-    missing_model = [name for name in required_model_files if not (MODEL / name).is_file()]
-    add(checks, "base_model", not missing_model, {"path": str(MODEL), "missing": missing_model})
+    rendered_manifest = command("python3", str(MANIFEST_TOOL), "render", str(MANIFEST), "--format", "json")
+    if args.normalized_manifest:
+        normalized_path = Path(args.normalized_manifest)
+        manifest_result = rendered_manifest
+    else:
+        temp = tempfile.NamedTemporaryFile(prefix="stage123-preflight-", suffix=".json", delete=False)
+        temp.close()
+        normalized_path = Path(temp.name)
+        manifest_result = rendered_manifest
+        if manifest_result.returncode == 0:
+            normalized_path.write_text(manifest_result.stdout)
+    try:
+        manifest = json.loads(normalized_path.read_text()) if manifest_result.returncode == 0 else {}
+        rendered = json.loads(rendered_manifest.stdout) if rendered_manifest.returncode == 0 else {}
+        normalized_matches_repo = manifest == rendered
+        phase_readiness = {
+            phase: {
+                "materialized": all(source.get("state") == "materialized" for source in manifest["calibration_workloads"][phase]["model_sources"]),
+                "model_sources": manifest["calibration_workloads"][phase]["model_sources"],
+            }
+            for phase in ("stage1", "stage2", "stage3")
+        }
+        identity_ok = manifest_result.returncode == 0 and normalized_matches_repo and phase_readiness["stage1"]["materialized"] and phase_readiness["stage2"]["materialized"]
+        add(checks, "model_identity", identity_ok, {"manifest_sha256": manifest.get("manifest_sha256"), "normalized_matches_repo": normalized_matches_repo, "phases": phase_readiness})
+    except (OSError, KeyError, json.JSONDecodeError) as exc:
+        add(checks, "model_identity", False, {"error": str(exc)})
+    finally:
+        if not args.normalized_manifest:
+            normalized_path.unlink(missing_ok=True)
 
     shard_details: list[dict[str, object]] = []
     shards_ok = True
