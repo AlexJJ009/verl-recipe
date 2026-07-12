@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+SANDBOX_DRY_RUN=0
+if [ "${1:-}" = "--sandbox-dry-run" ]; then SANDBOX_DRY_RUN=1; shift; fi
 PHASE=${1:?stage1|stage2|stage3 required}
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd)
+MANIFEST=${CALIBRATION_MANIFEST:-$REPO_ROOT/recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml}
+MANIFEST_TOOL=${CALIBRATION_MANIFEST_TOOL:-$REPO_ROOT/scripts/experiment_manifest.py}
+if [ "$SANDBOX_DRY_RUN" = 1 ]; then
+  python3 "$MANIFEST_TOOL" render "$MANIFEST" --format json | python3 -c '
+import json,sys
+d=json.load(sys.stdin); phase=sys.argv[1]; workload=d["calibration_workloads"][phase]
+print(json.dumps({"ok":True,"phase":phase,"model_provenance_class":workload["model_provenance_class"],"model_sources":workload["model_sources"]},sort_keys=True))
+' "$PHASE"
+  exit 0
+fi
 source "$SCRIPT_DIR/qwen3_1p7b_stage123_resource_profile.sh"
 : "${CALIBRATION_HUMANEVAL_PLUS_FILE:?}"
 : "${CALIBRATION_MBPP_PLUS_FILE:?}"
@@ -20,7 +33,7 @@ common=(
 hydra_overrides=(+data.require_source_uid=true)
 case "$PHASE" in
  stage1)
-  env "${common[@]}" INIT_MODEL_PATH="${QWEN3_1P7B_MODEL_PATH:?}" WDL_SFT_BETA=0.1 bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
+  env "${common[@]}" INIT_MODEL_PATH="${STAGE1_INIT_MODEL_PATH:?}" WDL_SFT_BETA=0.1 bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
   ;;
  stage2)
   : "${CALIBRATION_STAGE1_CKPT_DIR:?}" "${CALIBRATION_STAGE1_MODEL2:?}"

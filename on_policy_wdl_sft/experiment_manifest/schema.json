@@ -28,7 +28,7 @@
     },
     "paths": {
       "type": "object",
-      "required": ["checkpoint_root", "checkpoint_physical_root", "artifact_root", "scratch_root", "base_model", "source_train_file"],
+      "required": ["checkpoint_root", "checkpoint_physical_root", "artifact_root", "scratch_root", "base_model", "stage1_init_model", "stage1_init_provenance", "source_train_file"],
       "properties": {
         "checkpoint_physical_root": {"const": "/data-2/checkpoints"}
       }
@@ -95,13 +95,47 @@
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "modelSource": {
       "type": "object",
-      "required": ["role", "path", "artifact_sha256", "hash_algorithm"],
       "additionalProperties": false,
       "properties": {
         "role": {"type": "string", "minLength": 1},
+        "state": {"enum": ["materialized", "pending"]},
         "path": {"type": "string", "minLength": 1},
         "artifact_sha256": {"$ref": "#/$defs/sha256"},
-        "hash_algorithm": {"const": "sorted_relative_path_content_sha256_v1"}
+        "hash_algorithm": {"const": "sorted_relative_path_content_sha256_v1"},
+        "provenance": {"$ref": "#/$defs/provenanceBinding"},
+        "producer": {
+          "type": "object",
+          "required": ["run_id", "final_step", "output_path", "provenance_path"],
+          "additionalProperties": false,
+          "properties": {
+            "run_id": {"type": "string", "minLength": 1},
+            "final_step": {"const": 20},
+            "output_path": {"type": "string", "minLength": 1},
+            "provenance_path": {"type": "string", "minLength": 1}
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["role", "state", "path", "artifact_sha256", "hash_algorithm"],
+          "properties": {"state": {"const": "materialized"}}
+        },
+        {
+          "required": ["role", "state", "path", "producer"],
+          "properties": {"state": {"const": "pending"}},
+          "not": {"anyOf": [{"required": ["artifact_sha256"]}, {"required": ["hash_algorithm"]}, {"required": ["provenance"]}]}
+        }
+      ]
+    },
+    "provenanceBinding": {
+      "type": "object",
+      "required": ["path", "sha256", "schema_version", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_version": {"const": 1},
+        "kind": {"enum": ["format_cold_start_source", "stage1_model2_source", "stage2_model2_source"]}
       }
     },
     "datasetDescriptor": {

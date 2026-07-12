@@ -44,6 +44,8 @@ export ARTIFACT_ROOT=${ARTIFACT_ROOT:-$(manifest_get paths.artifact_root)}
 export STAGE2_SOURCE_TRAIN_FILE=${STAGE2_SOURCE_TRAIN_FILE:-$(manifest_get paths.source_train_file)}
 export QWEN3_1P7B_MODEL_PATH=${QWEN3_1P7B_MODEL_PATH:-$(manifest_get paths.base_model)}
 export BASE_MODEL_PATH="$QWEN3_1P7B_MODEL_PATH"
+export STAGE1_INIT_MODEL_PATH=${STAGE1_INIT_MODEL_PATH:-$(manifest_get paths.stage1_init_model)}
+export STAGE1_INIT_PROVENANCE_PATH=${STAGE1_INIT_PROVENANCE_PATH:-$(manifest_get paths.stage1_init_provenance)}
 
 if [ "$DRY_RUN" != 1 ] && [ "${ALLOW_QWEN3_1P7B_STAGE123_TRAINING:-0}" != 1 ]; then
     echo "ERROR: formal execution requires ALLOW_QWEN3_1P7B_STAGE123_TRAINING=1" >&2; exit 1
@@ -192,23 +194,16 @@ PY
     record "$chain" stage1 source_verified "checkpoint=$s1_dir/global_step_$trigger"
     if [ "$DRY_RUN" = 1 ]; then
       run_phase_dry STAGE1 env STAGE123_RUN_ID="$stage2_id" RUN_PREFIX="CODE-S1-QWEN3-1P7B-STAGE123-${chain^^}-SOURCE-CHECK" \
-        INIT_MODEL_PATH="$QWEN3_1P7B_MODEL_PATH" TOTAL_TRAINING_STEPS="$trigger" WDL_SFT_BETA=0.1 \
+        INIT_MODEL_PATH="$STAGE1_INIT_MODEL_PATH" TOTAL_TRAINING_STEPS="$trigger" WDL_SFT_BETA=0.1 \
         bash "${SCRIPT_DIR}/run_s1_code_qwen3_1p7b_stage123_common.sh"
       run_phase_dry STAGE2 env STAGE123_RUN_ID="$stage2_id" RUN_PREFIX="$stage2_prefix" STAGE1_RUN_PREFIX="$(basename "$s1_dir" | sed -E 's/_[0-9]+$//')" \
         EXPECTED_STAGE1_RUN_PREFIX="$(basename "$s1_dir" | sed -E 's/_[0-9]+$//')" STAGE1_CKPT_DIR="$s1_dir" STAGE2_HANDOFF_STEP="$trigger" \
         WDL_SFT_BETA=0.1 EXPECTED_STAGE1_BETA=0.1 CODE_TRAIN_FILE="$stage2_train_file" TRAIN_FILE="$stage2_train_file" \
         TOTAL_TRAINING_STEPS="$STAGE2_STEPS" MERGED_MODEL2_DIR="$s1_merged" MODEL2_CACHE_TAG="$chain" \
         bash "${SCRIPT_DIR}/run_s2_code_qwen3_1p7b_stage123_common.sh"
-      dry_stage2_model2="${chain_root}/stage2_final_model2"
-      mkdir -p "$dry_stage2_model2"; touch "$dry_stage2_model2/config.json" "$dry_stage2_model2/model.safetensors"
-      write_run_provenance "$provenance" "$stage2_id" "$stage2_prefix" "$stage2_train_file" false \
-        "$(json_object type stage1_checkpoint str checkpoint "$s1_dir/global_step_$trigger" str extracted_model2 "$dry_stage2_model2" str)"
-      write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" false \
-        "$(json_object type stage2_model2 str run_id "$stage2_id" str model2 "$dry_stage2_model2" str)"
-      run_phase_dry STAGE3 env STAGE123_RUN_ID="$stage3_id" RUN_PREFIX="$stage3_prefix" STAGE2_MODEL2_PATH="$dry_stage2_model2" STAGE2_PROVENANCE_FILE="$provenance" \
-        CODE_TRAIN_FILE="$stage3_train_file" TRAIN_FILE="$stage3_train_file" DATA_SHUFFLE=False \
-        TOTAL_TRAINING_STEPS="$STAGE3_STEPS" bash "${SCRIPT_DIR}/run_s3_code_qwen3_1p7b_stage123_common.sh"
-      record "$chain" all dry_run_pass "profile_hash=$profile_hash"
+      echo "[STAGE123 DRY RUN] Stage3 blocked: pending current ${stage2_id} final_step=${STAGE2_STEPS} model2"
+      record "$chain" stage3 pending_producer "run_id=$stage2_id final_step=$STAGE2_STEPS"
+      record "$chain" stage1_stage2 dry_run_pass "profile_hash=$profile_hash"
       continue
     fi
     launch_and_wait() {
@@ -310,4 +305,4 @@ PY
       "$(json_object type stage3_complete str source_run_id "$stage2_id" str init_model2 "$stage2_model2" str)"
     record "$chain" all completed "profile_hash=$profile_hash"
 done
-echo "[STAGE123 QUEUE] DRY_RUN PASS manifest_hash=$manifest_hash profile_hash=$profile_hash status=$QUEUE_STATUS_FILE"
+echo "[STAGE123 QUEUE] DRY_RUN PASS (Stage1/Stage2); Stage3 pending producer manifest_hash=$manifest_hash profile_hash=$profile_hash status=$QUEUE_STATUS_FILE"

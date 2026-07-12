@@ -28,6 +28,8 @@ paths:
   artifact_root: /data-2/model_weights/code_task/qwen3_1p7b_stage123
   scratch_root: /data-1/tmp/verl_agent_scratch/qwen3_1p7b_stage123
   base_model: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  stage1_init_model: /data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac25
+  stage1_init_provenance: /data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac25/format_cold_start_source.json
   source_train_file: /data-1/dataset/code/verl_rl/kodcode_light_rl_10k_train_rl_format.parquet
 preflight:
   policy: tests/experiment_workflow/fixtures/preflight_policy.json
@@ -147,12 +149,18 @@ calibration_workloads:
       sha256: fe7d2bfe2779bcf106492347ca173e30b9220c15c1b8783949d35edcd93a43d1
       uid_source: parquet.extra_info.uid
     log2_rollout_model_parameter_count_sum: 30.680238
-    model_provenance_class: base_pretrained
+    model_provenance_class: sft_checkpoint
     model_sources:
-    - artifact_sha256: 62e686c9c4efcb8ae65b78aed452450883fd1f0eb3d0c61771034d506238b179
+    - artifact_sha256: 695b1cab12212ed03e39d8281adae5e973f459e653c6ab5365d62b75d9eb50a0
       hash_algorithm: sorted_relative_path_content_sha256_v1
-      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      path: /data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac25
+      provenance:
+        kind: format_cold_start_source
+        path: /data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac25/format_cold_start_source.json
+        schema_version: 1
+        sha256: 649cc853c29b3c30d079bf09f10ccfabcc927f0e92f78e85de3be6d6a8cf6b8d
       role: rollout
+      state: materialized
     outcome_schema_version: 2
     parameter_counter_version: hf_qwen3_config_parameter_count_v1
     phase: stage1
@@ -209,10 +217,12 @@ calibration_workloads:
       hash_algorithm: sorted_relative_path_content_sha256_v1
       path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
       role: model1
+      state: materialized
     - artifact_sha256: 123afebed80b9765ecad60f97748427639610c859134ff7ed70bae2bb8245f32
       hash_algorithm: sorted_relative_path_content_sha256_v1
       path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/beta01/stage1_model2
       role: model2
+      state: materialized
     outcome_schema_version: 2
     parameter_counter_version: hf_qwen3_config_parameter_count_v1
     phase: stage2
@@ -266,10 +276,14 @@ calibration_workloads:
     log2_rollout_model_parameter_count_sum: 30.680238
     model_provenance_class: stage2_model2_handoff
     model_sources:
-    - artifact_sha256: 516a69cd83677ca132b0fb6a2885fc092956cb65b8925a89040d03b4b7e0c16a
-      hash_algorithm: sorted_relative_path_content_sha256_v1
-      path: /data-1/model_weights/code_task/kodcode_qwen3_1p7b_coldstart_fraction_ctx8k_stage2_p40/frac25/beta01/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1/step_40_s2steps60
+    - path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/stage2_final_model2
+      producer:
+        final_step: 20
+        output_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/stage2_final_model2
+        provenance_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage3.provenance.json
+        run_id: frac25-stage2
       role: rollout
+      state: pending
     outcome_schema_version: 2
     parameter_counter_version: hf_qwen3_config_parameter_count_v1
     phase: stage3

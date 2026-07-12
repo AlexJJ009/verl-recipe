@@ -156,9 +156,25 @@ def dataset_descriptor(name: str, path: Path) -> dict:
     }
 
 
-def model_source(role: str, path: Path) -> tuple[dict, dict]:
+def provenance_binding(path: Path, kind: str) -> dict:
+    payload = json.loads(path.read_text())
+    if not isinstance(payload, dict) or not payload:
+        raise ValueError(f"invalid provenance object: {path}")
+    return {"path": str(path), "sha256": file_sha256(path), "schema_version": 1, "kind": kind}
+
+
+def model_source(role: str, path: Path, provenance: dict | None = None) -> tuple[dict, dict]:
     count = qwen3_parameter_count(path / "config.json")
-    return ({"role": role, "path": str(path), "artifact_sha256": artifact_sha256(path), "hash_algorithm": HASH_ALGORITHM}, count)
+    source = {
+        "role": role,
+        "state": "materialized",
+        "path": str(path),
+        "artifact_sha256": artifact_sha256(path),
+        "hash_algorithm": HASH_ALGORITHM,
+    }
+    if provenance is not None:
+        source["provenance"] = provenance
+    return source, count
 
 
 def build(args: argparse.Namespace) -> dict:
@@ -181,14 +197,15 @@ def build(args: argparse.Namespace) -> dict:
         "config_sha256": file_sha256(args.tokenizer / "tokenizer_config.json"),
         "tokenizer_sha256": file_sha256(args.tokenizer / "tokenizer.json"),
     }
+    stage1_provenance = provenance_binding(args.stage1_provenance, "format_cold_start_source")
     specs = {
-        "stage1": ("base_pretrained", [("rollout", args.stage1_model)]),
-        "stage2": ("fixed_model2_joint_rollout", [("model1", args.stage2_model1), ("model2", args.stage2_model2)]),
-        "stage3": ("stage2_model2_handoff", [("rollout", args.stage3_model)]),
+        "stage1": ("sft_checkpoint", [("rollout", args.stage1_model, stage1_provenance)]),
+        "stage2": ("fixed_model2_joint_rollout", [("model1", args.stage2_model1, None), ("model2", args.stage2_model2, None)]),
+        "stage3": ("stage2_model2_handoff", [("rollout", args.stage3_model, None)]),
     }
     result = {}
     for phase, (provenance, source_specs) in specs.items():
-        sources, counts = zip(*(model_source(role, path) for role, path in source_specs), strict=True)
+        sources, counts = zip(*(model_source(role, path, provenance) for role, path, provenance in source_specs), strict=True)
         totals = [item["total"] for item in counts]
         total = sum(totals)
         result[phase] = {
@@ -212,6 +229,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--stage1-model", type=Path, required=True)
+    parser.add_argument("--stage1-provenance", type=Path, required=True)
     parser.add_argument("--stage2-model1", type=Path, required=True)
     parser.add_argument("--stage2-model2", type=Path, required=True)
     parser.add_argument("--stage3-model", type=Path, required=True)
