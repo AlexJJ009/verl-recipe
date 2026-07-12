@@ -36,6 +36,13 @@ def receipt_value(receipt: dict, *names: str):
     return None
 
 
+def bound_value(receipt: dict, name: str):
+    hashes = receipt.get("hashes")
+    if isinstance(hashes, dict) and name in hashes:
+        return hashes[name]
+    return receipt_value(receipt, name)
+
+
 def verify(args: argparse.Namespace, *, now: datetime | None = None) -> dict:
     receipt_bytes = args.receipt.read_bytes()
     receipt = json.loads(receipt_bytes)
@@ -46,12 +53,12 @@ def verify(args: argparse.Namespace, *, now: datetime | None = None) -> dict:
         failures.append("receipt is not canonical JSON")
 
     decision = receipt_value(receipt, "decision", "status")
+    if receipt.get("receipt_type") == "code_task_operational_calibration_stage12_producer":
+        failures.append("limited_receipt_scope_mismatch")
     if decision != "deployable":
         failures.append("receipt is not deployable")
 
     expected = {
-        "manifest_sha256": manifest["manifest_sha256"],
-        "profile_sha256": args.profile_hash,
         "preflight_receipt_sha256": digest(args.preflight_receipt),
         "queue_identity": args.queue_identity,
     }
@@ -59,9 +66,17 @@ def verify(args: argparse.Namespace, *, now: datetime | None = None) -> dict:
         "queue_identity": ("queue_identity", "formal_queue_identity"),
     }
     for key, expected_value in expected.items():
-        actual = receipt_value(receipt, *aliases.get(key, (key,)))
+        actual = receipt_value(receipt, *aliases.get(key, (key,))) if key == "queue_identity" else bound_value(receipt, key)
         if actual != expected_value:
             failures.append(f"{key} mismatch")
+    rendered_manifest = bound_value(receipt, "rendered_manifest_sha256") or receipt_value(receipt, "manifest_sha256")
+    if rendered_manifest != manifest["manifest_sha256"]:
+        failures.append("rendered_manifest_sha256 mismatch")
+    profile = receipt.get("profile", {})
+    observed_profile = profile.get("sha256") if isinstance(profile, dict) else None
+    observed_profile = observed_profile or receipt_value(receipt, "profile_sha256")
+    if observed_profile != args.profile_hash:
+        failures.append("profile_sha256 mismatch")
 
     file_checks = {
         "report_sha256": args.report,
@@ -76,7 +91,9 @@ def verify(args: argparse.Namespace, *, now: datetime | None = None) -> dict:
     if args.semantic_contract is not None:
         file_checks["semantic_contract_sha256"] = args.semantic_contract
     for key, path in file_checks.items():
-        actual = receipt_value(receipt, *alias_checks.get(key, (key,)))
+        actual = bound_value(receipt, key)
+        if actual is None:
+            actual = receipt_value(receipt, *alias_checks.get(key, (key,)))
         if actual != digest(path):
             failures.append(f"{key} mismatch")
 

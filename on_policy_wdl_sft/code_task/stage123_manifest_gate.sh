@@ -54,8 +54,42 @@ stage123_require_deployability_receipt() {
     python3 "${STAGE123_GATE_DIR}/stage123_deployability_receipt.py" "${args[@]}"
 }
 
+stage123_require_stage12_producer_receipt() {
+    local run_id=${1:?run id required}
+    [ "${DRY_RUN:-0}" = 1 ] && return 0
+    if [ "$run_id" != "frac25-stage2" ]; then
+        echo "limited_receipt_scope_mismatch" >&2
+        return 1
+    fi
+    : "${STAGE123_STAGE12_PRODUCER_RECEIPT:?STAGE123_STAGE12_PRODUCER_RECEIPT required}"
+    : "${STAGE123_STAGE12_CALIBRATION_REPORT:?STAGE123_STAGE12_CALIBRATION_REPORT required}"
+    : "${STAGE123_STAGE12_CALIBRATION_POLICY:?STAGE123_STAGE12_CALIBRATION_POLICY required}"
+    : "${STAGE123_STAGE12_CALIBRATION_HISTORY_INDEX:?STAGE123_STAGE12_CALIBRATION_HISTORY_INDEX required}"
+    : "${STAGE123_STAGE12_CALIBRATION_PREDICTION_CONTRACT:?STAGE123_STAGE12_CALIBRATION_PREDICTION_CONTRACT required}"
+    : "${STAGE123_FORMAL_QUEUE_ID:?STAGE123_FORMAL_QUEUE_ID required}"
+    python3 "${STAGE123_GATE_DIR}/stage123_stage12_producer_receipt.py" \
+        --receipt "$STAGE123_STAGE12_PRODUCER_RECEIPT" \
+        --normalized-manifest "$STAGE123_NORMALIZED_MANIFEST" \
+        --manifest "$STAGE123_MANIFEST" \
+        --preflight-receipt "$STAGE123_PREFLIGHT_RECEIPT" \
+        --preflight-report "$STAGE123_PREFLIGHT_REPORT" \
+        --preflight-policy "$STAGE123_PREFLIGHT_POLICY" \
+        --report "$STAGE123_STAGE12_CALIBRATION_REPORT" \
+        --policy "$STAGE123_STAGE12_CALIBRATION_POLICY" \
+        --history-index "$STAGE123_STAGE12_CALIBRATION_HISTORY_INDEX" \
+        --prediction-contract "$STAGE123_STAGE12_CALIBRATION_PREDICTION_CONTRACT" \
+        --queue-identity "$STAGE123_FORMAL_QUEUE_ID" \
+        --run-id "$run_id" \
+        --max-age-seconds "${STAGE123_STAGE12_RECEIPT_MAX_AGE_SECONDS:-86400}" \
+        --future-skew-seconds "${STAGE123_STAGE12_RECEIPT_FUTURE_SKEW_SECONDS:-300}"
+}
+
 stage123_require_formal_admission() {
     local run_id=${1:?run id required}
     stage123_require_preflight_receipt "$run_id"
-    stage123_require_deployability_receipt
+    if [ -n "${STAGE123_STAGE12_PRODUCER_RECEIPT:-}" ]; then
+        stage123_require_stage12_producer_receipt "$run_id"
+    else
+        stage123_require_deployability_receipt
+    fi
 }
