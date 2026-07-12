@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -15,6 +16,16 @@ import stat
 HASH_ALGORITHM = "sorted_relative_path_content_sha256_v1"
 PARAMETER_COUNTER_VERSION = "hf_qwen3_config_parameter_count_v1"
 OUTCOME_SCHEMA_VERSION = 2
+
+
+def _load_eligibility_compute():
+    path = Path(__file__).with_name("calibration_validation_eligibility.py")
+    spec = importlib.util.spec_from_file_location("calibration_validation_eligibility", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load validation eligibility calculator: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.compute
 
 
 def canonical_json(value: object) -> bytes:
@@ -151,11 +162,20 @@ def model_source(role: str, path: Path) -> tuple[dict, dict]:
 
 
 def build(args: argparse.Namespace) -> dict:
-    datasets = [
-        dataset_descriptor("HumanEval+", args.humaneval_plus),
-        dataset_descriptor("MBPP+", args.mbpp_plus),
-        dataset_descriptor("LiveCodeBench", args.livecodebench),
+    validation_sources = [
+        ("HumanEval+", args.humaneval_plus),
+        ("MBPP+", args.mbpp_plus),
+        ("LiveCodeBench", args.livecodebench),
     ]
+    datasets = [
+        dataset_descriptor(name, path) for name, path in validation_sources
+    ]
+    eligibility = _load_eligibility_compute()(
+        repo_root=args.repo_root,
+        tokenizer_path=args.tokenizer,
+        datasets=validation_sources,
+        max_prompt_length=args.max_prompt_length,
+    )
     tokenizer = {
         "path": str(args.tokenizer),
         "config_sha256": file_sha256(args.tokenizer / "tokenizer_config.json"),
@@ -181,6 +201,7 @@ def build(args: argparse.Namespace) -> dict:
             "model_sources": list(sources),
             "datasets": datasets,
             "tokenizer": tokenizer,
+            "validation_eligibility": eligibility,
             "outcome_schema_version": OUTCOME_SCHEMA_VERSION,
             "parameter_count_evidence": list(counts),
         }
@@ -189,6 +210,7 @@ def build(args: argparse.Namespace) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--stage1-model", type=Path, required=True)
     parser.add_argument("--stage2-model1", type=Path, required=True)
     parser.add_argument("--stage2-model2", type=Path, required=True)
@@ -197,6 +219,7 @@ def main() -> int:
     parser.add_argument("--humaneval-plus", type=Path, required=True)
     parser.add_argument("--mbpp-plus", type=Path, required=True)
     parser.add_argument("--livecodebench", type=Path, required=True)
+    parser.add_argument("--max-prompt-length", type=int, default=1024)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     result = build(args)

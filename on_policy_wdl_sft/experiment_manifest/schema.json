@@ -124,7 +124,7 @@
     },
     "calibrationWorkload": {
       "type": "object",
-      "required": ["phase", "parameter_counter_version", "rollout_model_parameter_counts", "rollout_model_parameter_count_sum", "log2_rollout_model_parameter_count_sum", "model_provenance_class", "model_sources", "datasets", "tokenizer", "outcome_schema_version"],
+      "required": ["phase", "parameter_counter_version", "rollout_model_parameter_counts", "rollout_model_parameter_count_sum", "log2_rollout_model_parameter_count_sum", "model_provenance_class", "model_sources", "datasets", "tokenizer", "validation_eligibility", "outcome_schema_version"],
       "additionalProperties": false,
       "properties": {
         "phase": {"enum": ["stage1", "stage2", "stage3"]},
@@ -138,6 +138,22 @@
         "tokenizer": {
           "type": "object", "required": ["path", "config_sha256", "tokenizer_sha256"], "additionalProperties": false,
           "properties": {"path": {"type": "string", "minLength": 1}, "config_sha256": {"$ref": "#/$defs/sha256"}, "tokenizer_sha256": {"$ref": "#/$defs/sha256"}}
+        },
+        "validation_eligibility": {
+          "type": "object",
+          "required": ["max_prompt_length", "filter_enabled", "filter_implementation_sha256", "ordered_eligible_uid_sha256", "per_dataset_eligible_counts", "submitted_prompt_count"],
+          "additionalProperties": false,
+          "properties": {
+            "max_prompt_length": {"const": 1024},
+            "filter_enabled": {"const": true},
+            "filter_implementation_sha256": {"$ref": "#/$defs/sha256"},
+            "ordered_eligible_uid_sha256": {"$ref": "#/$defs/sha256"},
+            "per_dataset_eligible_counts": {
+              "type": "object", "required": ["HumanEval+", "MBPP+", "LiveCodeBench"], "additionalProperties": false,
+              "properties": {"HumanEval+": {"type": "integer", "minimum": 1}, "MBPP+": {"type": "integer", "minimum": 1}, "LiveCodeBench": {"type": "integer", "minimum": 1}}
+            },
+            "submitted_prompt_count": {"type": "integer", "minimum": 1}
+          }
         },
         "outcome_schema_version": {"const": 2}
       }

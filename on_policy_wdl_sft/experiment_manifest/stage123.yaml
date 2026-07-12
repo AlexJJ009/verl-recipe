@@ -163,6 +163,16 @@ calibration_workloads:
       config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
       path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
+    validation_eligibility:
+      filter_enabled: true
+      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      max_prompt_length: 1024
+      ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
+      per_dataset_eligible_counts:
+        HumanEval+: 164
+        LiveCodeBench: 837
+        MBPP+: 378
+      submitted_prompt_count: 1379
   stage2:
     datasets:
     - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
@@ -214,6 +224,16 @@ calibration_workloads:
       config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
       path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
+    validation_eligibility:
+      filter_enabled: true
+      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      max_prompt_length: 1024
+      ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
+      per_dataset_eligible_counts:
+        HumanEval+: 164
+        LiveCodeBench: 837
+        MBPP+: 378
+      submitted_prompt_count: 1379
   stage3:
     datasets:
     - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
@@ -260,3 +280,13 @@ calibration_workloads:
       config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
       path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
+    validation_eligibility:
+      filter_enabled: true
+      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      max_prompt_length: 1024
+      ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
+      per_dataset_eligible_counts:
+        HumanEval+: 164
+        LiveCodeBench: 837
+        MBPP+: 378
+      submitted_prompt_count: 1379
