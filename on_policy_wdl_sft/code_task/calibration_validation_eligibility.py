@@ -32,6 +32,7 @@ def normalized_data_config(max_prompt_length: int) -> dict:
         "max_prompt_length": max_prompt_length,
         "need_tools_kwargs": False,
         "prompt_key": "prompt",
+        "require_source_uid": True,
         "tool_config_path": None,
         "truncation": "left",
     }

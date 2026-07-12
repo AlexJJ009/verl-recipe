@@ -165,7 +165,7 @@ calibration_workloads:
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
     validation_eligibility:
       filter_enabled: true
-      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      filter_implementation_sha256: b247623e52a391816bb19fccd987665244ab116b5f7d7743e77e59cd9c9bd941
       max_prompt_length: 1024
       ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
       per_dataset_eligible_counts:
@@ -226,7 +226,7 @@ calibration_workloads:
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
     validation_eligibility:
       filter_enabled: true
-      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      filter_implementation_sha256: b247623e52a391816bb19fccd987665244ab116b5f7d7743e77e59cd9c9bd941
       max_prompt_length: 1024
       ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
       per_dataset_eligible_counts:
@@ -282,7 +282,7 @@ calibration_workloads:
       tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
     validation_eligibility:
       filter_enabled: true
-      filter_implementation_sha256: 2304cfabe7fe15020f0eff35068a2927cd61034434fb7ac414780aef0f2699f4
+      filter_implementation_sha256: b247623e52a391816bb19fccd987665244ab116b5f7d7743e77e59cd9c9bd941
       max_prompt_length: 1024
       ordered_eligible_uid_sha256: 6df6e0e6b9ae420557858751f64c87a82097440a4323eb3b8864810d98d2de75
       per_dataset_eligible_counts:
