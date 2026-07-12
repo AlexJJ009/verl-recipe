@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/qwen3_1p7b_stage123_resource_profile.sh"
 : "${STAGE123_RUN_ID:?STAGE123_RUN_ID required}"
 source "${SCRIPT_DIR}/stage123_manifest_gate.sh"
-stage123_require_preflight_receipt "$STAGE123_RUN_ID"
+stage123_require_formal_admission "$STAGE123_RUN_ID"
 : "${RUN_PREFIX:?}"
 : "${INIT_MODEL_PATH:?}"
 export WDL_SFT_BETA=${WDL_SFT_BETA:-0.1}

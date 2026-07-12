@@ -25,10 +25,15 @@ manifest_hash=$(manifest_get manifest_sha256)
 export STAGE123_EXPECTED_PROFILE_HASH=$(manifest_get resource_profile.sha256)
 export STAGE123_RECEIPT_MAX_AGE_SECONDS=$(manifest_get preflight.receipt_max_age_seconds)
 export STAGE123_PREFLIGHT_POLICY=${STAGE123_PREFLIGHT_POLICY:-${REPO_ROOT}/$(manifest_get preflight.policy)}
+export STAGE123_FORMAL_QUEUE_ID=${STAGE123_FORMAL_QUEUE_ID:-$(manifest_get experiment_id)}
 if [ "$DRY_RUN" != 1 ]; then
-    stage123_check_machine
     : "${STAGE123_PREFLIGHT_REPORT:?STAGE123_PREFLIGHT_REPORT required}"
     : "${STAGE123_PREFLIGHT_RECEIPT:?STAGE123_PREFLIGHT_RECEIPT required}"
+    : "${STAGE123_DEPLOYABILITY_RECEIPT:?STAGE123_DEPLOYABILITY_RECEIPT required}"
+    : "${STAGE123_CALIBRATION_REPORT:?STAGE123_CALIBRATION_REPORT required}"
+    : "${STAGE123_CALIBRATION_POLICY:?STAGE123_CALIBRATION_POLICY required}"
+    : "${STAGE123_CALIBRATION_HISTORY_INDEX:?STAGE123_CALIBRATION_HISTORY_INDEX required}"
+    : "${STAGE123_CALIBRATION_PREDICTION_CONTRACT:?STAGE123_CALIBRATION_PREDICTION_CONTRACT required}"
 fi
 
 export BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-1/checkpoints}
@@ -141,6 +146,20 @@ PY
 }
 
 mapfile -t stage2_rows < <("$STAGE123_MANIFEST_PYTHON" "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format tsv | awk -F '\t' 'NR>1 && $4=="stage2"')
+if [ "$DRY_RUN" != 1 ]; then
+    for row in "${stage2_rows[@]}"; do
+        IFS=$'\t' read -r stage2_id chain _fraction _phase _order _stage2_prefix _steps _tmux _train_file _sha _chain_root _provenance <<<"$row"
+        IFS=$'\t' read -r stage3_id < <("$STAGE123_MANIFEST_PYTHON" - "$STAGE123_NORMALIZED_MANIFEST" "$chain" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); r=next(x for x in d['runs'] if x['chain']==sys.argv[2] and x['phase']=='stage3')
+print(r['id'])
+PY
+)
+        stage123_require_formal_admission "$stage2_id"
+        stage123_require_formal_admission "$stage3_id"
+    done
+    stage123_check_machine
+fi
 for row in "${stage2_rows[@]}"; do
     IFS=$'\t' read -r stage2_id chain fraction _phase _order stage2_prefix STAGE2_STEPS stage2_tmux stage2_train_file stage2_sha chain_root provenance <<<"$row"
     IFS=$'\t' read -r stage3_id stage3_prefix STAGE3_STEPS stage3_tmux stage3_train_file stage3_provenance < <("$STAGE123_MANIFEST_PYTHON" - "$STAGE123_NORMALIZED_MANIFEST" "$chain" <<'PY'
@@ -258,7 +277,7 @@ PY
         printf '%s\n' "$ckpt"
     }
 
-    stage123_require_preflight_receipt "$stage2_id"
+    stage123_require_formal_admission "$stage2_id"
     stage2_ckpt=$(launch_and_wait "$stage2_tmux" "$stage2_prefix" "$STAGE2_STEPS" \
         /workspace/verl/recipe/on_policy_wdl_sft/code_task/run_s2_code_qwen3_1p7b_stage123_common.sh \
         RUN_PREFIX="$stage2_prefix" STAGE1_RUN_PREFIX="$(basename "$s1_dir" | sed -E 's/_[0-9]+$//')" \
@@ -266,7 +285,8 @@ PY
         STAGE2_HANDOFF_STEP="$trigger" WDL_SFT_BETA=0.1 EXPECTED_STAGE1_BETA=0.1 \
         CODE_TRAIN_FILE="$stage2_train_file" TRAIN_FILE="$stage2_train_file" TOTAL_TRAINING_STEPS="$STAGE2_STEPS" \
         MERGED_MODEL2_DIR="$s1_merged" MODEL2_CACHE_TAG="$chain" FUSION_LAMBDA="$FUSION_LAMBDA" \
-        STAGE123_RUN_ID="$stage2_id" STAGE123_MANIFEST="$STAGE123_MANIFEST" STAGE123_NORMALIZED_MANIFEST="$STAGE123_NORMALIZED_MANIFEST" STAGE123_PREFLIGHT_REPORT="$STAGE123_PREFLIGHT_REPORT" STAGE123_PREFLIGHT_RECEIPT="$STAGE123_PREFLIGHT_RECEIPT" STAGE123_PREFLIGHT_POLICY="$STAGE123_PREFLIGHT_POLICY" STAGE123_RECEIPT_MAX_AGE_SECONDS="$STAGE123_RECEIPT_MAX_AGE_SECONDS" STAGE123_EXPECTED_PROFILE_HASH="$profile_hash")
+        STAGE123_RUN_ID="$stage2_id" STAGE123_MANIFEST="$STAGE123_MANIFEST" STAGE123_NORMALIZED_MANIFEST="$STAGE123_NORMALIZED_MANIFEST" STAGE123_PREFLIGHT_REPORT="$STAGE123_PREFLIGHT_REPORT" STAGE123_PREFLIGHT_RECEIPT="$STAGE123_PREFLIGHT_RECEIPT" STAGE123_PREFLIGHT_POLICY="$STAGE123_PREFLIGHT_POLICY" STAGE123_RECEIPT_MAX_AGE_SECONDS="$STAGE123_RECEIPT_MAX_AGE_SECONDS" STAGE123_EXPECTED_PROFILE_HASH="$profile_hash" \
+        STAGE123_DEPLOYABILITY_RECEIPT="$STAGE123_DEPLOYABILITY_RECEIPT" STAGE123_FORMAL_QUEUE_ID="$STAGE123_FORMAL_QUEUE_ID" STAGE123_CALIBRATION_REPORT="$STAGE123_CALIBRATION_REPORT" STAGE123_CALIBRATION_POLICY="$STAGE123_CALIBRATION_POLICY" STAGE123_CALIBRATION_HISTORY_INDEX="$STAGE123_CALIBRATION_HISTORY_INDEX" STAGE123_CALIBRATION_PREDICTION_CONTRACT="$STAGE123_CALIBRATION_PREDICTION_CONTRACT" STAGE123_CALIBRATION_SEMANTIC_CONTRACT="${STAGE123_CALIBRATION_SEMANTIC_CONTRACT:-}" STAGE123_DEPLOYABILITY_RECEIPT_MAX_AGE_SECONDS="${STAGE123_DEPLOYABILITY_RECEIPT_MAX_AGE_SECONDS:-86400}" STAGE123_DEPLOYABILITY_RECEIPT_FUTURE_SKEW_SECONDS="${STAGE123_DEPLOYABILITY_RECEIPT_FUTURE_SKEW_SECONDS:-300}")
 
     joint_dir="${chain_root}/stage2_final_joint"
     rm -rf "$joint_dir" "$stage2_model2"
@@ -279,12 +299,13 @@ PY
     write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" false \
       "$(json_object type stage2_model2 str run_id "$stage2_id" str model2 "$stage2_model2" str)"
 
-    stage123_require_preflight_receipt "$stage3_id"
+    stage123_require_formal_admission "$stage3_id"
     launch_and_wait "$stage3_tmux" "$stage3_prefix" "$STAGE3_STEPS" \
         /workspace/verl/recipe/on_policy_wdl_sft/code_task/run_s3_code_qwen3_1p7b_stage123_common.sh \
         RUN_PREFIX="$stage3_prefix" STAGE2_MODEL2_PATH="$stage2_model2" STAGE2_PROVENANCE_FILE="$provenance" \
         CODE_TRAIN_FILE="$stage3_train_file" TRAIN_FILE="$stage3_train_file" DATA_SHUFFLE=False TOTAL_TRAINING_STEPS="$STAGE3_STEPS" \
-        STAGE123_RUN_ID="$stage3_id" STAGE123_MANIFEST="$STAGE123_MANIFEST" STAGE123_NORMALIZED_MANIFEST="$STAGE123_NORMALIZED_MANIFEST" STAGE123_PREFLIGHT_REPORT="$STAGE123_PREFLIGHT_REPORT" STAGE123_PREFLIGHT_RECEIPT="$STAGE123_PREFLIGHT_RECEIPT" STAGE123_PREFLIGHT_POLICY="$STAGE123_PREFLIGHT_POLICY" STAGE123_RECEIPT_MAX_AGE_SECONDS="$STAGE123_RECEIPT_MAX_AGE_SECONDS" STAGE123_EXPECTED_PROFILE_HASH="$profile_hash" >/dev/null
+        STAGE123_RUN_ID="$stage3_id" STAGE123_MANIFEST="$STAGE123_MANIFEST" STAGE123_NORMALIZED_MANIFEST="$STAGE123_NORMALIZED_MANIFEST" STAGE123_PREFLIGHT_REPORT="$STAGE123_PREFLIGHT_REPORT" STAGE123_PREFLIGHT_RECEIPT="$STAGE123_PREFLIGHT_RECEIPT" STAGE123_PREFLIGHT_POLICY="$STAGE123_PREFLIGHT_POLICY" STAGE123_RECEIPT_MAX_AGE_SECONDS="$STAGE123_RECEIPT_MAX_AGE_SECONDS" STAGE123_EXPECTED_PROFILE_HASH="$profile_hash" \
+        STAGE123_DEPLOYABILITY_RECEIPT="$STAGE123_DEPLOYABILITY_RECEIPT" STAGE123_FORMAL_QUEUE_ID="$STAGE123_FORMAL_QUEUE_ID" STAGE123_CALIBRATION_REPORT="$STAGE123_CALIBRATION_REPORT" STAGE123_CALIBRATION_POLICY="$STAGE123_CALIBRATION_POLICY" STAGE123_CALIBRATION_HISTORY_INDEX="$STAGE123_CALIBRATION_HISTORY_INDEX" STAGE123_CALIBRATION_PREDICTION_CONTRACT="$STAGE123_CALIBRATION_PREDICTION_CONTRACT" STAGE123_CALIBRATION_SEMANTIC_CONTRACT="${STAGE123_CALIBRATION_SEMANTIC_CONTRACT:-}" STAGE123_DEPLOYABILITY_RECEIPT_MAX_AGE_SECONDS="${STAGE123_DEPLOYABILITY_RECEIPT_MAX_AGE_SECONDS:-86400}" STAGE123_DEPLOYABILITY_RECEIPT_FUTURE_SKEW_SECONDS="${STAGE123_DEPLOYABILITY_RECEIPT_FUTURE_SKEW_SECONDS:-300}" >/dev/null
     write_run_provenance "$stage3_provenance" "$stage3_id" "$stage3_prefix" "$stage3_train_file" true \
       "$(json_object type stage3_complete str source_run_id "$stage2_id" str init_model2 "$stage2_model2" str)"
     record "$chain" all completed "profile_hash=$profile_hash"

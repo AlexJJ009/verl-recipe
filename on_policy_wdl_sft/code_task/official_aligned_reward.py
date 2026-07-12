@@ -16,11 +16,13 @@ import json
 import os
 import signal
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import textwrap
 import uuid
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -170,6 +172,24 @@ def _resolve_livecodebench_input_output(test_case: dict[str, Any]) -> Any:
     if question_id is None:
         raise KeyError("input_output")
     release_version = str(test_case.get("release_version") or os.environ.get("LCB_RELEASE_VERSION") or "release_v5")
+    index_path = os.environ.get("LCB_INPUT_OUTPUT_INDEX")
+    if index_path:
+        path = Path(index_path)
+        if not path.is_file():
+            raise FileNotFoundError(f"LiveCodeBench input/output index missing: {path}")
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as con:
+            metadata = dict(con.execute("SELECT key, value FROM metadata"))
+            if metadata.get("release_version") != release_version:
+                raise ValueError(
+                    f"LiveCodeBench index release mismatch: expected={release_version} "
+                    f"actual={metadata.get('release_version')}"
+                )
+            row = con.execute(
+                "SELECT payload_zlib FROM input_output WHERE question_id = ?", (str(question_id),)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"LiveCodeBench question_id not found in index: {question_id}")
+        return _restore_jsonable(json.loads(zlib.decompress(row[0])))
     output_by_id = _lcb_input_output_by_question_id(release_version)
     key = str(question_id)
     if key not in output_by_id:
@@ -1027,18 +1047,66 @@ def score_bigcodebench_official(code: str, test_case: dict[str, Any]) -> dict[st
 
 
 def score_livecodebench_official(code: str, test_case: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from lcb_runner.evaluation.compute_code_generation_metrics import check_correctness
-    except Exception as exc:
-        raise RuntimeError(f"LiveCodeBench official evaluator is unavailable. {_official_env_hint()}") from exc
-
     sample = {"input_output": _resolve_livecodebench_input_output(test_case)}
-    result, metadata = check_correctness(
-        sample,
-        code,
-        timeout=int(os.environ.get("LCB_TIMEOUT", "6")),
-        debug=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="code_reward_livecodebench_") as td:
+        payload_path = Path(td) / "payload.json"
+        runner_path = Path(td) / "runner.py"
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "sample": sample,
+                    "code": code,
+                    "timeout": int(os.environ.get("LCB_TIMEOUT", "6")),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        runner_path.write_text(
+            textwrap.dedent(
+                """
+                import json
+                import sys
+                from pathlib import Path
+
+                from lcb_runner.evaluation.compute_code_generation_metrics import check_correctness
+
+                payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+                result, metadata = check_correctness(
+                    payload["sample"],
+                    payload["code"],
+                    timeout=payload["timeout"],
+                    debug=False,
+                )
+                print(json.dumps({"result": result, "metadata": metadata}, ensure_ascii=False))
+                """
+            ),
+            encoding="utf-8",
+        )
+        proc = subprocess.Popen(
+            [sys.executable, str(runner_path), str(payload_path)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=float(os.environ.get("LCB_SUBPROCESS_TIMEOUT", "25")))
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.communicate()
+            return _base_payload(0.0, "timeout", code, "livecodebench", 0, 0)
+
+    if proc.returncode != 0:
+        if "No module named 'lcb_runner'" in stderr:
+            raise RuntimeError(f"LiveCodeBench official evaluator is unavailable. {_official_env_hint()}")
+        return _base_payload(0.0, _classify_stderr(stderr), code, "livecodebench", 0, 0, stderr)
+    try:
+        payload = json.loads(stdout.strip().splitlines()[-1])
+        result = payload["result"]
+        metadata = payload["metadata"]
+    except Exception:
+        return _base_payload(0.0, "runtime_error", code, "livecodebench", 0, 0, stderr or stdout)
     passed_items = [x is True for x in result]
     passed = bool(result) and all(passed_items)
     status = "pass" if passed else "wrong_answer"

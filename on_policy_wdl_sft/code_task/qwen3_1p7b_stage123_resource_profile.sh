@@ -20,7 +20,9 @@ export SAVE_FREQ=${SAVE_FREQ:-5}
 export VAL_N=${VAL_N:-1}
 export VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN:-True}
 export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
-export CODE_REWARD_NUM_WORKERS=${CODE_REWARD_NUM_WORKERS:-1}
+export CODE_REWARD_NUM_WORKERS=${CODE_REWARD_NUM_WORKERS:-8}
+export CODE_REWARD_MAX_CONCURRENCY_PER_WORKER=${CODE_REWARD_MAX_CONCURRENCY_PER_WORKER:-4}
+export ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-64}
 export CODE_REWARD_TIMEOUT=${CODE_REWARD_TIMEOUT:-30}
 export CODE_REWARD_MANAGER_TIMEOUT=${CODE_REWARD_MANAGER_TIMEOUT:-30}
 export CODE_REWARD_STDIN_CASE_TIMEOUT=${CODE_REWARD_STDIN_CASE_TIMEOUT:-2}
@@ -28,6 +30,10 @@ export CODE_REWARD_EXEC_MAX_AS_MB=${CODE_REWARD_EXEC_MAX_AS_MB:-4096}
 export BIGCODEBENCH_MAX_AS_LIMIT=${BIGCODEBENCH_MAX_AS_LIMIT:-131072}
 export BIGCODEBENCH_MAX_DATA_LIMIT=${BIGCODEBENCH_MAX_DATA_LIMIT:-131072}
 export BIGCODEBENCH_MAX_STACK_LIMIT=${BIGCODEBENCH_MAX_STACK_LIMIT:-10}
+export LCB_INPUT_OUTPUT_INDEX=${LCB_INPUT_OUTPUT_INDEX:-/data-2/evaluator_assets/livecodebench_cache/index/release_v5_input_output.sqlite}
+export LCB_INPUT_OUTPUT_INDEX_SHA256=${LCB_INPUT_OUTPUT_INDEX_SHA256:-2f049e91c20f55b3967655c2828f4188cef4bc13108fd3a6d0407046375954b4}
+export LCB_INPUT_OUTPUT_INDEX_RECEIPT=${LCB_INPUT_OUTPUT_INDEX_RECEIPT:-/data-2/evaluator_assets/livecodebench_cache/index/release_v5_input_output.receipt.json}
+export LCB_SUBPROCESS_TIMEOUT=${LCB_SUBPROCESS_TIMEOUT:-25}
 export RAY_memory_usage_threshold=${RAY_memory_usage_threshold:-0.90}
 export RAY_memory_monitor_refresh_ms=${RAY_memory_monitor_refresh_ms:-1000}
 export RAY_object_spilling_directory=${RAY_object_spilling_directory:-/data-2/ray_spill}
@@ -45,10 +51,13 @@ stage123_profile_fields() {
         GENERATION_MICRO_BATCH_SIZE LOG_PROB_MICRO_BATCH_SIZE \
         ROLLOUT_GPU_MEMORY_UTILIZATION TRAIN_PROMPT_BSZ ROLLOUT_N \
         TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ VAL_N VAL_BEFORE_TRAIN \
-        TRAIN_MAX_SAMPLES CODE_REWARD_NUM_WORKERS CODE_REWARD_TIMEOUT \
+        TRAIN_MAX_SAMPLES CODE_REWARD_NUM_WORKERS CODE_REWARD_MAX_CONCURRENCY_PER_WORKER \
+        ROLLOUT_AGENT_NUM_WORKERS CODE_REWARD_TIMEOUT \
         CODE_REWARD_MANAGER_TIMEOUT CODE_REWARD_STDIN_CASE_TIMEOUT \
         CODE_REWARD_EXEC_MAX_AS_MB BIGCODEBENCH_MAX_AS_LIMIT \
         BIGCODEBENCH_MAX_DATA_LIMIT BIGCODEBENCH_MAX_STACK_LIMIT \
+        LCB_INPUT_OUTPUT_INDEX LCB_INPUT_OUTPUT_INDEX_SHA256 LCB_INPUT_OUTPUT_INDEX_RECEIPT \
+        LCB_SUBPROCESS_TIMEOUT \
         RAY_memory_usage_threshold RAY_memory_monitor_refresh_ms \
         RAY_object_spilling_directory RAY_TMPDIR TMPDIR OMP_NUM_THREADS \
         NGPUS_PER_NODE ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE
@@ -95,9 +104,23 @@ stage123_validate_profile() {
     [ "$LOG_PROB_MAX_TOKEN_LEN_PER_GPU" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$ACTOR_PPO_MAX_TOKEN_LEN" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$TRAIN_PROMPT_MINI_BSZ" = $((TRAIN_PROMPT_BSZ * ROLLOUT_N)) ] || return 1
-    [ "$CODE_REWARD_NUM_WORKERS" -le 2 ] || { echo "ERROR: reward workers >2 require a new RAM audit" >&2; return 1; }
+    [ "$CODE_REWARD_NUM_WORKERS" -eq 8 ] || { echo "ERROR: Stage123 reward workers must equal 8" >&2; return 1; }
+    [ "$CODE_REWARD_MAX_CONCURRENCY_PER_WORKER" -eq 4 ] || { echo "ERROR: Stage123 per-worker reward concurrency must equal 4" >&2; return 1; }
+    [ "$ROLLOUT_AGENT_NUM_WORKERS" -eq 64 ] || { echo "ERROR: Stage123 full-validation profile requires 64 agent workers" >&2; return 1; }
     [ "$NGPUS_PER_NODE" = 8 ] || { echo "ERROR: NGPUS_PER_NODE must equal 8" >&2; return 1; }
     [ "$ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE" = 1 ] || { echo "ERROR: Qwen3-1.7B Stage123 TP must equal 1" >&2; return 1; }
+    [ -f "$LCB_INPUT_OUTPUT_INDEX" ] || { echo "ERROR: LiveCodeBench index missing: $LCB_INPUT_OUTPUT_INDEX" >&2; return 1; }
+    [ -f "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" ] || { echo "ERROR: LiveCodeBench index receipt missing" >&2; return 1; }
+    python3 - "$LCB_INPUT_OUTPUT_INDEX" "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" "$LCB_INPUT_OUTPUT_INDEX_SHA256" <<'PY' || return 1
+import json,os,sys
+index,receipt_path,expected_sha=sys.argv[1:]
+receipt=json.load(open(receipt_path,encoding='utf-8'))
+assert receipt.get('schema_version') == 1
+assert receipt.get('release_version') == 'release_v5'
+assert receipt.get('row_count') == 880
+assert receipt.get('sha256') == expected_sha
+assert receipt.get('size_bytes') == os.path.getsize(index)
+PY
     mkdir -p "$RAY_object_spilling_directory" "$RAY_TMPDIR" "$TMPDIR"
 }
 
