@@ -33,6 +33,14 @@ common=(
 hydra_overrides=(+data.require_source_uid=true)
 case "$PHASE" in
  stage1)
+  python3 - "${STAGE1_INIT_MODEL_PATH:?}" "${STAGE1_INIT_PROVENANCE_PATH:?}" <<'PY'
+import json,sys
+from pathlib import Path
+model=Path(sys.argv[1]).resolve(); provenance=Path(sys.argv[2])
+data=json.loads(provenance.read_text())
+if Path(data.get("target_dir", "")).resolve() != model:
+    raise SystemExit("Stage1 calibration provenance target mismatch")
+PY
   env "${common[@]}" INIT_MODEL_PATH="${STAGE1_INIT_MODEL_PATH:?}" WDL_SFT_BETA=0.1 bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
   ;;
  stage2)
