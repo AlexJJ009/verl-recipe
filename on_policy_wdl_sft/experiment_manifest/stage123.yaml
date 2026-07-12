@@ -6,7 +6,10 @@ resource_profile:
   max_response_length: 8192
 semantics:
   formal_validation_scope: full
-  validation_datasets: [HumanEval+, MBPP+, LiveCodeBench]
+  validation_datasets:
+  - HumanEval+
+  - MBPP+
+  - LiveCodeBench
   validation_dataset_hashes:
     HumanEval+: e317c71511c7b6b3df98ef88bf409644bc000e11a0621a57cdc944ccb82a9fab
     MBPP+: 3221e7f53c88bfbd91d788fb7bcb37168fb088fa504fddf12b9126c2147312d2
@@ -51,55 +54,209 @@ release:
   registry_db: /data-1/experiment_registry/experiment_registry.sqlite
   wandb_root: /data-1/wandb_runs
 runs:
-  - id: frac25-stage2
-    chain: frac25_p40_s220_s340
+- id: frac25-stage2
+  chain: frac25_p40_s220_s340
+  fraction: frac25
+  phase: stage2
+  order: 10
+  run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-LAMBDA08-V1
+  final_step: 20
+  tmux_name: stage123_frac25_s2
+  train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet
+  train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+  source:
+    type: stage1_checkpoint
     fraction: frac25
-    phase: stage2
-    order: 10
-    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-LAMBDA08-V1
-    final_step: 20
-    tmux_name: stage123_frac25_s2
-    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet
-    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
-    source: {type: stage1_checkpoint, fraction: frac25, handoff_step: 40}
-    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
-    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage2.provenance.json
-  - id: frac25-stage3
-    chain: frac25_p40_s220_s340
-    fraction: frac25
-    phase: stage3
-    order: 20
-    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-V1
-    final_step: 40
-    tmux_name: stage123_frac25_s3
-    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
-    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
-    source: {type: stage2_model2, run_id: frac25-stage2}
-    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
-    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage3.provenance.json
-  - id: frac50-stage2
-    chain: frac50_p40_s220_s340
+    handoff_step: 40
+  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
+  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage2.provenance.json
+- id: frac25-stage3
+  chain: frac25_p40_s220_s340
+  fraction: frac25
+  phase: stage3
+  order: 20
+  run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-V1
+  final_step: 40
+  tmux_name: stage123_frac25_s3
+  train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+  train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+  source:
+    type: stage2_model2
+    run_id: frac25-stage2
+  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
+  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage3.provenance.json
+- id: frac50-stage2
+  chain: frac50_p40_s220_s340
+  fraction: frac50
+  phase: stage2
+  order: 30
+  run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-LAMBDA08-V1
+  final_step: 20
+  tmux_name: stage123_frac50_s2
+  train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_handoff_s2steps20.parquet
+  train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+  source:
+    type: stage1_checkpoint
     fraction: frac50
+    handoff_step: 40
+  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
+  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage2.provenance.json
+- id: frac50-stage3
+  chain: frac50_p40_s220_s340
+  fraction: frac50
+  phase: stage3
+  order: 40
+  run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-V1
+  final_step: 40
+  tmux_name: stage123_frac50_s3
+  train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_s2steps20_s3steps40.parquet
+  train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+  source:
+    type: stage2_model2
+    run_id: frac50-stage2
+  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
+  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage3.provenance.json
+calibration_workloads:
+  stage1:
+    datasets:
+    - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 164
+      name: HumanEval+
+      path: /data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet
+      row_count: 164
+      sha256: e317c71511c7b6b3df98ef88bf409644bc000e11a0621a57cdc944ccb82a9fab
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: c6ab2910c78eb6a43a9672dc5a0930a5774bff39aa9ad3ba1e39e236f9b61acc
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 378
+      name: MBPP+
+      path: /data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet
+      row_count: 378
+      sha256: 3221e7f53c88bfbd91d788fb7bcb37168fb088fa504fddf12b9126c2147312d2
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: 4825ae7ee8ce5ac1907633773408c7f7e53ed815437ee516e5bd1b2132210c95
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 880
+      name: LiveCodeBench
+      path: /data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet
+      row_count: 880
+      sha256: fe7d2bfe2779bcf106492347ca173e30b9220c15c1b8783949d35edcd93a43d1
+      uid_source: parquet.extra_info.uid
+    log2_rollout_model_parameter_count_sum: 30.680238
+    model_provenance_class: base_pretrained
+    model_sources:
+    - artifact_sha256: 62e686c9c4efcb8ae65b78aed452450883fd1f0eb3d0c61771034d506238b179
+      hash_algorithm: sorted_relative_path_content_sha256_v1
+      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      role: rollout
+    outcome_schema_version: 2
+    parameter_counter_version: hf_qwen3_config_parameter_count_v1
+    phase: stage1
+    rollout_model_parameter_count_sum: 1720567808
+    rollout_model_parameter_counts:
+    - 1720567808
+    tokenizer:
+      config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
+      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
+  stage2:
+    datasets:
+    - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 164
+      name: HumanEval+
+      path: /data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet
+      row_count: 164
+      sha256: e317c71511c7b6b3df98ef88bf409644bc000e11a0621a57cdc944ccb82a9fab
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: c6ab2910c78eb6a43a9672dc5a0930a5774bff39aa9ad3ba1e39e236f9b61acc
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 378
+      name: MBPP+
+      path: /data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet
+      row_count: 378
+      sha256: 3221e7f53c88bfbd91d788fb7bcb37168fb088fa504fddf12b9126c2147312d2
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: 4825ae7ee8ce5ac1907633773408c7f7e53ed815437ee516e5bd1b2132210c95
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 880
+      name: LiveCodeBench
+      path: /data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet
+      row_count: 880
+      sha256: fe7d2bfe2779bcf106492347ca173e30b9220c15c1b8783949d35edcd93a43d1
+      uid_source: parquet.extra_info.uid
+    log2_rollout_model_parameter_count_sum: 31.680238
+    model_provenance_class: fixed_model2_joint_rollout
+    model_sources:
+    - artifact_sha256: 62e686c9c4efcb8ae65b78aed452450883fd1f0eb3d0c61771034d506238b179
+      hash_algorithm: sorted_relative_path_content_sha256_v1
+      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      role: model1
+    - artifact_sha256: 123afebed80b9765ecad60f97748427639610c859134ff7ed70bae2bb8245f32
+      hash_algorithm: sorted_relative_path_content_sha256_v1
+      path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/beta01/stage1_model2
+      role: model2
+    outcome_schema_version: 2
+    parameter_counter_version: hf_qwen3_config_parameter_count_v1
     phase: stage2
-    order: 30
-    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-LAMBDA08-V1
-    final_step: 20
-    tmux_name: stage123_frac50_s2
-    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_handoff_s2steps20.parquet
-    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
-    source: {type: stage1_checkpoint, fraction: frac50, handoff_step: 40}
-    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
-    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage2.provenance.json
-  - id: frac50-stage3
-    chain: frac50_p40_s220_s340
-    fraction: frac50
+    rollout_model_parameter_count_sum: 3441135616
+    rollout_model_parameter_counts:
+    - 1720567808
+    - 1720567808
+    tokenizer:
+      config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
+      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
+  stage3:
+    datasets:
+    - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 164
+      name: HumanEval+
+      path: /data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet
+      row_count: 164
+      sha256: e317c71511c7b6b3df98ef88bf409644bc000e11a0621a57cdc944ccb82a9fab
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: c6ab2910c78eb6a43a9672dc5a0930a5774bff39aa9ad3ba1e39e236f9b61acc
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 378
+      name: MBPP+
+      path: /data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet
+      row_count: 378
+      sha256: 3221e7f53c88bfbd91d788fb7bcb37168fb088fa504fddf12b9126c2147312d2
+      uid_source: parquet.extra_info.uid
+    - difficulty_mapping_sha256: 4825ae7ee8ce5ac1907633773408c7f7e53ed815437ee516e5bd1b2132210c95
+      difficulty_resolution: unavailable
+      difficulty_stratum_counts:
+        unstratified: 880
+      name: LiveCodeBench
+      path: /data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet
+      row_count: 880
+      sha256: fe7d2bfe2779bcf106492347ca173e30b9220c15c1b8783949d35edcd93a43d1
+      uid_source: parquet.extra_info.uid
+    log2_rollout_model_parameter_count_sum: 30.680238
+    model_provenance_class: stage2_model2_handoff
+    model_sources:
+    - artifact_sha256: 516a69cd83677ca132b0fb6a2885fc092956cb65b8925a89040d03b4b7e0c16a
+      hash_algorithm: sorted_relative_path_content_sha256_v1
+      path: /data-1/model_weights/code_task/kodcode_qwen3_1p7b_coldstart_fraction_ctx8k_stage2_p40/frac25/beta01/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1/step_40_s2steps60
+      role: rollout
+    outcome_schema_version: 2
+    parameter_counter_version: hf_qwen3_config_parameter_count_v1
     phase: stage3
-    order: 40
-    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-V1
-    final_step: 40
-    tmux_name: stage123_frac50_s3
-    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_s2steps20_s3steps40.parquet
-    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
-    source: {type: stage2_model2, run_id: frac50-stage2}
-    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
-    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage3.provenance.json
+    rollout_model_parameter_count_sum: 1720567808
+    rollout_model_parameter_counts:
+    - 1720567808
+    tokenizer:
+      config_sha256: d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101
+      path: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+      tokenizer_sha256: aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4
