@@ -36,7 +36,7 @@ def receipt_value(receipt: dict, *names: str):
     return None
 
 
-def verify(args: argparse.Namespace) -> dict:
+def verify(args: argparse.Namespace, *, now: datetime | None = None) -> dict:
     receipt_bytes = args.receipt.read_bytes()
     receipt = json.loads(receipt_bytes)
     manifest = json.loads(args.normalized_manifest.read_text())
@@ -81,7 +81,7 @@ def verify(args: argparse.Namespace) -> dict:
             failures.append(f"{key} mismatch")
 
     try:
-        age = (datetime.now(timezone.utc) - parse_issued_at(receipt.get("issued_at"))).total_seconds()
+        age = ((now or datetime.now(timezone.utc)) - parse_issued_at(receipt.get("issued_at"))).total_seconds()
     except ValueError as exc:
         failures.append(str(exc))
         age = 0.0
