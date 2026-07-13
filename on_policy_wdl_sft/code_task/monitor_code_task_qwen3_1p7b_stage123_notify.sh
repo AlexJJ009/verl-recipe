@@ -26,12 +26,13 @@ export METRICS_ROOT=${METRICS_ROOT:-${SCRIPT_DIR}/metrics}
 export EXTRA_METRICS_ROOTS=${EXTRA_METRICS_ROOTS:-${REPO_ROOT}/recipe/on_policy_wdl_sft/staged_v1/metrics}
 export WANDB_PROJECT=${WANDB_PROJECT:-$(manifest_value release.project)}
 export POLL_SEC=${POLL_SEC:-$(manifest_value monitor.poll_seconds)}
+export STAGE123_EXECUTION_STATE_ROOT=${STAGE123_EXECUTION_STATE_ROOT:-/data-1/tmp/verl_agent_scratch/experiment_workflow/stage123/state}
 export NOTIFICATION_LEDGER=${NOTIFICATION_LEDGER:-/data-2/experiment_registry/stage123_notification_events.jsonl}
 sender_args=()
 if [ "${WXPUSHER_NOTIFY:-0}" = 1 ]; then
     sender_args=(--sender "${REPO_ROOT}/scripts/wxpusher_event_sender.sh")
 fi
 exec python3 "${REPO_ROOT}/scripts/stage123_manifest_monitor.py" \
-    --manifest "$manifest_json" --checkpoint-root "$CKPT_ROOT" --queue-tmux "$QUEUE_TMUX" \
+    --manifest "$manifest_json" --state-root "$STAGE123_EXECUTION_STATE_ROOT" --checkpoint-root "$CKPT_ROOT" --queue-tmux "$QUEUE_TMUX" \
     --poll-seconds "$POLL_SEC" --ledger "$NOTIFICATION_LEDGER" \
     --policy "${REPO_ROOT}/scripts/experiment_notification_policy.py" "${sender_args[@]}"

@@ -20,11 +20,8 @@ PY
 stage123_require_formal_admission() {
     local run_id=${1:?run id required}
     [ "${DRY_RUN:-0}" = 1 ] && return 0
-    : "${STAGE123_PREFLIGHT_RESULT:?STAGE123_PREFLIGHT_RESULT required}"
-    : "${STAGE123_CALIBRATION_RESULT:?STAGE123_CALIBRATION_RESULT required}"
-    : "${STAGE123_ACCEPTANCE_REPORT:?STAGE123_ACCEPTANCE_REPORT required}"
-    stage123_require_result "$STAGE123_PREFLIGHT_RESULT" preflight_result
-    stage123_require_result "$STAGE123_CALIBRATION_RESULT" calibration_result
-    stage123_require_result "$STAGE123_ACCEPTANCE_REPORT" acceptance_report
-    printf 'formal admission result bindings valid for %s\n' "$run_id"
+    : "${STAGE123_ADMISSION_BUNDLE:?STAGE123_ADMISSION_BUNDLE required}"
+    python3 "$STAGE123_GATE_REPO_ROOT/scripts/execution_results.py" admission validate \
+        --bundle "$STAGE123_ADMISSION_BUNDLE" --require-accepted --repo-root "$STAGE123_GATE_REPO_ROOT" >/dev/null
+    printf 'immutable admission bundle valid for %s\n' "$run_id"
 }
