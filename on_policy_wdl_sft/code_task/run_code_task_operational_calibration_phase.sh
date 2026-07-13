@@ -16,6 +16,26 @@ print(json.dumps({"ok":True,"phase":phase,"model_provenance_class":workload["mod
   exit 0
 fi
 source "$SCRIPT_DIR/qwen3_1p7b_stage123_resource_profile.sh"
+: "${CALIBRATION_RAY_WORKER_PORT_MIN:=21000}"
+: "${CALIBRATION_RAY_WORKER_PORT_MAX:=21999}"
+: "${CALIBRATION_RAY_HEAD_PORT:=22000}"
+: "${CALIBRATION_TCPSTORE_PORT_MIN:=35000}"
+: "${CALIBRATION_TCPSTORE_PORT_MAX:=35999}"
+python3 - "$CALIBRATION_RAY_WORKER_PORT_MIN" "$CALIBRATION_RAY_WORKER_PORT_MAX" "$CALIBRATION_TCPSTORE_PORT_MIN" "$CALIBRATION_TCPSTORE_PORT_MAX" <<'PY'
+import sys
+
+ray_min, ray_max, store_min, store_max = map(int, sys.argv[1:])
+for name, low, high in (("Ray worker", ray_min, ray_max), ("TCPStore", store_min, store_max)):
+    if not 1024 <= low < high <= 65535:
+        raise SystemExit(f"invalid {name} port range: {low}-{high}")
+if max(ray_min, store_min) <= min(ray_max, store_max):
+    raise SystemExit("calibration Ray worker and TCPStore port ranges overlap")
+PY
+ray start --head --port="$CALIBRATION_RAY_HEAD_PORT" \
+  --min-worker-port="$CALIBRATION_RAY_WORKER_PORT_MIN" \
+  --max-worker-port="$CALIBRATION_RAY_WORKER_PORT_MAX" \
+  --include-dashboard=false --disable-usage-stats >/dev/null
+export RAY_ADDRESS="127.0.0.1:$CALIBRATION_RAY_HEAD_PORT"
 : "${CALIBRATION_HUMANEVAL_PLUS_FILE:?}"
 : "${CALIBRATION_MBPP_PLUS_FILE:?}"
 : "${CALIBRATION_LIVE_CODE_BENCH_FILE:?}"
@@ -30,7 +50,10 @@ common=(
   WANDB_MODE=disabled KEEP_BEST_CKPT=False MAX_ACTOR_CKPTS_TO_KEEP=0 MAX_CRITIC_CKPTS_TO_KEEP=0
   CODE_REWARD_TIMEOUT=30 CODE_REWARD_MANAGER_TIMEOUT=30
 )
-hydra_overrides=(+data.require_source_uid=true)
+hydra_overrides=(
+  +data.require_source_uid=true
+  +trainer.ray_master_port_range="[$CALIBRATION_TCPSTORE_PORT_MIN,$CALIBRATION_TCPSTORE_PORT_MAX]"
+)
 case "$PHASE" in
  stage1)
   python3 - "${STAGE1_INIT_MODEL_PATH:?}" "${STAGE1_INIT_PROVENANCE_PATH:?}" <<'PY'
