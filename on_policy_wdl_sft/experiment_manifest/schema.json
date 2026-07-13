@@ -35,8 +35,13 @@
     },
     "preflight": {
       "type": "object",
-      "required": ["policy", "receipt_max_age_seconds", "report_root"],
-      "properties": {"receipt_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400}}
+      "required": ["policy", "result_max_age_seconds", "report_root"],
+      "additionalProperties": false,
+      "properties": {
+        "policy": {"type": "string", "minLength": 1},
+        "result_max_age_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "report_root": {"type": "string", "minLength": 1}
+      }
     },
     "calibration_policy": {
       "type": "object",
@@ -45,7 +50,7 @@
         "bootstrap_repetitions_per_phase",
         "acceptance_repetitions_per_phase",
         "validation_deadline_seconds",
-        "calibration_receipt_max_age_seconds",
+        "calibration_result_max_age_seconds",
         "future_skew",
         "roots"
       ],
@@ -54,7 +59,7 @@
         "bootstrap_repetitions_per_phase": {"const": 6},
         "acceptance_repetitions_per_phase": {"const": 3},
         "validation_deadline_seconds": {"const": 1800},
-        "calibration_receipt_max_age_seconds": {"const": 86400},
+        "calibration_result_max_age_seconds": {"const": 86400},
         "future_skew": {"const": 300},
         "roots": {
           "type": "object",

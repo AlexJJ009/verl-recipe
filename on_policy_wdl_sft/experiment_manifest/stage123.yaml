@@ -33,14 +33,14 @@ paths:
   source_train_file: /data-1/dataset/code/verl_rl/kodcode_light_rl_10k_train_rl_format.parquet
 preflight:
   policy: tests/experiment_workflow/fixtures/preflight_policy.json
-  receipt_max_age_seconds: 3600
+  result_max_age_seconds: 3600
   report_root: /data-2/experiment_registry/preflight_reports
 calibration_policy:
   algorithm: stage123_history_conformal_v1
   bootstrap_repetitions_per_phase: 6
   acceptance_repetitions_per_phase: 3
   validation_deadline_seconds: 1800
-  calibration_receipt_max_age_seconds: 86400
+  calibration_result_max_age_seconds: 86400
   future_skew: 300
   roots:
     history: /data-2/experiment_registry/calibration_history/qwen3_1p7b_stage123
@@ -87,37 +87,6 @@ runs:
     run_id: frac25-stage2
   artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
   provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage3.provenance.json
-- id: frac50-stage2
-  chain: frac50_p40_s220_s340
-  fraction: frac50
-  phase: stage2
-  order: 30
-  run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-LAMBDA08-V1
-  final_step: 20
-  tmux_name: stage123_frac50_s2
-  train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_handoff_s2steps20.parquet
-  train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
-  source:
-    type: stage1_checkpoint
-    fraction: frac50
-    handoff_step: 40
-  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
-  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage2.provenance.json
-- id: frac50-stage3
-  chain: frac50_p40_s220_s340
-  fraction: frac50
-  phase: stage3
-  order: 40
-  run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC50_P40_S220_S340-BETA01-V1
-  final_step: 40
-  tmux_name: stage123_frac50_s3
-  train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_s2steps20_s3steps40.parquet
-  train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
-  source:
-    type: stage2_model2
-    run_id: frac50-stage2
-  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340
-  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac50_p40_s220_s340/frac50-stage3.provenance.json
 calibration_workloads:
   stage1:
     datasets:

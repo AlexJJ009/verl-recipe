@@ -19,8 +19,8 @@ with open(provenance_path, encoding="utf-8") as handle:
     provenance = json.load(handle)
 source = provenance.get("source", {})
 if dry_run == "1":
-    if provenance.get("preflight_receipt_sha256") != "dry-run":
-        raise SystemExit("dry-run Stage2 provenance lacks dry-run receipt sentinel")
+    if provenance.get("preflight_result_sha256") != "dry-run":
+        raise SystemExit("dry-run Stage2 provenance lacks dry-run result sentinel")
 elif provenance.get("release_eligible") is not True:
     raise SystemExit("Stage2 provenance is not release eligible")
 if source.get("extracted_model2") != expected_model2:

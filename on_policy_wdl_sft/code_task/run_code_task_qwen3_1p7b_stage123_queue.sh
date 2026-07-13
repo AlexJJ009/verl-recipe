@@ -23,7 +23,7 @@ PY
 }
 manifest_hash=$(manifest_get manifest_sha256)
 export STAGE123_EXPECTED_PROFILE_HASH=$(manifest_get resource_profile.sha256)
-export STAGE123_RECEIPT_MAX_AGE_SECONDS=$(manifest_get preflight.receipt_max_age_seconds)
+export STAGE123_PREFLIGHT_RESULT_MAX_AGE_SECONDS=$(manifest_get preflight.result_max_age_seconds)
 export STAGE123_PREFLIGHT_POLICY=${STAGE123_PREFLIGHT_POLICY:-${REPO_ROOT}/$(manifest_get preflight.policy)}
 export STAGE123_FORMAL_QUEUE_ID=${STAGE123_FORMAL_QUEUE_ID:-$(manifest_get experiment_id)}
 STAGE123_STAGE12_PRODUCER_MODE=0
@@ -72,14 +72,14 @@ record() { printf '%s\t%s\t%s\t%s\t%s\n' "$(date -Is)" "$1" "$2" "$3" "$4" >> "$
 
 write_run_provenance() {
     local output=$1 run_id=$2 run_prefix=$3 train_file=$4 release_eligible=$5 source_json=$6
-    local receipt_path=${STAGE123_PREFLIGHT_RECEIPT:-}
-    python3 - "$output" "$STAGE123_NORMALIZED_MANIFEST" "$receipt_path" "$run_id" "$run_prefix" "$train_file" "$release_eligible" "$source_json" <<'PY'
+    local preflight_result_path=${STAGE123_PREFLIGHT_RESULT:-}
+    python3 - "$output" "$STAGE123_NORMALIZED_MANIFEST" "$preflight_result_path" "$run_id" "$run_prefix" "$train_file" "$release_eligible" "$source_json" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
-out,manifest_path,receipt_path,run_id,prefix,train_file,eligible,source_json=sys.argv[1:]
+out,manifest_path,result_path,run_id,prefix,train_file,eligible,source_json=sys.argv[1:]
 m=json.load(open(manifest_path)); run=next(x for x in m['runs'] if x['id']==run_id)
-receipt_hash=hashlib.sha256(Path(receipt_path).read_bytes()).hexdigest() if receipt_path and Path(receipt_path).is_file() else 'dry-run'
-d={'schema_version':1,'run_id':run_id,'run_prefix':prefix,'manifest_sha256':m['manifest_sha256'],'profile_sha256':m['resource_profile']['sha256'],'train_file':train_file,'train_file_sha256':run['train_file_sha256'],'preflight_receipt_sha256':receipt_hash,'release_eligible':eligible=='true','source':json.loads(source_json)}
+result_hash=hashlib.sha256(Path(result_path).read_bytes()).hexdigest() if result_path and Path(result_path).is_file() else 'dry-run'
+d={'schema_version':1,'run_id':run_id,'run_prefix':prefix,'manifest_sha256':m['manifest_sha256'],'profile_sha256':m['resource_profile']['sha256'],'train_file':train_file,'train_file_sha256':run['train_file_sha256'],'preflight_result_sha256':result_hash,'release_eligible':eligible=='true','source':json.loads(source_json)}
 Path(out).parent.mkdir(parents=True,exist_ok=True); Path(out).write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
 PY
 }
