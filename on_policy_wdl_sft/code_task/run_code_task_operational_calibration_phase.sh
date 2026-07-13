@@ -1,7 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 RAY_STARTED=0
-cleanup() { [ "$RAY_STARTED" = 0 ] || ray stop --force >/dev/null 2>&1 || true; }
+cleanup() {
+  [ "$RAY_STARTED" = 0 ] || python3 - "$RAY_TMPDIR" <<'PY' || true
+import os, signal, sys, time
+root = sys.argv[1]
+owned = []
+for entry in os.scandir('/proc'):
+    if not entry.name.isdigit() or int(entry.name) == os.getpid():
+        continue
+    try:
+        command = open(f'/proc/{entry.name}/cmdline', 'rb').read().replace(b'\0', b' ').decode(errors='replace')
+    except OSError:
+        continue
+    if root in command:
+        owned.append(int(entry.name))
+for pid in owned:
+    try: os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError: pass
+deadline = time.monotonic() + 10
+while time.monotonic() < deadline and any(os.path.exists(f'/proc/{pid}') for pid in owned):
+    time.sleep(0.1)
+for pid in owned:
+    if os.path.exists(f'/proc/{pid}'):
+        try: os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+PY
+}
 trap cleanup EXIT INT TERM
 SANDBOX_DRY_RUN=0
 if [ "${1:-}" = "--sandbox-dry-run" ]; then SANDBOX_DRY_RUN=1; shift; fi
