@@ -67,8 +67,9 @@ for name, low, high in (("Ray worker", ray_min, ray_max), ("TCPStore", store_min
 if max(ray_min, store_min) <= min(ray_max, store_max):
     raise SystemExit("calibration Ray worker and TCPStore port ranges overlap")
 PY
-mkdir -p "$CALIBRATION_OUTPUT_ROOT/ray"
-export RAY_TMPDIR="$CALIBRATION_OUTPUT_ROOT/ray"
+: "${CALIBRATION_RAY_TMPDIR:=$CALIBRATION_OUTPUT_ROOT/ray}"
+mkdir -p "$CALIBRATION_RAY_TMPDIR"
+export RAY_TMPDIR="$CALIBRATION_RAY_TMPDIR"
 ray start --head --port="$CALIBRATION_RAY_HEAD_PORT" --temp-dir="$RAY_TMPDIR" \
   --min-worker-port="$CALIBRATION_RAY_WORKER_PORT_MIN" \
   --max-worker-port="$CALIBRATION_RAY_WORKER_PORT_MAX" \
