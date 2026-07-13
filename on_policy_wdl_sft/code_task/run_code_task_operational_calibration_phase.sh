@@ -85,7 +85,9 @@ if [ "$CALIBRATION_TOTAL_TRAINING_STEPS" != 0 ] || [ "$CALIBRATION_OPTIMIZER_ENA
   echo '{"code":"calibration_training_enabled","message":"calibration must remain zero-step with optimizer disabled","context":{}}' >&2
   exit 2
 fi
-mkdir -p "$CALIBRATION_OUTPUT_ROOT/checkpoints" "$CALIBRATION_OUTPUT_ROOT/logs"
+: "${VERL_FILE_LOGGER_ROOT:=$CALIBRATION_OUTPUT_ROOT/logs/metrics}"
+export VERL_FILE_LOGGER_ROOT
+mkdir -p "$CALIBRATION_OUTPUT_ROOT/checkpoints" "$CALIBRATION_OUTPUT_ROOT/logs" "$VERL_FILE_LOGGER_ROOT"
 common=(
   RUN_PREFIX="CALIBRATION-${PHASE^^}-QWEN3-1P7B-CTX8K"
   CODE_VAL_FILES="['$CALIBRATION_HUMANEVAL_PLUS_FILE','$CALIBRATION_MBPP_PLUS_FILE','$CALIBRATION_LIVE_CODE_BENCH_FILE']"
