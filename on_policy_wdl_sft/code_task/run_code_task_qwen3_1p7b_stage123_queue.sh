@@ -13,6 +13,6 @@ import json,sys
 print(json.dumps(["bash",sys.argv[1]],separators=(",",":")))
 PY
 )
-args=(queue --run-id stage123-primary-queue --state-root "$STAGE123_EXECUTION_STATE_ROOT" --timeout-seconds "$STAGE123_QUEUE_DEADLINE_SECONDS" --command-json "$command_json")
+args=(queue --run-id stage123-primary-queue --state-root "$STAGE123_EXECUTION_STATE_ROOT" --timeout-seconds "$STAGE123_QUEUE_DEADLINE_SECONDS" --recovery-policy "${REPO_ROOT}/config/experiment_execution/stage123_recovery_policy_v1.json" --command-json "$command_json")
 [ "${1:-}" = --resume ] && args+=(--resume)
 exec python3 "${REPO_ROOT}/scripts/experiment_execution_core.py" "${args[@]}"
