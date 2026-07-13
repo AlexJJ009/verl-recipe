@@ -214,6 +214,12 @@ calibration_workloads:
         MBPP+: 378
       submitted_prompt_count: 1379
   stage3:
+    calibration_proxy:
+      artifact_sha256: 516a69cd83677ca132b0fb6a2885fc092956cb65b8925a89040d03b4b7e0c16a
+      hash_algorithm: sorted_relative_path_content_sha256_v1
+      path: /data-1/model_weights/code_task/kodcode_qwen3_1p7b_coldstart_fraction_ctx8k_stage2_p40/frac25/beta01/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1/step_40_s2steps60
+      purpose: pending_stage2_handoff_runtime_resource_proxy
+      rollout_model_parameter_count: 1720567808
     datasets:
     - difficulty_mapping_sha256: 4d6aa67b83fef10d3eabde8751abedcfc52d8024009b3c9ab4c1c425b630d6c2
       difficulty_resolution: unavailable

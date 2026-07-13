@@ -31,6 +31,7 @@ PYTHONPATH="$CALIBRATION_SCORER_PYTHONPATH" LCB_INPUT_OUTPUT_INDEX="$LCB_INPUT_O
 : "${CALIBRATION_RAY_HEAD_PORT:=22000}"
 : "${CALIBRATION_TCPSTORE_PORT_MIN:=35000}"
 : "${CALIBRATION_TCPSTORE_PORT_MAX:=35999}"
+: "${CALIBRATION_OUTPUT_ROOT:?}"
 python3 - "$CALIBRATION_RAY_WORKER_PORT_MIN" "$CALIBRATION_RAY_WORKER_PORT_MAX" "$CALIBRATION_TCPSTORE_PORT_MIN" "$CALIBRATION_TCPSTORE_PORT_MAX" <<'PY'
 import sys
 
@@ -41,7 +42,9 @@ for name, low, high in (("Ray worker", ray_min, ray_max), ("TCPStore", store_min
 if max(ray_min, store_min) <= min(ray_max, store_max):
     raise SystemExit("calibration Ray worker and TCPStore port ranges overlap")
 PY
-ray start --head --port="$CALIBRATION_RAY_HEAD_PORT" \
+mkdir -p "$CALIBRATION_OUTPUT_ROOT/ray"
+export RAY_TMPDIR="$CALIBRATION_OUTPUT_ROOT/ray"
+ray start --head --port="$CALIBRATION_RAY_HEAD_PORT" --temp-dir="$RAY_TMPDIR" \
   --min-worker-port="$CALIBRATION_RAY_WORKER_PORT_MIN" \
   --max-worker-port="$CALIBRATION_RAY_WORKER_PORT_MAX" \
   --include-dashboard=false --disable-usage-stats >/dev/null
@@ -50,7 +53,6 @@ export RAY_ADDRESS="127.0.0.1:$CALIBRATION_RAY_HEAD_PORT"
 : "${CALIBRATION_HUMANEVAL_PLUS_FILE:?}"
 : "${CALIBRATION_MBPP_PLUS_FILE:?}"
 : "${CALIBRATION_LIVE_CODE_BENCH_FILE:?}"
-: "${CALIBRATION_OUTPUT_ROOT:?}"
 : "${CALIBRATION_TOTAL_TRAINING_STEPS:=0}"
 : "${CALIBRATION_OPTIMIZER_ENABLED:=false}"
 if [ "$CALIBRATION_TOTAL_TRAINING_STEPS" != 0 ] || [ "$CALIBRATION_OPTIMIZER_ENABLED" != false ]; then

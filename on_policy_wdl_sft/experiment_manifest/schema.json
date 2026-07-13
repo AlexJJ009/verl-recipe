@@ -173,6 +173,18 @@
         "log2_rollout_model_parameter_count_sum": {"type": "number", "minimum": 1},
         "model_provenance_class": {"enum": ["base_pretrained", "sft_checkpoint", "stage1_model2_handoff", "stage2_model2_handoff", "fixed_model2_joint_rollout"]},
         "model_sources": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/modelSource"}},
+        "calibration_proxy": {
+          "type": "object",
+          "required": ["purpose", "path", "artifact_sha256", "hash_algorithm", "rollout_model_parameter_count"],
+          "additionalProperties": false,
+          "properties": {
+            "purpose": {"const": "pending_stage2_handoff_runtime_resource_proxy"},
+            "path": {"type": "string", "minLength": 1},
+            "artifact_sha256": {"$ref": "#/$defs/sha256"},
+            "hash_algorithm": {"const": "sorted_relative_path_content_sha256_v1"},
+            "rollout_model_parameter_count": {"type": "integer", "minimum": 1}
+          }
+        },
         "datasets": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/datasetDescriptor"}},
         "tokenizer": {
           "type": "object", "required": ["path", "config_sha256", "tokenizer_sha256"], "additionalProperties": false,
