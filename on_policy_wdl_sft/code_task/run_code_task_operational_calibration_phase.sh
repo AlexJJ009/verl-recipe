@@ -16,6 +16,13 @@ print(json.dumps({"ok":True,"phase":phase,"model_provenance_class":workload["mod
   exit 0
 fi
 source "$SCRIPT_DIR/qwen3_1p7b_stage123_resource_profile.sh"
+: "${REPO_PYTHONPATH_ROOT:=/workspace/verl}"
+: "${CODE_EVAL_OFFICIAL_SITE:=/data-1/code_eval_envs/official_site}"
+: "${LCB_REPO_DIR:=/data-1/code_eval_envs/LiveCodeBench}"
+: "${LCB_INPUT_OUTPUT_INDEX:=/data-2/evaluator_assets/livecodebench_cache/index/release_v5_input_output.sqlite}"
+export CALIBRATION_SCORER_PYTHONPATH="$REPO_PYTHONPATH_ROOT:$CODE_EVAL_OFFICIAL_SITE:$LCB_REPO_DIR"
+PYTHONPATH="$CALIBRATION_SCORER_PYTHONPATH" LCB_INPUT_OUTPUT_INDEX="$LCB_INPUT_OUTPUT_INDEX" \
+  python3 "$SCRIPT_DIR/check_official_scorer_dependencies.py" >/dev/null
 : "${CALIBRATION_RAY_WORKER_PORT_MIN:=21000}"
 : "${CALIBRATION_RAY_WORKER_PORT_MAX:=21999}"
 : "${CALIBRATION_RAY_HEAD_PORT:=22000}"

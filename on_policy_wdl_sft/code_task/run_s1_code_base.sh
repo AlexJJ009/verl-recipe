@@ -182,6 +182,7 @@ source "${SCRIPT_DIR}/../ablation_single_model/_common_ablation.sh" \
     +ray_kwargs.ray_init.runtime_env.env_vars.BIGCODEBENCH_MAX_STACK_LIMIT="'${BIGCODEBENCH_MAX_STACK_LIMIT}'" \
     +ray_kwargs.ray_init.runtime_env.env_vars.LCB_INPUT_OUTPUT_INDEX="'${LCB_INPUT_OUTPUT_INDEX:-}'" \
     +ray_kwargs.ray_init.runtime_env.env_vars.LCB_SUBPROCESS_TIMEOUT="'${LCB_SUBPROCESS_TIMEOUT:-25}'" \
+    +ray_kwargs.ray_init.runtime_env.env_vars.PYTHONPATH="'${PYTHONPATH}'" \
     +ray_kwargs.ray_init.runtime_env.env_vars.CALIBRATION_VALIDATION_READY_FILE="'${CALIBRATION_VALIDATION_READY_FILE:-}'" \
     data.seed=${DATA_SEED} \
     data.shuffle=${DATA_SHUFFLE} \
