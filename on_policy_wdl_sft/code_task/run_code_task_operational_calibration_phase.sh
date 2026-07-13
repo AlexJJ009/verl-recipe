@@ -100,6 +100,7 @@ common=(
 hydra_overrides=(
   +data.require_source_uid=true
   +trainer.ray_master_port_range="[$CALIBRATION_TCPSTORE_PORT_MIN,$CALIBRATION_TCPSTORE_PORT_MAX]"
+  +ray_kwargs.ray_init.runtime_env.env_vars.VERL_FILE_LOGGER_ROOT="'$VERL_FILE_LOGGER_ROOT'"
   'trainer.logger=["file"]'
 )
 case "$PHASE" in
