@@ -98,6 +98,7 @@ common=(
 hydra_overrides=(
   +data.require_source_uid=true
   +trainer.ray_master_port_range="[$CALIBRATION_TCPSTORE_PORT_MIN,$CALIBRATION_TCPSTORE_PORT_MAX]"
+  'trainer.logger=["file"]'
 )
 case "$PHASE" in
  stage1)
