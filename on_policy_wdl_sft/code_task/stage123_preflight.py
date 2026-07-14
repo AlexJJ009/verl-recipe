@@ -20,6 +20,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROFILE = SCRIPT_DIR / "qwen3_1p7b_stage123_resource_profile.sh"
 MANIFEST = REPO / "recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml"
 MANIFEST_TOOL = REPO / "scripts/experiment_manifest.py"
+SCORER_PROBE = SCRIPT_DIR / "check_official_scorer_dependencies.py"
 DATA_DIR = Path("/data-1/dataset/code/verl_rl")
 SHARDS = (
     "kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet",
@@ -27,8 +28,8 @@ SHARDS = (
 )
 
 
-def command(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, text=True, capture_output=True, check=False)
+def command(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, text=True, capture_output=True, check=False, env=env)
 
 
 def add(checks: list[dict[str, object]], name: str, ok: bool, detail: object) -> None:
@@ -45,6 +46,26 @@ def sha256(path: Path) -> str:
 
 def now_utc() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def scorer_dependency_check() -> tuple[bool, dict[str, object]]:
+    scorer_pythonpath = os.pathsep.join((
+        "/workspace/verl",
+        "/data-1/code_eval_envs/official_site",
+        "/data-1/code_eval_envs/LiveCodeBench",
+    ))
+    environment = {
+        **os.environ,
+        "PYTHONPATH": scorer_pythonpath,
+        "LCB_INPUT_OUTPUT_INDEX": "/data-2/evaluator_assets/livecodebench_cache/index/release_v5_input_output.sqlite",
+    }
+    result = command(sys.executable, str(SCORER_PROBE), "--pythonpath", scorer_pythonpath, env=environment)
+    payload_text = result.stdout if result.returncode == 0 else result.stderr
+    try:
+        payload = json.loads(payload_text)
+    except json.JSONDecodeError:
+        payload = {"ok": False, "failure_class": "dependency_failure", "error": payload_text.strip() or "scorer probe returned invalid JSON"}
+    return result.returncode == 0 and payload.get("ok") is True, payload
 
 
 def implementation_tree_sha256() -> tuple[str | None, str | None]:
@@ -104,6 +125,8 @@ def main() -> int:
     compat = Path("/data-1/verl07/verl")
     add(checks, "compat_symlink", compat.resolve() == Path("/data-1/code/verl"), str(compat.resolve()))
     add(checks, "checkpoint_mount", host_facts.get("mounts", {}).get("checkpoint_mount") == "/data-2/checkpoints", host_facts.get("mounts", {}))
+    scorer_ok, scorer_detail = scorer_dependency_check()
+    add(checks, "scorer_dependencies", scorer_ok, scorer_detail)
 
     profile = command(
         "bash",
