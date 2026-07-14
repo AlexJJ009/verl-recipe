@@ -20,6 +20,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$BATCH_MANIFEST" ] || {
+    if [ "${DRY_RUN:-0}" = 1 ]; then
+        exec python3 "${REPO_ROOT}/scripts/stage123_dry_run_compat.py" \
+            --manifest "${STAGE123_MANIFEST:-${REPO_ROOT}/recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml}" \
+            --manifest-tool "${STAGE123_MANIFEST_TOOL:-${REPO_ROOT}/scripts/experiment_manifest.py}" \
+            --python "${STAGE123_MANIFEST_PYTHON:-python3}" \
+            --scratch-root "${STAGE123_SCRATCH_ROOT:-/data-1/tmp/verl_agent_scratch/qwen3_1p7b_stage123}"
+    fi
     echo "ERROR: EXPERIMENT_BATCH_MANIFEST or --batch-manifest is required" >&2
     exit 2
 }
