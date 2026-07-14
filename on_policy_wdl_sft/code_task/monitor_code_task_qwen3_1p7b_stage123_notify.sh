@@ -7,9 +7,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 export STAGE123_MANIFEST=${STAGE123_MANIFEST:-${REPO_ROOT}/recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml}
 export STAGE123_MANIFEST_TOOL=${STAGE123_MANIFEST_TOOL:-${REPO_ROOT}/scripts/experiment_manifest.py}
 export STAGE123_MANIFEST_PYTHON=${STAGE123_MANIFEST_PYTHON:-python3}
-manifest_json=$(mktemp)
-trap 'rm -f "$manifest_json"' EXIT
-"$STAGE123_MANIFEST_PYTHON" "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format json > "$manifest_json"
+manifest_json=${EXPERIMENT_BATCH_MANIFEST:-}
+if [ -z "$manifest_json" ]; then
+    manifest_json=$(mktemp)
+    trap 'rm -f "$manifest_json"' EXIT
+    "$STAGE123_MANIFEST_PYTHON" "$STAGE123_MANIFEST_TOOL" render "$STAGE123_MANIFEST" --format json > "$manifest_json"
+fi
 
 manifest_value() { "$STAGE123_MANIFEST_PYTHON" - "$manifest_json" "$1" <<'PY'
 import json,sys
