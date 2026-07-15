@@ -115,7 +115,7 @@ data=json.loads(provenance.read_text())
 if Path(data.get("target_dir", "")).resolve() != model:
     raise SystemExit("Stage1 calibration provenance target mismatch")
 PY
-  env "${common[@]}" INIT_MODEL_PATH="${STAGE1_INIT_MODEL_PATH:?}" WDL_SFT_BETA=0.1 bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
+  env "${common[@]}" INIT_MODEL_PATH="${STAGE1_INIT_MODEL_PATH:?}" CODE_TRAIN_FILE="${CALIBRATION_TRAIN_FILE:?}" TRAIN_FILE="$CALIBRATION_TRAIN_FILE" WDL_SFT_BETA=0.1 DATA_SHUFFLE=False bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
   ;;
  stage2)
   : "${CALIBRATION_STAGE1_CKPT_DIR:?}" "${CALIBRATION_STAGE1_MODEL2:?}"

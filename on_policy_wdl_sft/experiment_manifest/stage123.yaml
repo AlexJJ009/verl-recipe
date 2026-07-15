@@ -56,6 +56,28 @@ release:
   registry_db: /data-1/experiment_registry/experiment_registry.sqlite
   wandb_root: /data-1/wandb_runs
 runs:
+- id: frac25-stage1-control
+  chain: frac25_p40_s220_s340
+  fraction: frac25
+  phase: stage1
+  order: 0
+  run_prefix: CODE-S1-CONTROL-QWEN3-1P7B-STAGE123-FRAC25_P40_S220_S340-BETA01-V1
+  final_step: 60
+  effective_final_step: 100
+  tmux_name: stage123_frac25_s1_control
+  train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps60.parquet
+  train_file_sha256: a73593277c2997b579e64fa786a93a504a086465b20e7965bfd7724eabbf65f4
+  source:
+    type: stage1_actor_checkpoint
+    fraction: frac25
+    beta: 0.1
+    handoff_step: 40
+    run_prefix: ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1
+    actor_path: /data-2/checkpoints/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1_1783425947/global_step_40/actor
+    model_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/beta01/stage1_model2
+  topology: stage1
+  artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
+  provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage1-control.provenance.json
 - id: frac25-stage2
   chain: frac25_p40_s220_s340
   fraction: frac25
@@ -70,6 +92,10 @@ runs:
     type: stage1_checkpoint
     fraction: frac25
     handoff_step: 40
+    beta: 0.1
+    run_prefix: ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1
+    checkpoint_root: /data-2/checkpoints/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1_1783425947
+    model2_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/beta01/stage1_model2
   artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340
   provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123/frac25_p40_s220_s340/frac25-stage2.provenance.json
 - id: frac25-stage3

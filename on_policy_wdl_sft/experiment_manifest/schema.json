@@ -89,7 +89,7 @@
         "type": "object",
         "required": ["id", "chain", "fraction", "phase", "order", "run_prefix", "final_step", "tmux_name", "train_file", "train_file_sha256", "source", "artifact_dir", "provenance_file"],
         "properties": {
-          "phase": {"enum": ["stage2", "stage3"]},
+          "phase": {"enum": ["stage1", "stage2", "stage3"]},
           "final_step": {"type": "integer", "minimum": 1},
           "train_file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         }
