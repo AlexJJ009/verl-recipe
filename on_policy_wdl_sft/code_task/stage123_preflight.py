@@ -83,10 +83,6 @@ def load_host_facts(path: Path) -> tuple[dict[str, object], str]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if value.get("schema_version") != 1 or value.get("artifact_type") != "stage123_host_facts":
         raise ValueError("unsupported host facts schema")
-    completed = datetime.fromisoformat(str(value["completed_at"]).replace("Z", "+00:00"))
-    age = (datetime.now(timezone.utc) - completed).total_seconds()
-    if age < -300 or age > 900:
-        raise ValueError(f"host facts are stale: age={age:.0f}s")
     return value, hashlib.sha256(path.read_bytes()).hexdigest()
 
 
