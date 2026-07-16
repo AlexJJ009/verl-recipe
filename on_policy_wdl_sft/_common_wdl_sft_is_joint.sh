@@ -269,8 +269,10 @@ n_resp_per_prompt=${ROLLOUT_N:-8}
 temperature=${TEMPERATURE:-1.0}
 top_p=${TOP_P:-1.0}
 top_k=${TOP_K:--1}
+rollout_do_sample=${ROLLOUT_DO_SAMPLE:-True}
 val_temperature=${VAL_TEMPERATURE:-$temperature}
 val_top_p=${VAL_TOP_P:-0.95}
+val_do_sample=${VAL_DO_SAMPLE:-True}
 VAL_N=${VAL_N:-3}
 
 sp_size=${SP_SIZE:-1}
@@ -432,11 +434,11 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.response_length=${max_response_length} \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
     +actor_rollout_ref.rollout.micro_batch_size=${GENERATION_MICRO_BATCH_SIZE} \
-    actor_rollout_ref.rollout.do_sample=True \
+    actor_rollout_ref.rollout.do_sample=${rollout_do_sample} \
     actor_rollout_ref.rollout.val_kwargs.temperature=${val_temperature} \
     actor_rollout_ref.rollout.val_kwargs.top_p=${val_top_p} \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
-    actor_rollout_ref.rollout.val_kwargs.do_sample=True \
+    actor_rollout_ref.rollout.val_kwargs.do_sample=${val_do_sample} \
     actor_rollout_ref.rollout.val_kwargs.n=${VAL_N} \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILES}" \

@@ -1,8 +1,8 @@
 schema_version: 1
 experiment_id: qwen3_1p7b_stage123_p40
 resource_profile:
-  name: l40s8x46g_ram582g_cpu176_ctx9k_v1
-  sha256: d9b6a36dd9fcc4307f7b502e5511989e60c1a257f57c9ac70574acaf12eee2b5
+  name: l40s8x46g_ram582g_cpu176_ctx9k_v2
+  sha256: d687caf1146c9b32a2f51dcf71e876cf5f987fe62b4db69f1043caaff52ddbe8
   max_response_length: 8192
 semantics:
   formal_validation_scope: full
@@ -14,7 +14,7 @@ semantics:
     HumanEval+: e317c71511c7b6b3df98ef88bf409644bc000e11a0621a57cdc944ccb82a9fab
     MBPP+: 3221e7f53c88bfbd91d788fb7bcb37168fb088fa504fddf12b9126c2147312d2
     LiveCodeBench: fe7d2bfe2779bcf106492347ca173e30b9220c15c1b8783949d35edcd93a43d1
-  sampled_decoding_semantic_hash: 24bd4578745b44d73266db42abf38ddf622721bb256a3efd89feca18fe537d35
+  sampled_decoding_semantic_hash: 8860e3bbcbe940ddf8d1e3dfce1a66fc584e2307eeca136f0788730d8d74b89e
   scorer_hash: 504ca29ad5431f2b669e7507486957e2ff0cce589b96b98a7d7e8f071b52ee4e
   timeout_policy_hash: 952f3cc183d22759cc315be8888dd627f9274af033c95e7260d0cd5aae14b6a9
   phase_topology_hashes:

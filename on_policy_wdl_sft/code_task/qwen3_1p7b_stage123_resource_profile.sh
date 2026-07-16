@@ -2,7 +2,7 @@
 # Shared L40S resource profile for every phase of the Qwen3-1.7B Stage123 chain.
 set -euo pipefail
 
-export STAGE123_RESOURCE_PROFILE_NAME=${STAGE123_RESOURCE_PROFILE_NAME:-l40s8x46g_ram582g_cpu176_ctx9k_v1}
+export STAGE123_RESOURCE_PROFILE_NAME=${STAGE123_RESOURCE_PROFILE_NAME:-l40s8x46g_ram582g_cpu176_ctx9k_v2}
 export MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH:-1024}
 export MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-8192}
 export ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-9216}
@@ -17,7 +17,13 @@ export ROLLOUT_N=${ROLLOUT_N:-8}
 export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLLOUT_N))}
 export TEST_FREQ=${TEST_FREQ:-5}
 export SAVE_FREQ=${SAVE_FREQ:-5}
+export TEMPERATURE=${TEMPERATURE:-1.0}
+export TOP_P=${TOP_P:-1.0}
+export ROLLOUT_DO_SAMPLE=${ROLLOUT_DO_SAMPLE:-True}
 export VAL_N=${VAL_N:-1}
+export VAL_TEMPERATURE=${VAL_TEMPERATURE:-0.2}
+export VAL_TOP_P=${VAL_TOP_P:-0.95}
+export VAL_DO_SAMPLE=${VAL_DO_SAMPLE:-True}
 export VAL_BEFORE_TRAIN=${VAL_BEFORE_TRAIN:-True}
 export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
 export CODE_REWARD_NUM_WORKERS=${CODE_REWARD_NUM_WORKERS:-8}
@@ -50,7 +56,8 @@ stage123_profile_fields() {
         LOG_PROB_MAX_TOKEN_LEN_PER_GPU ACTOR_PPO_MAX_TOKEN_LEN \
         GENERATION_MICRO_BATCH_SIZE LOG_PROB_MICRO_BATCH_SIZE \
         ROLLOUT_GPU_MEMORY_UTILIZATION TRAIN_PROMPT_BSZ ROLLOUT_N \
-        TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ VAL_N VAL_BEFORE_TRAIN \
+        TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ TEMPERATURE TOP_P ROLLOUT_DO_SAMPLE \
+        VAL_N VAL_TEMPERATURE VAL_TOP_P VAL_DO_SAMPLE VAL_BEFORE_TRAIN \
         TRAIN_MAX_SAMPLES CODE_REWARD_NUM_WORKERS CODE_REWARD_MAX_CONCURRENCY_PER_WORKER \
         ROLLOUT_AGENT_NUM_WORKERS CODE_REWARD_TIMEOUT \
         CODE_REWARD_MANAGER_TIMEOUT CODE_REWARD_STDIN_CASE_TIMEOUT \
@@ -104,6 +111,13 @@ stage123_validate_profile() {
     [ "$LOG_PROB_MAX_TOKEN_LEN_PER_GPU" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$ACTOR_PPO_MAX_TOKEN_LEN" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$TRAIN_PROMPT_MINI_BSZ" = $((TRAIN_PROMPT_BSZ * ROLLOUT_N)) ] || return 1
+    [ "$TEMPERATURE" = 1.0 ] || { echo "ERROR: Stage123 rollout temperature must equal 1.0" >&2; return 1; }
+    [ "$TOP_P" = 1.0 ] || { echo "ERROR: Stage123 rollout top_p must equal 1.0" >&2; return 1; }
+    [ "$ROLLOUT_DO_SAMPLE" = True ] || { echo "ERROR: Stage123 rollout do_sample must equal True" >&2; return 1; }
+    [ "$VAL_TEMPERATURE" = 0.2 ] || { echo "ERROR: Stage123 validation temperature must equal 0.2" >&2; return 1; }
+    [ "$VAL_TOP_P" = 0.95 ] || { echo "ERROR: Stage123 validation top_p must equal 0.95" >&2; return 1; }
+    [ "$VAL_DO_SAMPLE" = True ] || { echo "ERROR: Stage123 validation do_sample must equal True" >&2; return 1; }
+    [ "$VAL_N" = 1 ] || { echo "ERROR: Stage123 validation n must equal 1" >&2; return 1; }
     [ "$CODE_REWARD_NUM_WORKERS" -eq 8 ] || { echo "ERROR: Stage123 reward workers must equal 8" >&2; return 1; }
     [ "$CODE_REWARD_MAX_CONCURRENCY_PER_WORKER" -eq 4 ] || { echo "ERROR: Stage123 per-worker reward concurrency must equal 4" >&2; return 1; }
     [ "$ROLLOUT_AGENT_NUM_WORKERS" -eq 64 ] || { echo "ERROR: Stage123 full-validation profile requires 64 agent workers" >&2; return 1; }
