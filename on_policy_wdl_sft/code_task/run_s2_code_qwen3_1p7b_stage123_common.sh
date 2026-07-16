@@ -7,4 +7,20 @@ source "${SCRIPT_DIR}/qwen3_1p7b_stage123_resource_profile.sh"
 source "${SCRIPT_DIR}/stage123_manifest_gate.sh"
 stage123_require_formal_admission "$STAGE123_RUN_ID"
 stage123_print_profile STAGE2
-exec bash "${SCRIPT_DIR}/run_s2_code_kodcode_qwen3_1p7b_instruct_ctx8k_p40_common.sh" "$@"
+
+export RAY_TMPDIR="${STAGE123_RAY_TMPDIR:-/tmp/stage123-ray-${STAGE123_RUN_ID}}"
+cleanup_stage123_ray() {
+    ray stop --force >/dev/null 2>&1 || true
+    rm -rf "$RAY_TMPDIR"
+}
+trap cleanup_stage123_ray EXIT
+rm -rf "$RAY_TMPDIR"
+ray start --head --port=22000 --min-worker-port=21000 --max-worker-port=21999 \
+  --temp-dir="$RAY_TMPDIR" --include-dashboard=false --disable-usage-stats >/dev/null
+export RAY_ADDRESS="127.0.0.1:22000"
+
+set +e
+bash "${SCRIPT_DIR}/run_s2_code_kodcode_qwen3_1p7b_instruct_ctx8k_p40_common.sh" "$@"
+status=$?
+set -e
+exit "$status"

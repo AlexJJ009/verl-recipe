@@ -41,4 +41,20 @@ export CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE=${CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE:-
 export CODE_VAL_FILES=${CODE_VAL_FILES:-"['/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet','/data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet','$CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE']"}
 export TEST_FILES="$CODE_VAL_FILES"
 stage123_print_profile STAGE3
-exec bash "${SCRIPT_DIR}/run_s1_code_base.sh" "$@"
+
+export RAY_TMPDIR="${STAGE123_RAY_TMPDIR:-/tmp/stage123-ray-${STAGE123_RUN_ID}}"
+cleanup_stage123_ray() {
+    ray stop --force >/dev/null 2>&1 || true
+    rm -rf "$RAY_TMPDIR"
+}
+trap cleanup_stage123_ray EXIT
+rm -rf "$RAY_TMPDIR"
+ray start --head --port=22000 --min-worker-port=21000 --max-worker-port=21999 \
+  --temp-dir="$RAY_TMPDIR" --include-dashboard=false --disable-usage-stats >/dev/null
+export RAY_ADDRESS="127.0.0.1:22000"
+
+set +e
+bash "${SCRIPT_DIR}/run_s1_code_base.sh" "$@"
+status=$?
+set -e
+exit "$status"

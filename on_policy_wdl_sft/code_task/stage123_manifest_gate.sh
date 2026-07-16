@@ -20,6 +20,12 @@ PY
 stage123_require_formal_admission() {
     local run_id=${1:?run id required}
     [ "${DRY_RUN:-0}" = 1 ] && return 0
+    if [ -n "${STAGE123_TREATMENT_REUSE_ADMISSION:-}" ]; then
+        python3 "$STAGE123_GATE_REPO_ROOT/scripts/stage123_control_reuse.py" validate-treatment \
+            --admission "$STAGE123_TREATMENT_REUSE_ADMISSION" --run-id "$run_id" >/dev/null
+        printf 'authorized treatment-only admission valid for %s\n' "$run_id"
+        return 0
+    fi
     : "${STAGE123_ADMISSION_BUNDLE:?STAGE123_ADMISSION_BUNDLE required}"
     python3 "$STAGE123_GATE_REPO_ROOT/scripts/execution_results.py" admission validate \
         --bundle "$STAGE123_ADMISSION_BUNDLE" --require-accepted --repo-root "$STAGE123_GATE_REPO_ROOT" >/dev/null
