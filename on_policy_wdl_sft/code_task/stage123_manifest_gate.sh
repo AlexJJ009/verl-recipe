@@ -20,6 +20,15 @@ PY
 stage123_require_formal_admission() {
     local run_id=${1:?run id required}
     [ "${DRY_RUN:-0}" = 1 ] && return 0
+    if [ -n "${STAGE123_MATRIX_ADMISSION:-}" ]; then
+        python3 "$STAGE123_GATE_REPO_ROOT/scripts/stage123_matrix_admission.py" validate \
+            --admission "$STAGE123_MATRIX_ADMISSION" \
+            --run-id "$run_id" \
+            --repo-root "$STAGE123_GATE_REPO_ROOT" >/dev/null
+        stage123_check_machine
+        printf 'immutable matrix admission valid for %s\n' "$run_id"
+        return 0
+    fi
     if [ -n "${STAGE123_BATCH_ADMISSION_RECORD:-}" ]; then
         : "${STAGE123_ADMISSION_BUNDLE:?STAGE123_ADMISSION_BUNDLE required}"
         : "${STAGE123_BATCH_ADMISSION_RECORD_SHA256:?STAGE123_BATCH_ADMISSION_RECORD_SHA256 required}"
