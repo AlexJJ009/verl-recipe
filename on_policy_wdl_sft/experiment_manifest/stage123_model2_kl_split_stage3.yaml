@@ -1,0 +1,136 @@
+base_manifest: recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml
+experiment_id: qwen3_1p7b_stage123_model2_kl_split_stage3_v1
+resource_profile:
+  name: l40s8x46g_ram582g_cpu176_ctx9k_v2_val_n3
+  sha256: d7dc9c7a01f09ed8042839a95bb67dc2df31db994e28fec3a21646483fa33de7
+  max_response_length: 8192
+semantics:
+  sampled_decoding_semantic_hash: f80f43bd7a336f929812e1cc966c984c52721599ca3d19443735d8cb68dba790
+paths:
+  artifact_root: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  do_sample: true
+  primary_metric: val-core/model2/HumanEval+/acc/mean@3
+  secondary_metrics: [acc/pass@3, acc/std@3]
+hypotheses:
+  primary: model2_only_kl_improves_stage2_model2_and_persists_into_model2_stage3
+  secondary: observe_model1_joint_training_behavior_and_indirect_response_to_model2_kl
+decision_policy:
+  primary_endpoint: stage2_final_step20_model2_macro_mean_at_3
+  benchmark_macro: [HumanEval+, MBPP+, LiveCodeBench]
+  comparison: model2_kl_minus_no_kl
+  minimum_effect_pp: 1.0
+  confidence_interval: paired_task_bootstrap_95
+  positive_rule: delta_at_least_minimum_and_ci_lower_above_zero_and_no_dataset_regression_over_1pp
+  harmful_rule: delta_at_most_negative_minimum_or_two_of_three_datasets_regress_over_1pp
+  otherwise: inconclusive
+monitor:
+  name: stage123_model2_kl_split_stage3_monitor
+release:
+  run_group: qwen3_1p7b_stage123_model2_kl_split_stage3_v1
+runs:
+  - id: frac25-stage2-nokl
+    chain: frac25_p40_s220_nokl_split_s3_v1
+    fraction: frac25
+    phase: stage2
+    order: 10
+    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC25-NOKL-SPLIT-S3-V1
+    final_step: 20
+    tmux_name: stage123_split_s2_nokl
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet
+    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+    source:
+      type: stage1_checkpoint
+      fraction: frac25
+      beta: 0.1
+      handoff_step: 40
+      run_prefix: ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1
+      checkpoint_root: /data-2/checkpoints/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1_1783425947
+      model2_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123_v16/frac25_p40_s220_s340_v16/beta01/stage1_model2
+    validation_views: [model1, model2]
+    submodel_kl: {enabled: false, model1_enabled: false, model1_coef: 0.0, model2_enabled: false, model2_coef: 0.0}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl/frac25-stage2-nokl.provenance.json
+  - id: frac25-stage3-nokl-model1
+    chain: frac25_p40_s220_nokl_split_s3_v1
+    fraction: frac25
+    phase: stage3
+    order: 30
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25-NOKL-MODEL1-V1
+    final_step: 40
+    tmux_name: stage123_split_s3_nokl_m1
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_submodel, run_id: frac25-stage2-nokl, submodel: model1}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl/frac25-stage3-nokl-model1.provenance.json
+  - id: frac25-stage3-nokl-model2
+    chain: frac25_p40_s220_nokl_split_s3_v1
+    fraction: frac25
+    phase: stage3
+    order: 50
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25-NOKL-MODEL2-V1
+    final_step: 40
+    tmux_name: stage123_split_s3_nokl_m2
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_submodel, run_id: frac25-stage2-nokl, submodel: model2}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/nokl/frac25-stage3-nokl-model2.provenance.json
+  - id: frac25-stage2-m2kl
+    chain: frac25_p40_s220_m2kl_split_s3_v1
+    fraction: frac25
+    phase: stage2
+    order: 20
+    run_prefix: CODE-S2-QWEN3-1P7B-STAGE123-FRAC25-M2KL-SPLIT-S3-V1
+    final_step: 20
+    tmux_name: stage123_split_s2_m2kl
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps20.parquet
+    train_file_sha256: 160be1866e6c1dc439dcfbd594b54324f000f1f48db1f6a0fc88cf227c628dab
+    source:
+      type: stage1_checkpoint
+      fraction: frac25
+      beta: 0.1
+      handoff_step: 40
+      run_prefix: ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1
+      checkpoint_root: /data-2/checkpoints/ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1_1783425947
+      model2_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123_v16/frac25_p40_s220_s340_v16/beta01/stage1_model2
+    validation_views: [model1, model2]
+    submodel_kl:
+      enabled: true
+      model1_enabled: false
+      model1_coef: 0.0
+      model2_enabled: true
+      model2_coef: 0.01
+      model2_ref_path: /data-2/model_weights/code_task/qwen3_1p7b_stage123_v16/frac25_p40_s220_s340_v16/beta01/stage1_model2
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl/frac25-stage2-m2kl.provenance.json
+  - id: frac25-stage3-m2kl-model1
+    chain: frac25_p40_s220_m2kl_split_s3_v1
+    fraction: frac25
+    phase: stage3
+    order: 40
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25-M2KL-MODEL1-V1
+    final_step: 40
+    tmux_name: stage123_split_s3_m2kl_m1
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_submodel, run_id: frac25-stage2-m2kl, submodel: model1}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl/frac25-stage3-m2kl-model1.provenance.json
+  - id: frac25-stage3-m2kl-model2
+    chain: frac25_p40_s220_m2kl_split_s3_v1
+    fraction: frac25
+    phase: stage3
+    order: 60
+    run_prefix: CODE-S3-QWEN3-1P7B-STAGE123-FRAC25-M2KL-MODEL2-V1
+    final_step: 40
+    tmux_name: stage123_split_s3_m2kl_m2
+    train_file: /data-1/dataset/code/verl_rl/kodcode_stage3_after_s2_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_s2steps20_s3steps40.parquet
+    train_file_sha256: deb0c223f643e749862c0ca848b1d57a7117b45658c996caab4ad5087039ea15
+    source: {type: stage2_submodel, run_id: frac25-stage2-m2kl, submodel: model2}
+    artifact_dir: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl
+    provenance_file: /data-2/model_weights/code_task/qwen3_1p7b_stage123_model2_kl_split_stage3_v1/m2kl/frac25-stage3-m2kl-model2.provenance.json

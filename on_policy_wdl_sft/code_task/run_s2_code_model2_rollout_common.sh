@@ -359,6 +359,7 @@ fi
 
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../staged_v1/_run_stage2_model2_rollout_common.sh" \
+    trainer.joint_validation_views="${JOINT_VALIDATION_VIEWS:-[model2]}" \
     +reward.timeout=${CODE_REWARD_MANAGER_TIMEOUT} \
     reward.num_workers=${CODE_REWARD_NUM_WORKERS} \
     reward.max_concurrency_per_worker=${CODE_REWARD_MAX_CONCURRENCY_PER_WORKER} \

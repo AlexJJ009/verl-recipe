@@ -7,14 +7,16 @@ source "${SCRIPT_DIR}/qwen3_1p7b_stage123_resource_profile.sh"
 source "${SCRIPT_DIR}/stage123_manifest_gate.sh"
 stage123_require_formal_admission "$STAGE123_RUN_ID"
 : "${RUN_PREFIX:?}"
-: "${STAGE2_MODEL2_PATH:?}"
+: "${STAGE2_SUBMODEL:=model2}"
+: "${STAGE2_MODEL_PATH:=${STAGE2_MODEL2_PATH:-}}"
+: "${STAGE2_MODEL_PATH:?}"
 : "${STAGE2_PROVENANCE_FILE:?}"
 [ -f "$STAGE2_PROVENANCE_FILE" ] || { echo "ERROR: missing Stage2 provenance" >&2; exit 1; }
-python3 - "$STAGE2_PROVENANCE_FILE" "$STAGE2_MODEL2_PATH" "${DRY_RUN:-0}" <<'PY' || {
+python3 - "$STAGE2_PROVENANCE_FILE" "$STAGE2_MODEL_PATH" "$STAGE2_SUBMODEL" "${DRY_RUN:-0}" <<'PY' || {
 import json
 import sys
 
-provenance_path, expected_model2, dry_run = sys.argv[1:]
+provenance_path, expected_model, submodel, dry_run = sys.argv[1:]
 with open(provenance_path, encoding="utf-8") as handle:
     provenance = json.load(handle)
 source = provenance.get("source", {})
@@ -23,13 +25,13 @@ if dry_run == "1":
         raise SystemExit("dry-run Stage2 provenance lacks dry-run result sentinel")
 elif provenance.get("release_eligible") is not True:
     raise SystemExit("Stage2 provenance is not release eligible")
-if source.get("extracted_model2") != expected_model2:
-    raise SystemExit("Stage2 extracted model2 path mismatch")
+if source.get(f"extracted_{submodel}") != expected_model:
+    raise SystemExit(f"Stage2 extracted {submodel} path mismatch")
 PY
     echo "ERROR: Stage3 provenance mismatch" >&2
     exit 1
 }
-export INIT_MODEL_PATH="$STAGE2_MODEL2_PATH"
+export INIT_MODEL_PATH="$STAGE2_MODEL_PATH"
 export WDL_SFT_BETA=${WDL_SFT_BETA:-0.1}
 export LOSS_MODE=${LOSS_MODE:-wdl_sft}
 export LR=${LR:-5e-7}

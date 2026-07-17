@@ -117,7 +117,10 @@ stage123_validate_profile() {
     [ "$VAL_TEMPERATURE" = 0.2 ] || { echo "ERROR: Stage123 validation temperature must equal 0.2" >&2; return 1; }
     [ "$VAL_TOP_P" = 0.95 ] || { echo "ERROR: Stage123 validation top_p must equal 0.95" >&2; return 1; }
     [ "$VAL_DO_SAMPLE" = True ] || { echo "ERROR: Stage123 validation do_sample must equal True" >&2; return 1; }
-    [ "$VAL_N" = 1 ] || { echo "ERROR: Stage123 validation n must equal 1" >&2; return 1; }
+    [ "$VAL_N" = "${STAGE123_EXPECTED_VAL_N:-1}" ] || {
+        echo "ERROR: Stage123 validation n must equal ${STAGE123_EXPECTED_VAL_N:-1}" >&2
+        return 1
+    }
     [ "$CODE_REWARD_NUM_WORKERS" -eq 8 ] || { echo "ERROR: Stage123 reward workers must equal 8" >&2; return 1; }
     [ "$CODE_REWARD_MAX_CONCURRENCY_PER_WORKER" -eq 4 ] || { echo "ERROR: Stage123 per-worker reward concurrency must equal 4" >&2; return 1; }
     [ "$ROLLOUT_AGENT_NUM_WORKERS" -eq 64 ] || { echo "ERROR: Stage123 full-validation profile requires 64 agent workers" >&2; return 1; }
