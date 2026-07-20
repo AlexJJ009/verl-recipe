@@ -43,14 +43,29 @@ from verl.utils.reward_score import math_verify as verl_math_verify
 
 
 def compute_format_telemetry(solution_str: str) -> dict[str, bool]:
-    think_open = solution_str.count("<think>")
-    think_close = solution_str.count("</think>")
-    answer_open = solution_str.count("<answer>")
-    answer_close = solution_str.count("</answer>")
+    think_matches = list(re.finditer(r"<think>(.*?)</think>", solution_str, re.DOTALL))
+    answer_matches = list(re.finditer(r"<answer>(.*?)</answer>", solution_str, re.DOTALL))
+    think_complete = solution_str.count("<think>") == 1 and solution_str.count("</think>") == 1 and len(think_matches) == 1
+    answer_complete = solution_str.count("<answer>") == 1 and solution_str.count("</answer>") == 1 and len(answer_matches) == 1
+    think_nonempty = think_complete and bool(think_matches[0].group(1).strip())
+    format_ordered = (
+        think_complete
+        and answer_complete
+        and think_matches[0].start() < think_matches[0].end() <= answer_matches[0].start() < answer_matches[0].end()
+    )
     return {
-        "think_complete": think_open == 1 and think_close == 1 and solution_str.index("<think>") < solution_str.index("</think>"),
-        "answer_complete": answer_open == 1 and answer_close == 1 and solution_str.index("<answer>") < solution_str.index("</answer>"),
+        "think_nonempty": think_nonempty,
+        "think_complete": think_complete,
+        "answer_complete": answer_complete,
+        "format_ordered": format_ordered,
     }
+
+
+def extract_answer_body(text: str) -> Optional[str]:
+    matches = list(re.finditer(r"<answer>(.*?)</answer>", text, re.DOTALL))
+    if len(matches) != 1:
+        return None
+    return matches[0].group(1).strip()
 
 
 def verify_with_latex(pred: str, gold: str) -> Optional[bool]:
@@ -168,13 +183,15 @@ def compute_score_latex_verify(
 
     format_telemetry = compute_format_telemetry(solution_str)
 
-    # Extract predicted answer for logging
-    pred = extract_boxed_answer(solution_str)
+    answer_body = extract_answer_body(solution_str)
+
+    # A boxed expression is a valid final answer only inside <answer>.
+    pred = extract_boxed_answer(answer_body or "")
     if pred is None:
         pred = '[NO_BOXED]'
 
     # Try LaTeX semantic verification first
-    latex_correct = verify_with_latex(solution_str, ground_truth)
+    latex_correct = verify_with_latex(answer_body or "", ground_truth)
 
     # If LaTeX verification succeeded, use its result
     if latex_correct is not None:
@@ -183,7 +200,7 @@ def compute_score_latex_verify(
     else:
         # Fallback 1: Try verl's math_verify
         try:
-            verl_score = verl_math_verify.compute_score(solution_str, ground_truth)
+            verl_score = verl_math_verify.compute_score(answer_body or "", ground_truth)
             correct = (verl_score > 0)
             verification_method = "verl_math_verify"
         except Exception:
@@ -203,31 +220,20 @@ def compute_score_latex_verify(
         if not correct and verification_method == "verl_math_verify_error" and pred == '[NO_BOXED]':
             verification_method = "no_answer"
 
-    # Reward Logic:
-    # 1. No EOS → Always wrong (format error)
-    # 2. Has EOS + Wrong Answer → Wrong
-    # 3. Has EOS + Correct Answer → Correct
-    if not has_eos:
-        reward = -1.0
-        final_correct = False
-    elif correct:
-        reward = 1.0
-        final_correct = True
-    else:
-        reward = -1.0
-        final_correct = False
-
     boxed_extraction_success = pred != '[NO_BOXED]'
     reward_grader_success = verification_method not in {"verl_math_verify_error", "no_answer"}
     format_contract_success = all(
         (
+            format_telemetry["think_nonempty"],
             format_telemetry["think_complete"],
             format_telemetry["answer_complete"],
+            format_telemetry["format_ordered"],
             boxed_extraction_success,
-            reward_grader_success,
             has_eos,
         )
     )
+    final_correct = bool(correct and format_contract_success)
+    reward = 1.0 if final_correct else -1.0
 
     return {
         "score": reward,

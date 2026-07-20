@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 
 ANSWER_RE = re.compile(r"<answer>(?P<body>.*?)</answer>", re.DOTALL | re.IGNORECASE)
+THINK_RE = re.compile(r"<think>(?P<body>.*?)</think>", re.DOTALL | re.IGNORECASE)
 FENCED_PY_RE = re.compile(r"```(?:python|py)\s*\n(?P<code>.*?)```", re.DOTALL | re.IGNORECASE)
 FENCED_ANY_RE = re.compile(r"```\s*(?P<code>.*?)```", re.DOTALL)
 
@@ -21,6 +22,26 @@ class ExtractionResult:
     @property
     def ok(self) -> bool:
         return self.status == "ok"
+
+
+def compute_format_telemetry(text: str | None) -> dict[str, bool]:
+    text = "" if text is None else str(text)
+    think_matches = list(THINK_RE.finditer(text))
+    answer_matches = list(ANSWER_RE.finditer(text))
+    think_complete = text.lower().count("<think>") == 1 and text.lower().count("</think>") == 1 and len(think_matches) == 1
+    answer_complete = text.lower().count("<answer>") == 1 and text.lower().count("</answer>") == 1 and len(answer_matches) == 1
+    think_nonempty = think_complete and bool(think_matches[0].group("body").strip())
+    format_ordered = (
+        think_complete
+        and answer_complete
+        and think_matches[0].start() < think_matches[0].end() <= answer_matches[0].start() < answer_matches[0].end()
+    )
+    return {
+        "think_nonempty": think_nonempty,
+        "think_complete": think_complete,
+        "answer_complete": answer_complete,
+        "format_ordered": format_ordered,
+    }
 
 
 def _strip_code(code: str) -> str:

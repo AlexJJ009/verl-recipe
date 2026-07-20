@@ -27,12 +27,13 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from recipe.on_policy_wdl_sft.code_task.code_extraction import extract_code
+    from recipe.on_policy_wdl_sft.code_task.code_extraction import compute_format_telemetry, extract_code
 except Exception:
-    from code_extraction import extract_code  # type: ignore
+    from code_extraction import compute_format_telemetry, extract_code  # type: ignore
 
 
 STATUS_KEYS = {
+    "format_error": "code_reward_format_error",
     "extraction_fail": "code_reward_extraction_fail",
     "compile_error": "code_reward_compile_error",
     "runtime_error": "code_reward_runtime_error",
@@ -85,12 +86,13 @@ def _base_payload(
     num_passed: int = 0,
     stderr_excerpt: str = "",
 ) -> dict[str, Any]:
-    label_score = 1.0 if score >= 1.0 else float(os.environ.get("CODE_REWARD_FAILURE_SCORE", "-1.0"))
+    label_score = 1.0 if score >= 1.0 else -1.0
     payload: dict[str, Any] = {
         "score": label_score,
         "acc": 1.0 if score >= 1.0 else 0.0,
         "code_reward_status": status,
         "code_reward_extraction_fail": 0,
+        "code_reward_format_error": 0,
         "code_reward_compile_error": 0,
         "code_reward_runtime_error": 0,
         "code_reward_timeout": 0,
@@ -105,6 +107,28 @@ def _base_payload(
     }
     if status in STATUS_KEYS:
         payload[STATUS_KEYS[status]] = 1
+    return payload
+
+
+def _attach_format_contract(
+    payload: dict[str, Any],
+    format_telemetry: dict[str, bool],
+    *,
+    extraction_success: bool,
+) -> dict[str, Any]:
+    format_contract_success = all(format_telemetry.values()) and extraction_success
+    payload.update(
+        {
+            **format_telemetry,
+            "extraction_success": extraction_success,
+            "format_contract_success": format_contract_success,
+            "answer_correct": payload["score"] == 1.0,
+        }
+    )
+    if not format_contract_success and payload["score"] == 1.0:
+        payload["score"] = -1.0
+        payload["acc"] = 0.0
+        payload["answer_correct"] = False
     return payload
 
 
@@ -1120,33 +1144,48 @@ def compute_score_code_official_aligned(
     extra_info: dict[str, Any] | None = None,
     **_: Any,
 ) -> dict[str, Any]:
+    format_telemetry = compute_format_telemetry(solution_str)
     extraction = extract_code(solution_str)
+    format_contract_success = all(format_telemetry.values()) and extraction.ok
+    if not format_contract_success:
+        method = OFFICIAL_METHODS.get(str(data_source), "local_exec")
+        status = "format_error" if not all(format_telemetry.values()) else "extraction_fail"
+        payload = _base_payload(-1.0, status, extraction.code, method, 0, 0)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=extraction.ok)
     if not extraction.ok:
         method = OFFICIAL_METHODS.get(str(data_source), "local_exec")
-        return _base_payload(0.0, "extraction_fail", "[NO_CODE]", method, 0, 0)
+        payload = _base_payload(-1.0, "extraction_fail", "[NO_CODE]", method, 0, 0)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=False)
 
     test_case = _parse_tests(ground_truth, extra_info)
     if test_case is None:
-        return _base_payload(0.0, "runtime_error", extraction.code, "local_exec", 0, 0, "missing ground_truth")
+        payload = _base_payload(-1.0, "runtime_error", extraction.code, "local_exec", 0, 0, "missing ground_truth")
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
 
     data_source = str(data_source)
 
     if data_source in {"HumanEval", "HumanEval+", "MBPP", "MBPP+"}:
-        return score_evalplus_official(extraction.code, test_case)
+        payload = score_evalplus_official(extraction.code, test_case)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source == "BigCodeBench":
-        return score_bigcodebench_official(extraction.code, test_case)
+        payload = score_bigcodebench_official(extraction.code, test_case)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source == "LiveCodeBench":
-        return score_livecodebench_official(extraction.code, test_case)
+        payload = score_livecodebench_official(extraction.code, test_case)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     timeout = float(os.environ.get("CODE_REWARD_TIMEOUT", "5"))
     if data_source == "kodcode_light_rl_10k" or (
         isinstance(test_case, dict) and test_case.get("verification_method") == "kodcode_exec"
     ):
-        return score_kodcode_exec(extraction.code, test_case, timeout)
+        payload = score_kodcode_exec(extraction.code, test_case, timeout)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source.startswith("deepcoder_preview") or (
         isinstance(test_case, dict) and test_case.get("verification_method") == "stdin_stdout_exec"
     ):
-        return score_stdin_stdout_exec(extraction.code, test_case, timeout)
-    return score_local_exec(extraction.code, test_case, timeout)
+        payload = score_stdin_stdout_exec(extraction.code, test_case, timeout)
+        return _attach_format_contract(payload, format_telemetry, extraction_success=True)
+    payload = score_local_exec(extraction.code, test_case, timeout)
+    return _attach_format_contract(payload, format_telemetry, extraction_success=True)
 
 
 compute_score = compute_score_code_official_aligned
