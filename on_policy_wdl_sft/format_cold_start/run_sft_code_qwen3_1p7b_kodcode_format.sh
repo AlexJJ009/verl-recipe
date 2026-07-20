@@ -26,6 +26,8 @@ export TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
 export VAL_FILES=${VAL_FILES:-null}
 export VAL_MAX_SAMPLES=${VAL_MAX_SAMPLES:--1}
 export DATA_NUM_WORKERS=${DATA_NUM_WORKERS:-8}
+export LOSS_MASK_PREFLIGHT_SAMPLES=${LOSS_MASK_PREFLIGHT_SAMPLES:-32}
+export LOSS_MASK_PREFLIGHT_DIR=${LOSS_MASK_PREFLIGHT_DIR:-/data-1/tmp/verl_agent_scratch/sft_loss_mask_preflight}
 export TRUST_REMOTE_CODE=${TRUST_REMOTE_CODE:-False}
 export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 
@@ -74,7 +76,8 @@ CMD=(
     "data.val_max_samples=${VAL_MAX_SAMPLES}"
     "data.truncation=error"
     "data.num_workers=${DATA_NUM_WORKERS}"
-    "data.ignore_input_ids_mismatch=True"
+    "data.tokenize_whole_message=True"
+    "data.ignore_input_ids_mismatch=False"
     "trainer.project_name=${WANDB_PROJECT}"
     "trainer.experiment_name=${RUN_NAME}"
     "trainer.default_local_dir=${CKPT_ROOT}/${RUN_NAME}"
@@ -98,4 +101,11 @@ if [ "${DRY_RUN:-0}" = "1" ]; then
 fi
 
 cd "$REPO_ROOT"
+mkdir -p "$LOSS_MASK_PREFLIGHT_DIR"
+python3 scripts/validate_sft_loss_mask.py \
+    --model "$MODEL_PATH" \
+    --dataset "$TRAIN_FILE" \
+    --output "$LOSS_MASK_PREFLIGHT_DIR/${RUN_NAME}.json" \
+    --samples "$LOSS_MASK_PREFLIGHT_SAMPLES" \
+    --max-length "$MAX_LENGTH"
 exec "${CMD[@]}" "$@"
