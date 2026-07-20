@@ -1,0 +1,49 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_stage123_v1
+status: admitted_for_integrated_launch
+seed: 20260719
+launch_allowed: true
+paths:
+  source_train_file: /data-1/dataset/math/train_rl_format.parquet
+  model1_selection: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_v1/model1_selection.json
+  dataset_receipt: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/dataset_receipt.json
+  checkpoint_root: /data-1/checkpoints
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_stage123_v1
+  state_root: /data-2/model_weights/math_task/qwen3_1p7b_stage123_v1/state
+validation:
+  datasets: [aime25, HuggingFaceH4/MATH-500, zwhe99/amc23, deepmind/aqua_rat, openai/gsm8k, mwpt5/MAWPS, ChilleD/SVAMP]
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  primary_metric: val-core/math7_macro/acc/mean@3
+  joint_primary_metric: val-core/model2/math7_macro/acc/mean@3
+resources:
+  max_prompt_length: 500
+  max_response_length: 4096
+  rollout_gpu_memory_utilization: 0.60
+  gpu_probe_required: true
+matrix:
+  betas: [0.0, 0.1]
+  stage1_steps: 40
+  stage1_control_steps: 60
+  stage2_steps: 20
+  stage3_steps: 40
+  stage2_fusion_lambda: 0.8
+  model2_kl_coef: 0.01
+runs:
+  - {id: b0-stage1, beta: 0.0, phase: stage1, train_shard: stage1, final_step: 40}
+  - {id: b01-stage1, beta: 0.1, phase: stage1, train_shard: stage1, final_step: 40}
+  - {id: b0-stage1-control, beta: 0.0, phase: stage1_control, source_run: b0-stage1, train_shard: stage1_control, final_step: 60}
+  - {id: b01-stage1-control, beta: 0.1, phase: stage1_control, source_run: b01-stage1, train_shard: stage1_control, final_step: 60}
+  - {id: b0-stage2-nokl, beta: 0.0, phase: stage2, source_run: b0-stage1, train_shard: stage2, final_step: 20, kl: nokl}
+  - {id: b0-stage2-m2kl, beta: 0.0, phase: stage2, source_run: b0-stage1, train_shard: stage2, final_step: 20, kl: m2kl}
+  - {id: b01-stage2-nokl, beta: 0.1, phase: stage2, source_run: b01-stage1, train_shard: stage2, final_step: 20, kl: nokl}
+  - {id: b01-stage2-m2kl, beta: 0.1, phase: stage2, source_run: b01-stage1, train_shard: stage2, final_step: 20, kl: m2kl}
+  - {id: b0-stage3-nokl-model1, beta: 0.0, phase: stage3, source_run: b0-stage2-nokl, submodel: model1, train_shard: stage3, final_step: 40}
+  - {id: b0-stage3-nokl-model2, beta: 0.0, phase: stage3, source_run: b0-stage2-nokl, submodel: model2, train_shard: stage3, final_step: 40}
+  - {id: b0-stage3-m2kl-model1, beta: 0.0, phase: stage3, source_run: b0-stage2-m2kl, submodel: model1, train_shard: stage3, final_step: 40}
+  - {id: b0-stage3-m2kl-model2, beta: 0.0, phase: stage3, source_run: b0-stage2-m2kl, submodel: model2, train_shard: stage3, final_step: 40}
+  - {id: b01-stage3-nokl-model1, beta: 0.1, phase: stage3, source_run: b01-stage2-nokl, submodel: model1, train_shard: stage3, final_step: 40}
+  - {id: b01-stage3-nokl-model2, beta: 0.1, phase: stage3, source_run: b01-stage2-nokl, submodel: model2, train_shard: stage3, final_step: 40}
+  - {id: b01-stage3-m2kl-model1, beta: 0.1, phase: stage3, source_run: b01-stage2-m2kl, submodel: model1, train_shard: stage3, final_step: 40}
+  - {id: b01-stage3-m2kl-model2, beta: 0.1, phase: stage3, source_run: b01-stage2-m2kl, submodel: model2, train_shard: stage3, final_step: 40}

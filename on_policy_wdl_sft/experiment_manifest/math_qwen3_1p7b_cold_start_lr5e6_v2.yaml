@@ -1,0 +1,47 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_cold_start_lr5e6_v2
+status: invalidated_qwen_per_turn_loss_mask
+seed: 20260719
+paths:
+  source_train_file: /data-1/dataset/math/train_rl_format.parquet
+  raw_model: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  dataset_receipt: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/dataset_receipt.json
+  cold_start_rl_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/cold_start.parquet
+  cold_start_sft_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/cold_start_sft_messages.parquet
+  checkpoint_root: /data-1/checkpoints/math_qwen3_1p7b_cold_start_lr5e6_v2
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_lr5e6_v2
+  selection_file: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_lr5e6_v2/model1_selection.json
+  pause_marker: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_lr5e6_v2/PAUSE_FOR_MODEL1_SELECTION
+  step_zero_validation: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_v1/validation/step_0_n1
+  event_log: /data-2/model_weights/math_task/qwen3_1p7b_integrated_lr5e6_v2/events.jsonl
+training:
+  max_steps: 30
+  step_interval: 5
+  train_batch_size: 64
+  learning_rate: 5.0e-06
+  max_length: 4096
+  run_name: MATH-CS-QWEN3-1P7B-SEED20260719-LR5E6-V2
+validation:
+  n: 1
+  temperature: 0.2
+  top_p: 0.95
+  max_tokens: 4096
+  seed: 20260719
+  gpu_memory_utilization: 0.6
+  datasets:
+  - /data-1/dataset/AIME-2025/aime-2025_with_system_prompt.parquet
+  - /data-1/dataset/MATH-500/math500-test_with_system_prompt.parquet
+  - /data-1/dataset/AMC23/amc23-test_with_system_prompt.parquet
+  - /data-1/dataset/AQUA/aqua-test_with_system_prompt.parquet
+  - /data-1/dataset/gsm8k/gsm8k-test_with_system_prompt.parquet
+  - /data-1/dataset/MAWPS/mawps-test_with_system_prompt.parquet
+  - /data-1/dataset/SVAMP/svamp-test_with_system_prompt.parquet
+admission_thresholds:
+  format_contract_success_rate: 0.95
+execution:
+  gpu_probe_required: true
+  launch_allowed: false
+  stop_after_first_passing_checkpoint: true
+  auto_select_first_passing_checkpoint: true
+  continue_to_stage123: false
+  stage123_manifest: /workspace/verl/recipe/on_policy_wdl_sft/experiment_manifest/math_qwen3_1p7b_stage123_lr5e6_v2.yaml
