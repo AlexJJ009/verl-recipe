@@ -1,8 +1,8 @@
 schema_version: 1
 experiment_id: qwen3_1p7b_stage123_p40
 resource_profile:
-  name: l40s8x46g_ram582g_cpu176_ctx9k_v2
-  sha256: d687caf1146c9b32a2f51dcf71e876cf5f987fe62b4db69f1043caaff52ddbe8
+  name: l40s8x46g_ram582g_cpu176_ctx9k_v3
+  sha256: fdaf9c66d62018b24aad5918b125ed513c9368e350d2b7ef72067cc44350e8de
   max_response_length: 8192
 semantics:
   formal_validation_scope: full

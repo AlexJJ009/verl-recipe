@@ -13,6 +13,8 @@ export WRAPPER_SCRIPT_DIR
 
 export LOSS_MODE=${LOSS_MODE:-wdl_sft}
 export LR=${LR:-5e-7}
+export LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-5}
+export TRACK_JOINT_SUBMODEL_LOSSES=${TRACK_JOINT_SUBMODEL_LOSSES:-false}
 export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-75}
 export MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-100}
 export WANDB_PROJECT=${WANDB_PROJECT:-"OnPolicySFT-Then-WDLSFT-StagedV1"}
@@ -203,6 +205,21 @@ submodel_kl_overrides=(
     actor_rollout_ref.actor.submodel_kl.model2.ref_path="${SUBMODEL_KL_MODEL2_REF_PATH}"
 )
 
+submodel_kl_ref_overrides=()
+if [ "$SUBMODEL_KL_ENABLED" = true ]; then
+    if [ "$SUBMODEL_KL_MODEL1_ENABLED" = true ] && [ "$SUBMODEL_KL_MODEL2_ENABLED" = false ]; then
+        submodel_kl_ref_overrides=(
+            +actor_rollout_ref.ref.model.path="$SUBMODEL_KL_MODEL1_REF_PATH"
+            +actor_rollout_ref.ref.submodel_kl_target_index=0
+        )
+    elif [ "$SUBMODEL_KL_MODEL1_ENABLED" = false ] && [ "$SUBMODEL_KL_MODEL2_ENABLED" = true ]; then
+        submodel_kl_ref_overrides=(
+            +actor_rollout_ref.ref.model.path="$SUBMODEL_KL_MODEL2_REF_PATH"
+            +actor_rollout_ref.ref.submodel_kl_target_index=1
+        )
+    fi
+fi
+
 source "${WRAPPER_SCRIPT_DIR}/../_common_wdl_sft_is_joint.sh" \
     data.seed=${DATA_SEED} \
     data.train_max_samples=${TRAIN_MAX_SAMPLES} \
@@ -210,6 +227,8 @@ source "${WRAPPER_SCRIPT_DIR}/../_common_wdl_sft_is_joint.sh" \
     +actor_rollout_ref.model.joint_training_rollout_source=${JOINT_TRAINING_ROLLOUT_SOURCE} \
     actor_rollout_ref.actor.ppo_epochs=${ACTOR_PPO_EPOCHS} \
     actor_rollout_ref.actor.shuffle=${ACTOR_SHUFFLE} \
+    actor_rollout_ref.actor.track_joint_submodel_losses=${TRACK_JOINT_SUBMODEL_LOSSES} \
     actor_rollout_ref.rollout.calculate_log_probs=${ROLLOUT_CALCULATE_LOG_PROBS} \
     "${submodel_kl_overrides[@]}" \
+    "${submodel_kl_ref_overrides[@]}" \
     "$@"

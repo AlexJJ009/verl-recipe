@@ -132,6 +132,25 @@ if ! joint_cache_complete; then
         --fusion_lambda "$FUSION_LAMBDA"
 fi
 
+if [ -n "${EXPECTED_MODEL1_PATH:-}" ]; then
+    python3 - "$MODEL_PATH/config.json" "$EXPECTED_MODEL1_PATH" "$MODEL2_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path, expected_model1, expected_model2 = map(Path, sys.argv[1:])
+config = json.loads(config_path.read_text())
+sources = config.get("joint_model_sources", {})
+actual_model1 = Path(sources.get("model1", "")).resolve()
+actual_model2 = Path(sources.get("model2", "")).resolve()
+if actual_model1 != expected_model1.resolve():
+    raise SystemExit(f"joint cache Model1 mismatch: {actual_model1} != {expected_model1.resolve()}")
+if actual_model2 != expected_model2.resolve():
+    raise SystemExit(f"joint cache Model2 mismatch: {actual_model2} != {expected_model2.resolve()}")
+print(f"Joint source identity PASS: model1={actual_model1} model2={actual_model2}")
+PY
+fi
+
 refresh_joint_remote_code() {
     local src_dir="${REPO_ROOT}/verl/models/joint_model"
     local dst_dir="$MODEL_PATH"
@@ -239,6 +258,7 @@ echo "Log file        : $LOG_FILE"
 adv_estimator=grpo
 loss_agg_mode=${LOSS_AGG_MODE:-seq-mean-token-sum}
 loss_mode=${LOSS_MODE:-wdl_sft_is}
+LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-5}
 use_kl_in_reward=False
 kl_coef=0.0
 use_kl_loss=False
@@ -280,17 +300,22 @@ use_dynamic_bsz=${USE_DYNAMIC_BSZ:-True}
 actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-9192}
 calculate_entropy=${CALCULATE_ENTROPY:-True}
 offload=${FSDP_OFFLOAD:-False}
+optimizer_offload=${FSDP_OPTIMIZER_OFFLOAD:-${offload}}
+ref_offload=${REF_FSDP_OFFLOAD:-${offload}}
 fsdp_size=${FSDP_SIZE:--1}
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
+REF_LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${REF_LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}
 LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}
+REF_LOG_PROB_MICRO_BATCH_SIZE=${REF_LOG_PROB_MICRO_BATCH_SIZE:-${LOG_PROB_MICRO_BATCH_SIZE}}
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
+REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}}
 ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.4}
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
@@ -314,6 +339,9 @@ if [ "${USE_REMOVE_PADDING}" = "True" ]; then
         USE_REMOVE_PADDING=False
         if [ -z "${LOG_PROB_MICRO_BATCH_SIZE_WAS_SET}" ]; then
             LOG_PROB_MICRO_BATCH_SIZE=1
+        fi
+        if [ -z "${REF_LOG_PROB_MICRO_BATCH_SIZE_WAS_SET}" ]; then
+            REF_LOG_PROB_MICRO_BATCH_SIZE=1
         fi
     fi
 fi
@@ -345,12 +373,14 @@ MAX_RESPONSE_LENGTH=${max_response_length}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN}
 ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}
+REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU}
 ACTOR_PPO_MAX_TOKEN_LEN=${actor_ppo_max_token_len}
 TRAIN_PROMPT_BSZ=${train_prompt_bsz}
 ROLLOUT_N=${n_resp_per_prompt}
 TRAIN_PROMPT_MINI_BSZ=${train_prompt_mini_bsz}
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE}
 LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE}
+REF_LOG_PROB_MICRO_BATCH_SIZE=${REF_LOG_PROB_MICRO_BATCH_SIZE}
 ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION}
 CALCULATE_ENTROPY=${calculate_entropy}
 ENTROPY_COEFF=0
@@ -388,10 +418,10 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.actor.optim.lr=${LR} \
-    actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
+    actor_rollout_ref.actor.optim.lr_warmup_steps=${LR_WARMUP_STEPS} \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=${optimizer_offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.calculate_entropy=${calculate_entropy} \
@@ -402,9 +432,9 @@ python3 -m verl.trainer.main_ppo \
     +actor_rollout_ref.actor.policy_loss.wdl_sft_beta=${WDL_SFT_BETA} \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
-    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
-    actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${REF_LOG_PROB_MICRO_BATCH_SIZE} \
+    actor_rollout_ref.ref.fsdp_config.param_offload=${ref_offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=${USE_REMOVE_PADDING} \

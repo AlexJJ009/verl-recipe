@@ -6,7 +6,13 @@ source "${SCRIPT_DIR}/qwen3_1p7b_stage123_resource_profile.sh"
 : "${STAGE123_RUN_ID:?STAGE123_RUN_ID required}"
 source "${SCRIPT_DIR}/stage123_manifest_gate.sh"
 stage123_require_formal_admission "$STAGE123_RUN_ID"
+: "${BASE_MODEL_PATH:?formal Stage2 admission must provide Model1 path}"
+: "${EXPECTED_MODEL1_PATH:?formal Stage2 admission must bind Model1 identity}"
 stage123_print_profile STAGE2
+
+export LR=${LR:-1e-6}
+export LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-0}
+export TRACK_JOINT_SUBMODEL_LOSSES=${TRACK_JOINT_SUBMODEL_LOSSES:-true}
 
 export RAY_TMPDIR="${STAGE123_RAY_TMPDIR:-/tmp/stage123-ray-${STAGE123_RUN_ID}}"
 cleanup_stage123_ray() {

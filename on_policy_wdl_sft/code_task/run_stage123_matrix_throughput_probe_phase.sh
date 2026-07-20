@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/qwen3_1p7b_stage123_resource_profile.sh"
+: "${THROUGHPUT_OUTPUT_ROOT:?}"
+: "${THROUGHPUT_RUN_ID:?}"
+: "${THROUGHPUT_TRAIN_FILE:?}"
+: "${THROUGHPUT_STAGE1_CKPT_DIR:?}"
+: "${THROUGHPUT_STAGE1_RUN_PREFIX:?}"
+: "${THROUGHPUT_STAGE1_HANDOFF_STEP:?}"
+: "${THROUGHPUT_MODEL2_PATH:?}"
+: "${BASE_MODEL_PATH:?}"
+: "${EXPECTED_MODEL1_PATH:?}"
+
+stage123_print_profile THROUGHPUT
+mkdir -p "$THROUGHPUT_OUTPUT_ROOT"/{checkpoints,logs,metrics,validation,wandb,tmp,joint_model_parent}
+export RAY_TMPDIR="/tmp/s123tp-${THROUGHPUT_RUN_ID}"
+export TMPDIR="/tmp/s123tmp-${THROUGHPUT_RUN_ID}"
+export VERL_FILE_LOGGER_ROOT="$THROUGHPUT_OUTPUT_ROOT/metrics"
+export RAY_ADDRESS="127.0.0.1:${THROUGHPUT_RAY_HEAD_PORT:-22300}"
+cleanup() {
+  ray stop --force >/dev/null 2>&1 || true
+  rm -rf "$RAY_TMPDIR" "$TMPDIR"
+}
+trap cleanup EXIT INT TERM
+rm -rf "$RAY_TMPDIR" "$TMPDIR"
+mkdir -p "$TMPDIR"
+ray start --head --port="${THROUGHPUT_RAY_HEAD_PORT:-22300}" \
+  --min-worker-port="${THROUGHPUT_RAY_WORKER_PORT_MIN:-22400}" \
+  --max-worker-port="${THROUGHPUT_RAY_WORKER_PORT_MAX:-22999}" \
+  --temp-dir="$RAY_TMPDIR" --include-dashboard=false --disable-usage-stats >/dev/null
+
+exec_env=(
+  RUN_PREFIX="THROUGHPUT-${THROUGHPUT_RUN_ID}"
+  STAGE1_RUN_PREFIX="$THROUGHPUT_STAGE1_RUN_PREFIX"
+  EXPECTED_STAGE1_RUN_PREFIX="$THROUGHPUT_STAGE1_RUN_PREFIX"
+  STAGE1_CKPT_DIR="$THROUGHPUT_STAGE1_CKPT_DIR"
+  STAGE2_HANDOFF_STEP="$THROUGHPUT_STAGE1_HANDOFF_STEP"
+  MERGED_MODEL2_DIR="$THROUGHPUT_MODEL2_PATH"
+  MODEL2_PATH="$THROUGHPUT_MODEL2_PATH"
+  MODEL2_CACHE_TAG="throughput-${THROUGHPUT_RUN_ID}"
+  MODEL_PATH="$THROUGHPUT_OUTPUT_ROOT/joint_model"
+  REQUIRE_MERGED_MODEL2_PROVENANCE=False
+  CODE_TRAIN_FILE="$THROUGHPUT_TRAIN_FILE"
+  TRAIN_FILE="$THROUGHPUT_TRAIN_FILE"
+  TOTAL_TRAINING_STEPS=1
+  TRAIN_MAX_SAMPLES=64
+  DATA_SHUFFLE=False
+  WDL_SFT_BETA=0.1
+  EXPECTED_STAGE1_BETA=0.1
+  FUSION_LAMBDA=0.8
+  VAL_BEFORE_TRAIN=False
+  TEST_FREQ=1000
+  SAVE_FREQ=1000
+  KEEP_BEST_CKPT=False
+  MAX_ACTOR_CKPTS_TO_KEEP=0
+  MAX_CRITIC_CKPTS_TO_KEEP=0
+  BASE_CKPT_DIR="$THROUGHPUT_OUTPUT_ROOT/checkpoints"
+  LOG_DIR="$THROUGHPUT_OUTPUT_ROOT/logs"
+  VALIDATION_DATA_DIR="$THROUGHPUT_OUTPUT_ROOT/validation"
+  WANDB_DIR="$THROUGHPUT_OUTPUT_ROOT/wandb"
+  WANDB_MODE=disabled
+)
+
+env "${exec_env[@]}" bash "$SCRIPT_DIR/run_s2_code_model2_rollout_common.sh" \
+  trainer.save_freq=-1 \
+  trainer.test_freq=1000 \
+  trainer.val_before_train=false \
+  'trainer.logger=["file"]'

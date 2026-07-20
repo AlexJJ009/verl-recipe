@@ -2,16 +2,23 @@
 # Shared L40S resource profile for every phase of the Qwen3-1.7B Stage123 chain.
 set -euo pipefail
 
-export STAGE123_RESOURCE_PROFILE_NAME=${STAGE123_RESOURCE_PROFILE_NAME:-l40s8x46g_ram582g_cpu176_ctx9k_v2}
+export STAGE123_RESOURCE_PROFILE_NAME=${STAGE123_RESOURCE_PROFILE_NAME:-l40s8x46g_ram582g_cpu176_ctx9k_v3}
 export MAX_PROMPT_LENGTH=${MAX_PROMPT_LENGTH:-1024}
 export MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-8192}
 export ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-9216}
-export ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-9216}
+export ROLLOUT_MAX_NUM_BATCHED_TOKENS=${ROLLOUT_MAX_NUM_BATCHED_TOKENS:-32768}
 export LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-9216}
+export REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-9216}
 export ACTOR_PPO_MAX_TOKEN_LEN=${ACTOR_PPO_MAX_TOKEN_LEN:-9216}
-export GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}
-export LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}
-export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.24}
+export GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-32}
+export LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-8}
+export REF_LOG_PROB_MICRO_BATCH_SIZE=${REF_LOG_PROB_MICRO_BATCH_SIZE:-1}
+export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.40}
+export ROLLOUT_FREE_CACHE_ENGINE=${ROLLOUT_FREE_CACHE_ENGINE:-False}
+export ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-False}
+export REF_FSDP_OFFLOAD=${REF_FSDP_OFFLOAD:-True}
+export FSDP_OFFLOAD=${FSDP_OFFLOAD:-True}
+export FSDP_OPTIMIZER_OFFLOAD=${FSDP_OPTIMIZER_OFFLOAD:-True}
 export TRAIN_PROMPT_BSZ=${TRAIN_PROMPT_BSZ:-64}
 export ROLLOUT_N=${ROLLOUT_N:-8}
 export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLLOUT_N))}
@@ -53,9 +60,10 @@ stage123_profile_fields() {
     printf '%s\n' \
         STAGE123_RESOURCE_PROFILE_NAME MAX_PROMPT_LENGTH MAX_RESPONSE_LENGTH \
         ROLLOUT_MAX_MODEL_LEN ROLLOUT_MAX_NUM_BATCHED_TOKENS \
-        LOG_PROB_MAX_TOKEN_LEN_PER_GPU ACTOR_PPO_MAX_TOKEN_LEN \
-        GENERATION_MICRO_BATCH_SIZE LOG_PROB_MICRO_BATCH_SIZE \
-        ROLLOUT_GPU_MEMORY_UTILIZATION TRAIN_PROMPT_BSZ ROLLOUT_N \
+        LOG_PROB_MAX_TOKEN_LEN_PER_GPU REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU ACTOR_PPO_MAX_TOKEN_LEN \
+        GENERATION_MICRO_BATCH_SIZE LOG_PROB_MICRO_BATCH_SIZE REF_LOG_PROB_MICRO_BATCH_SIZE \
+        ROLLOUT_GPU_MEMORY_UTILIZATION ROLLOUT_FREE_CACHE_ENGINE \
+        ROLLOUT_ENABLE_SLEEP_MODE REF_FSDP_OFFLOAD FSDP_OFFLOAD FSDP_OPTIMIZER_OFFLOAD TRAIN_PROMPT_BSZ ROLLOUT_N \
         TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ TEMPERATURE TOP_P ROLLOUT_DO_SAMPLE \
         VAL_N VAL_TEMPERATURE VAL_TOP_P VAL_DO_SAMPLE VAL_BEFORE_TRAIN \
         TRAIN_MAX_SAMPLES CODE_REWARD_NUM_WORKERS CODE_REWARD_MAX_CONCURRENCY_PER_WORKER \
@@ -107,7 +115,49 @@ stage123_assert_expected_profile() {
 stage123_validate_profile() {
     [ "$MAX_RESPONSE_LENGTH" = 8192 ] || { echo "ERROR: MAX_RESPONSE_LENGTH must equal 8192" >&2; return 1; }
     [ "$ROLLOUT_MAX_MODEL_LEN" -ge $((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH)) ] || { echo "ERROR: model length is smaller than prompt+response" >&2; return 1; }
-    [ "$ROLLOUT_MAX_NUM_BATCHED_TOKENS" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
+    [ "$ROLLOUT_MAX_NUM_BATCHED_TOKENS" -ge "$ROLLOUT_MAX_MODEL_LEN" ] || {
+        echo "ERROR: rollout token batching must cover at least one full model context" >&2
+        return 1
+    }
+    [ "$ROLLOUT_MAX_NUM_BATCHED_TOKENS" -ge 16384 ] || {
+        echo "ERROR: rollout token batching remains safety-only; require at least 16384" >&2
+        return 1
+    }
+    python3 - "$ROLLOUT_GPU_MEMORY_UTILIZATION" <<'PY' || return 1
+import sys
+
+utilization = float(sys.argv[1])
+if not 0.4 <= utilization < 1.0:
+    raise SystemExit("rollout GPU memory utilization must be throughput-qualified in [0.4, 1.0)")
+PY
+    [ "$ROLLOUT_FREE_CACHE_ENGINE" = False ] || {
+        echo "ERROR: vLLM cache unloading is not admitted on this async stack" >&2
+        return 1
+    }
+    [ "$ROLLOUT_ENABLE_SLEEP_MODE" = False ] || {
+        echo "ERROR: vLLM sleep mode is not admitted on this async stack" >&2
+        return 1
+    }
+    [ "$REF_FSDP_OFFLOAD" = True ] || {
+        echo "ERROR: Stage123 requires on-demand CPU offload for the KL reference model" >&2
+        return 1
+    }
+    [ "$FSDP_OPTIMIZER_OFFLOAD" = True ] || {
+        echo "ERROR: Stage123 requires CPU offload for optimizer state" >&2
+        return 1
+    }
+    [ "$FSDP_OFFLOAD" = True ] || {
+        echo "ERROR: Stage123 requires actor parameter offload between rollout and training phases" >&2
+        return 1
+    }
+    [ "$REF_LOG_PROB_MICRO_BATCH_SIZE" = 1 ] || {
+        echo "ERROR: Stage123 KL reference log-prob micro-batch must equal calibrated value 1" >&2
+        return 1
+    }
+    [ "$REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU" = 9216 ] || {
+        echo "ERROR: Stage123 KL reference dynamic token budget must cover the full 9216-token context" >&2
+        return 1
+    }
     [ "$LOG_PROB_MAX_TOKEN_LEN_PER_GPU" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$ACTOR_PPO_MAX_TOKEN_LEN" = "$ROLLOUT_MAX_MODEL_LEN" ] || return 1
     [ "$TRAIN_PROMPT_MINI_BSZ" = $((TRAIN_PROMPT_BSZ * ROLLOUT_N)) ] || return 1

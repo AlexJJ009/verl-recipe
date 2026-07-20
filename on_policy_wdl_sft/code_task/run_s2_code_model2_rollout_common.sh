@@ -21,6 +21,41 @@ export STAGE1_STEP="$STAGE2_HANDOFF_STEP"
 export EXPECTED_STAGE1_RUN_PREFIX=${EXPECTED_STAGE1_RUN_PREFIX:-}
 export EXPECTED_STAGE1_BETA=${EXPECTED_STAGE1_BETA:-}
 
+verify_model1_identity() {
+    [ -n "${EXPECTED_MODEL1_PATH:-}" ] || return 0
+    python3 - "$BASE_MODEL_PATH" "$EXPECTED_MODEL1_PATH" \
+        "$EXPECTED_MODEL1_CONFIG_SHA256" "$EXPECTED_MODEL1_TOKENIZER_CONFIG_SHA256" \
+        "$EXPECTED_MODEL1_CHAT_TEMPLATE_SHA256" "$EXPECTED_MODEL1_PROVENANCE_PATH" \
+        "$EXPECTED_MODEL1_PROVENANCE_SHA256" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+actual, expected, config_sha, tokenizer_sha, template_sha, provenance_path, provenance_sha = sys.argv[1:]
+actual_path = Path(actual).resolve()
+expected_path = Path(expected).resolve()
+if actual_path != expected_path:
+    raise SystemExit(f"Model1 path mismatch: actual={actual_path} expected={expected_path}")
+
+def verify(path: Path, expected_sha: str) -> None:
+    if not path.is_file():
+        raise SystemExit(f"Model1 identity file missing: {path}")
+    observed = hashlib.sha256(path.read_bytes()).hexdigest()
+    if observed != expected_sha:
+        raise SystemExit(f"Model1 identity hash mismatch: {path}: {observed} != {expected_sha}")
+
+verify(actual_path / "config.json", config_sha)
+verify(actual_path / "tokenizer_config.json", tokenizer_sha)
+verify(actual_path / "chat_template.jinja", template_sha)
+verify(Path(provenance_path), provenance_sha)
+provenance = json.loads(Path(provenance_path).read_text())
+if Path(provenance.get("target_dir", "")).resolve() != actual_path:
+    raise SystemExit("Model1 provenance target mismatch")
+print(f"[code-s2] Model1 identity PASS: {actual_path}")
+PY
+}
+
 export CODE_TRAIN_FILE=${CODE_TRAIN_FILE:-/data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_handoff.parquet}
 export CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE=${CODE_ONLINE_HUMANEVAL_PLUS_VAL_FILE:-/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet}
 export CODE_ONLINE_MBPP_PLUS_VAL_FILE=${CODE_ONLINE_MBPP_PLUS_VAL_FILE:-/data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet}
@@ -349,6 +384,7 @@ EOF
 
 print_config
 
+verify_model1_identity
 check_expected_stage2_source
 prepare_model2_if_needed
 

@@ -35,6 +35,7 @@ set -xeuo pipefail
 : "${LR:?LR must be set by the caller}"
 
 WDL_SFT_BETA=${WDL_SFT_BETA:-0.0}
+LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-5}
 
 # ===================== Section 1: Environment Activation ======================
 echo "Environment ready (Docker/uv mode)."
@@ -352,7 +353,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.actor.optim.lr=${LR} \
-    actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
+    actor_rollout_ref.actor.optim.lr_warmup_steps=${LR_WARMUP_STEPS} \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
