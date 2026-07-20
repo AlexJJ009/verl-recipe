@@ -328,7 +328,45 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 
 ---
 
-## Cross-Experiment Comparison (EVAL-01 through EVAL-09)
+## EVAL-10: EXP-12 Qwen3-1.7B Post-Trained/Instruct Step-Zero Format Screen
+
+| Field | Value |
+|---|---|
+| **Source Experiment** | EXP-12 (Qwen3-1.7B Post-Trained/Instruct Step-Zero Baseline) |
+| **Model Weights** | `/data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` |
+| **Checkpoint Step** | 0 (official raw post-trained model) |
+| **Sub-Model** | N/A (single model) |
+| **Inference Engine** | vLLM 0.12.0 (FLASHINFER backend, V1 engine, tp=8) |
+| **Benchmarks** | MATH-500, AIME-2025, AMC-2023, AQUA, GSM8K, MAWPS, SVAMP (all with system prompt) |
+| **Generation Params** | temperature=0.2, top_p=0.95, top_k=-1, n=1, max_tokens=4096, seed=20260719 |
+| **Date** | 2026-07-19 |
+
+### Results (n=1)
+
+| Benchmark | Samples | mean@1 | think complete | answer complete | boxed extraction | EOS | truncation |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **MATH-500** | 500 | **52.6%** | 74.0% | 66.6% | 57.4% | 74.2% | 25.8% |
+| **AIME-2025** | 30 | **6.7%** | 13.3% | 3.3% | 13.3% | 6.7% | 93.3% |
+| **AMC-2023** | 40 | **37.5%** | 47.5% | 40.0% | 40.0% | 47.5% | 52.5% |
+| **AQUA** | 254 | **33.1%** | 81.5% | 76.4% | 34.3% | 80.3% | 19.7% |
+| **GSM8K** | 1319 | **49.3%** | 95.8% | 91.0% | 55.7% | 96.7% | 3.3% |
+| **MAWPS** | 355 | **39.2%** | 99.7% | 96.9% | 41.7% | 100.0% | 0.0% |
+| **SVAMP** | 300 | **39.3%** | 99.3% | 97.3% | 42.7% | 99.7% | 0.3% |
+| **Math-7 macro** | 7 datasets | **36.8%** | 73.0% | 67.4% | 40.7% | 72.1% | 27.9% |
+
+### Format Decision
+
+- Response-level micro rates across all 2,798 prompts: accuracy 45.4%, think complete 89.9%, answer complete 85.1%, boxed extraction 50.2%, reward-grader success 100.0%, EOS 90.2%, truncation 9.8%.
+- Only 1,241/2,798 responses (44.4%) simultaneously passed both tag checks, boxed extraction, reward-grader execution, and EOS.
+- 1,140/2,798 responses were non-truncated but still lacked a boxed answer. Typical failure: `<answer> 81 </answer>` instead of `<answer> \\boxed{81} </answer>`.
+- Competition-level prompts also exhibit severe length failure: AIME-2025 truncation 93.3%, AMC-2023 52.5%, MATH-500 25.8%.
+- The reward grader executed successfully for every response; the dominant failures are model output format and excessive response length, not grader crashes.
+- Decision: the raw model fails the frozen format gate by a wide margin. Supervised format cold start is required before Stage1 Model1 selection.
+- Generation completed in 799.8 seconds. Raw results: `/data-2/model_weights/math_task/qwen3_1p7b_cold_start_v1/validation/step_0_n1/`.
+
+---
+
+## Cross-Experiment Comparison (EVAL-01 through EVAL-10)
 
 ### 1.7B Models (verl-trained, mean@3 or mean@8)
 
@@ -355,6 +393,12 @@ This file tracks offline vLLM inference and evaluation results for merged model 
 **Observations**:
 
 *1.7B verl-trained models*: EVAL-04 (EXP-06 step 680) remains the strongest 1.7B checkpoint overall, leading on MATH-500 (66.9%), AMC-2023 (43.1%), and OlympiadBench (30.3%).
+
+*Qwen3-1.7B step-zero format screen*: EVAL-10 is not directly comparable to the
+trained-model `mean@3/mean@8` table because it uses `n=1` as a format-screening
+run. It demonstrates that the official post-trained model is not an admissible
+format init: only 44.4% of responses pass the complete format contract and
+boxed extraction succeeds on only 50.2% of responses.
 
 *4B/8B DPO pipeline comparison*: The SFT→DPO pipeline (EXP-11) is dramatically stronger than both Base→DPO approaches. The 4B SFT→DPO model surpasses even the 8B Base→DPO on 6 of 7 benchmarks: MATH-500 67.7% vs 51.1% (+16.6%), GSM8K 89.8% vs 57.2% (+32.6%), MAWPS 94.4% vs 72.8% (+21.6%), SVAMP 90.7% vs 70.2% (+20.5%), AQUA 65.0% vs 5.1% (+59.9%), AMC 40.8% vs 30.0% (+10.8%). Only AIME-2025 (7.8% vs 8.9%) slightly trails the 8B DPO. This confirms the critical importance of SFT pre-training before DPO: the SFT checkpoint provides format compliance and reasoning capability that DPO alone cannot instill. Notably, the 4B SFT→DPO now matches verl-trained 1.7B models on MATH-500 (67.7% vs 66.9%).
 

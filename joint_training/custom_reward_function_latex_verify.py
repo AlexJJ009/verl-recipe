@@ -42,6 +42,17 @@ from verl.utils.reward_score.math_dapo import normalize_final_answer, last_boxed
 from verl.utils.reward_score import math_verify as verl_math_verify
 
 
+def compute_format_telemetry(solution_str: str) -> dict[str, bool]:
+    think_open = solution_str.count("<think>")
+    think_close = solution_str.count("</think>")
+    answer_open = solution_str.count("<answer>")
+    answer_close = solution_str.count("</answer>")
+    return {
+        "think_complete": think_open == 1 and think_close == 1 and solution_str.index("<think>") < solution_str.index("</think>"),
+        "answer_complete": answer_open == 1 and answer_close == 1 and solution_str.index("<answer>") < solution_str.index("</answer>"),
+    }
+
+
 def verify_with_latex(pred: str, gold: str) -> Optional[bool]:
     """
     Verify answer using LaTeX semantic parsing.
@@ -155,6 +166,8 @@ def compute_score_latex_verify(
             # If valid_length reaches max_resp_len, the response was truncated (no EOS)
             has_eos = (valid_length < max_resp_len)
 
+    format_telemetry = compute_format_telemetry(solution_str)
+
     # Extract predicted answer for logging
     pred = extract_boxed_answer(solution_str)
     if pred is None:
@@ -204,11 +217,28 @@ def compute_score_latex_verify(
         reward = -1.0
         final_correct = False
 
+    boxed_extraction_success = pred != '[NO_BOXED]'
+    reward_grader_success = verification_method not in {"verl_math_verify_error", "no_answer"}
+    format_contract_success = all(
+        (
+            format_telemetry["think_complete"],
+            format_telemetry["answer_complete"],
+            boxed_extraction_success,
+            reward_grader_success,
+            has_eos,
+        )
+    )
+
     return {
         "score": reward,
         "acc": final_correct,
         "pred": pred,
         "has_eos": has_eos,
+        "truncated": not has_eos,
+        "boxed_extraction_success": boxed_extraction_success,
+        "reward_grader_success": reward_grader_success,
+        "format_contract_success": format_contract_success,
+        **format_telemetry,
         "answer_correct": correct,
         "verification_method": verification_method,
     }

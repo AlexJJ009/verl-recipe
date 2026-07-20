@@ -107,9 +107,9 @@ def bootstrap_majority(predictions: list[dict], k: int, n_bootstrap: int = 200, 
 
 
 def compute_shared_metrics(prompt_entries: list[dict], n_for_mean: int) -> dict:
-    """Compute mean@n and extraction-failure rate once for the full run."""
+    """Compute accuracy and output-format metrics once for the full run."""
     mean_vals = []
-    extraction_failures = 0
+    telemetry_totals = defaultdict(int)
     total_responses = 0
 
     for entry in prompt_entries:
@@ -120,13 +120,28 @@ def compute_shared_metrics(prompt_entries: list[dict], n_for_mean: int) -> dict:
 
         for r in results:
             total_responses += 1
-            if r["pred"] in (None, "", "[NO_BOXED]"):
-                extraction_failures += 1
+            for key in (
+                "think_complete",
+                "answer_complete",
+                "boxed_extraction_success",
+                "reward_grader_success",
+                "format_contract_success",
+                "has_eos",
+                "truncated",
+            ):
+                telemetry_totals[key] += int(bool(r.get(key, False)))
 
     return {
         f"mean@{n_for_mean}": float(np.mean(mean_vals)),
         "n_prompts": len(prompt_entries),
-        "extraction_fail": extraction_failures / max(total_responses, 1),
+        "think_complete_rate": telemetry_totals["think_complete"] / max(total_responses, 1),
+        "answer_complete_rate": telemetry_totals["answer_complete"] / max(total_responses, 1),
+        "boxed_extraction_success_rate": telemetry_totals["boxed_extraction_success"] / max(total_responses, 1),
+        "reward_grader_success_rate": telemetry_totals["reward_grader_success"] / max(total_responses, 1),
+        "format_contract_success_rate": telemetry_totals["format_contract_success"] / max(total_responses, 1),
+        "eos_rate": telemetry_totals["has_eos"] / max(total_responses, 1),
+        "truncation_rate": telemetry_totals["truncated"] / max(total_responses, 1),
+        "extraction_fail": 1.0 - telemetry_totals["boxed_extraction_success"] / max(total_responses, 1),
     }
 
 
@@ -302,6 +317,10 @@ def main():
                     data_source=sample["data_source"],
                     solution_str=response_text,
                     ground_truth=sample["ground_truth"],
+                    extra_info={
+                        "valid_response_length": len(completion.token_ids),
+                        "max_resp_len": args.max_tokens,
+                    },
                 )
                 if isinstance(result, (int, float)):
                     result = {"score": float(result), "acc": float(result) > 0, "pred": None}
@@ -310,6 +329,14 @@ def main():
                     "score": float(result.get("score", 0)),
                     "pred": result.get("pred"),
                     "verification_method": result.get("verification_method"),
+                    "think_complete": bool(result.get("think_complete", False)),
+                    "answer_complete": bool(result.get("answer_complete", False)),
+                    "boxed_extraction_success": bool(result.get("boxed_extraction_success", False)),
+                    "reward_grader_success": bool(result.get("reward_grader_success", False)),
+                    "format_contract_success": bool(result.get("format_contract_success", False)),
+                    "has_eos": bool(result.get("has_eos", completion.finish_reason != "length")),
+                    "truncated": bool(result.get("truncated", completion.finish_reason == "length")),
+                    "finish_reason": completion.finish_reason,
                     "response_text": response_text,
                 })
             ds = sample["data_source"]
@@ -338,6 +365,53 @@ def main():
         for k in ds_k_values:
             metrics.update(compute_metrics_for_k(info["entries"], k))
         all_metrics[data_source] = metrics
+
+    macro_sources = sorted(all_metrics)
+    macro_n_values = {all_metrics[source]["n_used"] for source in macro_sources}
+    macro_mean_key = f"mean@{macro_n_values.pop()}" if len(macro_n_values) == 1 else "mean@configured_n"
+    macro_metrics = {
+        "dataset_count": len(macro_sources),
+        "data_sources": macro_sources,
+        macro_mean_key: float(
+            np.mean(
+                [all_metrics[source][f"mean@{all_metrics[source]['n_used']}"] for source in macro_sources]
+            )
+        ),
+    }
+    for key in (
+        "think_complete_rate",
+        "answer_complete_rate",
+        "boxed_extraction_success_rate",
+        "reward_grader_success_rate",
+        "format_contract_success_rate",
+        "eos_rate",
+        "truncation_rate",
+    ):
+        macro_metrics[key] = float(np.mean([all_metrics[source][key] for source in macro_sources]))
+
+    total_responses = sum(
+        len(entry["results"])
+        for info in results_by_source.values()
+        for entry in info["entries"]
+    )
+    micro_metrics = {"response_count": total_responses}
+    for key in (
+        "think_complete",
+        "answer_complete",
+        "boxed_extraction_success",
+        "reward_grader_success",
+        "format_contract_success",
+        "has_eos",
+        "truncated",
+    ):
+        count = sum(
+            int(bool(result[key]))
+            for info in results_by_source.values()
+            for entry in info["entries"]
+            for result in entry["results"]
+        )
+        rate_name = "eos_rate" if key == "has_eos" else f"{key}_rate"
+        micro_metrics[rate_name] = count / max(total_responses, 1)
 
     # ---- Print results ----
     print("=" * 60)
@@ -409,6 +483,8 @@ def main():
         "n_values_used": n_values_used,
         "generation_time_s": total_gen_time,
         "metrics": all_metrics,
+        "macro_metrics": macro_metrics,
+        "micro_metrics": micro_metrics,
     }
     metrics_file = output_dir / "eval_metrics.json"
     with open(metrics_file, "w") as f:
@@ -428,6 +504,14 @@ def main():
                     "score": r["score"],
                     "pred": r["pred"],
                     "verification_method": r["verification_method"],
+                    "think_complete": r["think_complete"],
+                    "answer_complete": r["answer_complete"],
+                    "boxed_extraction_success": r["boxed_extraction_success"],
+                    "reward_grader_success": r["reward_grader_success"],
+                    "format_contract_success": r["format_contract_success"],
+                    "has_eos": r["has_eos"],
+                    "truncated": r["truncated"],
+                    "finish_reason": r["finish_reason"],
                     "response_text": r["response_text"],
                     "n": info["n"],
                 })

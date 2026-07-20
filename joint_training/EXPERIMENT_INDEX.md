@@ -229,6 +229,23 @@ This table tracks all training experiments, their logs, checkpoints, and merged 
 
 ---
 
+### EXP-12: Qwen3-1.7B Post-Trained/Instruct Step-Zero Baseline
+
+| Field | Value |
+|---|---|
+| **Script** | N/A (official Hugging Face model; evaluated with `recipe/joint_training/offline_eval.py`) |
+| **Goal** | Determine whether raw Qwen3-1.7B can satisfy the Math-7 `<think>/<answer>/\\boxed{}` output contract without supervised format cold start |
+| **Algorithm** | Official post-trained/Instruct model (no project training) |
+| **Model** | Qwen3-1.7B (`Qwen/Qwen3-1.7B`) |
+| **Dataset** | N/A for training; complete Math-7 system-prompt validation for screening |
+| **Key Params** | n=1, temperature=0.2, top_p=0.95, max_tokens=4096, seed=20260719, tp=8, FlashInfer |
+| **Model Weights** | `/data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e` |
+| **Inference** | EVAL-10 in `INFERENCE_RESULTS.md` (complete Math-7 step-zero format screen) |
+| **Known Issue** | Fails the format gate: boxed extraction macro 40.7%, EOS macro 72.1%, truncation macro 27.9%; cold start required |
+| **Status** | External baseline evaluated; concluded not admissible as Stage1 Model1 init |
+
+---
+
 ### EXP-00: GRPO-Example-Script (Reference Only)
 
 | Field | Value |
@@ -321,6 +338,7 @@ Recommended folder structure:
 | `/data-1/checkpoints/qwen3-4b-dpo` | EXP-09 | 376 (final) | External DPO (8.2 GB) |
 | `/data-1/checkpoints/qwen3-8b-dpo` | EXP-10 | 496 (final) | External DPO (~16 GB) |
 | `/data-1/checkpoints/qwen3-4b-sft-dpo` | EXP-11 | 365 (final) | External SFT→DPO (8.2 GB) |
+| `/data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc...` | EXP-12 | N/A (official post-trained model) | HuggingFace cache; step-zero baseline |
 
 ---
 
