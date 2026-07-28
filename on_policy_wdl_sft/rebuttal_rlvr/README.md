@@ -118,9 +118,13 @@ they are never self-certified from the physical host.
 
 After a formal worker reaches step 115 and the training process exits zero,
 `release_after_success.sh` runs automatically. It records and checks
-`success_complete`, imports the local experiment-registry row, syncs the
-offline W&B run, and verifies both the registry row and sync marker. A release
-failure writes `release_status=failed` beside the attempt while preserving
+`success_complete`, imports the local experiment-registry row, verifies the
+offline W&B directory, and writes a SHA-256 file manifest for handoff. Meituan
+workers have no external network, so this path requires `WANDB_MODE=offline`
+and never invokes `wandb sync`. The colleague returns the complete offline W&B
+run, its manifest, logs, and checkpoints to the experiment owner for joint
+analysis or later sync from a networked machine. A local release failure writes
+`release_status=failed` beside the attempt while preserving
 `training_status=success_complete`; failed or incomplete training never enters
 this path. Offline Math-7 result analysis remains a later, separate workflow
 after the colleague returns logs/checkpoints.

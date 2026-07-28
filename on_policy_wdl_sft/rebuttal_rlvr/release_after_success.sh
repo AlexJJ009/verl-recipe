@@ -56,9 +56,25 @@ print(matches[0])
 PY
 )
 
-WANDB_SYNC_DIR=$(find "$RUN_WANDB_DIR" -type d -name 'offline-run-*' -print | sort | tail -1)
-if [ -z "$WANDB_SYNC_DIR" ] || [ ! -d "$WANDB_SYNC_DIR" ]; then
+if [ "${WANDB_MODE:-offline}" != "offline" ]; then
+    echo "ERROR: Meituan rebuttal RLVR requires WANDB_MODE=offline" >&2
+    exit 1
+fi
+
+WANDB_OFFLINE_DIR=$(find "$RUN_WANDB_DIR" -type d -name 'offline-run-*' -print | sort | tail -1)
+if [ -z "$WANDB_OFFLINE_DIR" ] || [ ! -d "$WANDB_OFFLINE_DIR" ]; then
     echo "ERROR: offline W&B run directory missing under $RUN_WANDB_DIR" >&2
+    exit 1
+fi
+WANDB_OFFLINE_MANIFEST="${ATTEMPT_ROOT}/wandb_offline_run.sha256"
+(
+    cd "$WANDB_OFFLINE_DIR"
+    find . -type f -print0 | sort -z | while IFS= read -r -d '' path; do
+        sha256sum "$path"
+    done
+) >"$WANDB_OFFLINE_MANIFEST"
+if [ ! -s "$WANDB_OFFLINE_MANIFEST" ]; then
+    echo "ERROR: offline W&B run contains no files: $WANDB_OFFLINE_DIR" >&2
     exit 1
 fi
 
@@ -84,7 +100,7 @@ python3 "$IMPORT_SCRIPT" \
     --checkpoint-dir "$CKPTS_DIR" \
     --metrics-path "$METRICS_PATH" \
     --train-file "$TRAIN_FILE" \
-    --wandb-run "$WANDB_SYNC_DIR" \
+    --wandb-run "$WANDB_OFFLINE_DIR" \
     --final-step "$FINAL_STEP" \
     --db "$REGISTRY_DB"
 
@@ -101,24 +117,16 @@ if row is None:
 print(f"registry verified training_run_id={row[0]}")
 PY
 
-sync_args=(wandb sync --project "${WANDB_PROJECT:-Rebuttal-RLVR-MATH}" --mark-synced)
-if [ -n "${WANDB_ENTITY:-}" ]; then
-    sync_args+=(--entity "$WANDB_ENTITY")
-fi
-sync_args+=("$WANDB_SYNC_DIR")
-"${sync_args[@]}"
-
-if ! find "$WANDB_SYNC_DIR" -maxdepth 1 -type f \( -name '*.wandb.synced' -o -name '.synced' \) -print -quit | grep -q .; then
-    echo "ERROR: W&B sync marker missing after successful sync command" >&2
-    exit 1
-fi
-
 printf '%s\n' \
-    'release_status=complete' \
+    'release_status=local_complete' \
+    'training_status=success_complete' \
+    'wandb_mode=offline' \
+    'wandb_publication_status=deferred_manual_handoff' \
     "run_name=${WANDB_RUN_NAME}" \
     "checkpoint=${FINAL_CKPT}" \
     "metrics=${METRICS_PATH}" \
     "registry_db=${REGISTRY_DB}" \
-    "wandb_sync_dir=${WANDB_SYNC_DIR}" \
+    "wandb_offline_dir=${WANDB_OFFLINE_DIR}" \
+    "wandb_offline_manifest=${WANDB_OFFLINE_MANIFEST}" \
     >"$RELEASE_STATUS"
-echo "[$(date -Iseconds)] automatic release complete run=${WANDB_RUN_NAME}"
+echo "[$(date -Iseconds)] local offline release complete; W&B handoff deferred run=${WANDB_RUN_NAME}"
