@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR frozen Math-7 receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_kind",
+    "datasets",
+    "grader_receipt_sha256",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_kind": {"const": "math7_bundle"},
+    "datasets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aime_2025", "math_500", "amc23", "aqua", "gsm8k", "mawps", "svamp"],
+      "properties": {
+        "aime_2025": {"$ref": "#/$defs/aime_2025"},
+        "math_500": {"$ref": "#/$defs/math_500"},
+        "amc23": {"$ref": "#/$defs/amc23"},
+        "aqua": {"$ref": "#/$defs/aqua"},
+        "gsm8k": {"$ref": "#/$defs/gsm8k"},
+        "mawps": {"$ref": "#/$defs/mawps"},
+        "svamp": {"$ref": "#/$defs/svamp"}
+      }
+    },
+    "grader_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "dataset_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "row_count", "ordered_prompt_ids_sha256", "prompt_template_sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/[^\\n\\r\\u0000]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "row_count": {"type": "integer", "minimum": 1},
+        "ordered_prompt_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "prompt_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "aime_2025": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 30}}}]},
+    "math_500": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 500}}}]},
+    "amc23": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 40}}}]},
+    "aqua": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 254}}}]},
+    "gsm8k": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 1319}}}]},
+    "mawps": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 355}}}]},
+    "svamp": {"allOf": [{"$ref": "#/$defs/dataset_base"}, {"properties": {"row_count": {"const": 300}}}]}
+  }
+}

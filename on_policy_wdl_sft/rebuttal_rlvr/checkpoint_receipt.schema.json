@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR initialization checkpoint receipt",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version", "classifier", "model_path", "files",
+    "base_model_revision", "architecture", "tokenizer_hash",
+    "dataset_receipt_sha256", "prompt_template_hash", "initialization_seed",
+    "optimizer", "optimizer_updates", "target_supervised_tokens",
+    "learning_rate_schedule", "checkpoint_selection_rule",
+    "training_code_commit", "post_checkpoint_rl", "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "classifier": {"enum": ["ordinary_sft", "offline_wdl_sft"]},
+    "model_path": {"type": "string", "minLength": 1},
+    "files": {
+      "type": "object",
+      "minProperties": 3,
+      "additionalProperties": {"$ref": "#/$defs/sha256"}
+    },
+    "base_model_revision": {"type": "string", "minLength": 1},
+    "architecture": {"type": "string", "minLength": 1},
+    "tokenizer_hash": {"$ref": "#/$defs/sha256"},
+    "dataset_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "prompt_template_hash": {"$ref": "#/$defs/sha256"},
+    "initialization_seed": {"type": "integer"},
+    "optimizer": {"type": "string", "minLength": 1},
+    "optimizer_updates": {"type": "integer", "minimum": 1},
+    "target_supervised_tokens": {"type": "integer", "minimum": 1},
+    "learning_rate_schedule": {"type": "string", "minLength": 1},
+    "checkpoint_selection_rule": {"type": "string", "minLength": 1},
+    "training_code_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "post_checkpoint_rl": {"const": false},
+    "offline_wdl_stage": {"type": "string", "minLength": 1},
+    "single_model_extraction_rule": {"type": "string", "minLength": 1},
+    "receipt_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

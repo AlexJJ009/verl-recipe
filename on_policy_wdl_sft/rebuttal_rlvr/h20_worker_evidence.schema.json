@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR H20 calibration worker evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_kind",
+    "calibration_id",
+    "arm",
+    "job_id",
+    "image_digest",
+    "runtime_versions",
+    "runtime_versions_sha256",
+    "metrics",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_kind": {"const": "h20_calibration_worker_evidence"},
+    "calibration_id": {"type": "string", "pattern": "^[A-Za-z0-9_+-]{1,64}$"},
+    "arm": {"enum": ["sft", "wdl"]},
+    "job_id": {"type": "string", "pattern": "^[A-Za-z0-9_.:+-]+$"},
+    "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_versions": {"$ref": "#/$defs/runtime_versions"},
+    "runtime_versions_sha256": {"$ref": "#/$defs/sha256"},
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "receipt_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runtime_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nvidia_driver", "cuda_driver", "cuda_runtime", "pytorch", "vllm", "flashinfer"],
+      "properties": {
+        "nvidia_driver": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "cuda_driver": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "cuda_runtime": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "pytorch": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"},
+        "vllm": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"},
+        "flashinfer": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["peak_gpu_memory_fraction", "median_step_seconds", "step_time_cv", "finite_loss_and_grad_norm", "worker_retry_count", "measured_steps"],
+      "properties": {
+        "peak_gpu_memory_fraction": {"type": "number", "minimum": 0, "maximum": 0.9},
+        "median_step_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "step_time_cv": {"type": "number", "minimum": 0, "maximum": 0.15},
+        "finite_loss_and_grad_norm": {"const": true},
+        "worker_retry_count": {"const": 0},
+        "measured_steps": {"const": [3, 4, 5]}
+      }
+    }
+  }
+}

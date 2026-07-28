@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR paired initialization manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "admission_scope",
+    "init_pair",
+    "ordinary_sft_receipt",
+    "offline_wdl_sft_receipt",
+    "matched_fields",
+    "candidate_universe_hash",
+    "selection_timestamp",
+    "historical_math7_access_disclosed",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "admitted"},
+    "admission_scope": {"enum": ["fixed_pair_pilot", "method_matrix"]},
+    "init_pair": {"type": "string", "pattern": "^I[1-9][0-9]*$"},
+    "ordinary_sft_receipt": {"$ref": "#/$defs/receiptBinding"},
+    "offline_wdl_sft_receipt": {"$ref": "#/$defs/receiptBinding"},
+    "matched_fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_model_revision",
+        "architecture",
+        "tokenizer_hash",
+        "math_source_receipt",
+        "prompt_template_hash",
+        "target_supervised_tokens",
+        "optimizer_updates",
+        "optimizer",
+        "learning_rate_schedule",
+        "initialization_seed",
+        "checkpoint_selection_rule"
+      ],
+      "properties": {
+        "base_model_revision": {"const": true},
+        "architecture": {"const": true},
+        "tokenizer_hash": {"const": true},
+        "math_source_receipt": {"const": true},
+        "prompt_template_hash": {"const": true},
+        "target_supervised_tokens": {"const": true},
+        "optimizer_updates": {"const": true},
+        "optimizer": {"const": true},
+        "learning_rate_schedule": {"const": true},
+        "initialization_seed": {"const": true},
+        "checkpoint_selection_rule": {"const": true}
+      }
+    },
+    "candidate_universe_hash": {"$ref": "#/$defs/sha256"},
+    "selection_timestamp": {"type": "string", "format": "date-time"},
+    "historical_math7_access_disclosed": {"type": "boolean"},
+    "manifest_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receiptBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

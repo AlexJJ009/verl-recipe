@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR H20 arm calibration terminal receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_kind",
+    "calibration_id",
+    "arm",
+    "state",
+    "job_id",
+    "app_name",
+    "image_digest",
+    "runtime_versions",
+    "platform_resources",
+    "selected",
+    "fixed",
+    "staged_run_hope",
+    "status_evidence",
+    "worker_evidence",
+    "metrics",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_kind": {"const": "h20_calibration_terminal"},
+    "calibration_id": {"type": "string", "pattern": "^[A-Za-z0-9_+-]{1,64}$"},
+    "arm": {"enum": ["sft", "wdl"]},
+    "state": {"const": "SUCCEEDED"},
+    "job_id": {"type": "string", "pattern": "^[A-Za-z0-9_.:+-]+$"},
+    "app_name": {"type": "string", "pattern": "^[A-Za-z0-9_.:+-]+$"},
+    "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_versions": {"$ref": "#/$defs/runtime_versions"},
+    "platform_resources": {"$ref": "#/$defs/platform_resources"},
+    "selected": {"$ref": "#/$defs/selected"},
+    "fixed": {"$ref": "#/$defs/fixed"},
+    "staged_run_hope": {"$ref": "#/$defs/file_binding"},
+    "status_evidence": {"$ref": "#/$defs/file_binding"},
+    "worker_evidence": {"$ref": "#/$defs/file_binding"},
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "receipt_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "absolute_path": {"type": "string", "pattern": "^/[^\\n\\r\\u0000]+$"},
+    "file_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/absolute_path"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "runtime_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nvidia_driver", "cuda_driver", "cuda_runtime", "pytorch", "vllm", "flashinfer"],
+      "properties": {
+        "nvidia_driver": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "cuda_driver": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "cuda_runtime": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$"},
+        "pytorch": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"},
+        "vllm": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"},
+        "flashinfer": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$"}
+      }
+    },
+    "platform_resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usergroup", "queue", "workers", "worker_memory_mb", "worker_vcore", "gpu_resource_key", "gpu_count", "worker_script", "shm_size_bytes", "max_retry", "failover"],
+      "properties": {
+        "usergroup": {"const": "hadoop-ai-search"},
+        "queue": {"const": "root.shxs_training_cluster.hadoop-fridayagi.friday_h20_train"},
+        "workers": {"const": 1},
+        "worker_memory_mb": {"const": 1920000},
+        "worker_vcore": {"const": 128},
+        "gpu_resource_key": {"const": "worker.gcoresh20-141g"},
+        "gpu_count": {"const": 8},
+        "worker_script": {"const": "bash jupyter.sh"},
+        "shm_size_bytes": {"const": 549755813888},
+        "max_retry": {"const": 0},
+        "failover": {"const": false}
+      }
+    },
+    "selected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rollout_gpu_memory_utilization", "generation_micro_batch_size", "log_prob_micro_batch_size", "actor_ppo_max_token_len"],
+      "properties": {
+        "rollout_gpu_memory_utilization": {"enum": [0.6, 0.7, 0.8]},
+        "generation_micro_batch_size": {"enum": [16, 32]},
+        "log_prob_micro_batch_size": {"enum": [4, 8]},
+        "actor_ppo_max_token_len": {"enum": [9192, 18384]}
+      }
+    },
+    "fixed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tensor_parallel_size", "rollout_agent_num_workers", "rollout_max_num_seqs", "rollout_enforce_eager", "rollout_enable_chunked_prefill", "rollout_max_model_len", "log_prob_max_token_len_per_gpu", "actor_param_offload", "actor_optimizer_offload"],
+      "properties": {
+        "tensor_parallel_size": {"const": 1},
+        "rollout_agent_num_workers": {"const": 4},
+        "rollout_max_num_seqs": {"const": 256},
+        "rollout_enforce_eager": {"const": true},
+        "rollout_enable_chunked_prefill": {"const": true},
+        "rollout_max_model_len": {"const": 4596},
+        "log_prob_max_token_len_per_gpu": {"const": 4596},
+        "actor_param_offload": {"const": false},
+        "actor_optimizer_offload": {"const": false}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["peak_gpu_memory_fraction", "median_step_seconds", "step_time_cv", "finite_loss_and_grad_norm", "worker_retry_count", "measured_steps"],
+      "properties": {
+        "peak_gpu_memory_fraction": {"type": "number", "minimum": 0, "maximum": 0.9},
+        "median_step_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "step_time_cv": {"type": "number", "minimum": 0, "maximum": 0.15},
+        "finite_loss_and_grad_norm": {"const": true},
+        "worker_retry_count": {"const": 0},
+        "measured_steps": {"const": [3, 4, 5]}
+      }
+    }
+  }
+}

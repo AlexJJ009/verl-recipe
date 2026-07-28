@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rebuttal RLVR frozen MATH training-data receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_kind",
+    "path",
+    "sha256",
+    "source_data",
+    "source_row_count",
+    "filtered_row_count",
+    "filtered_row_ids_sha256",
+    "prompt_template_sha256",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_kind": {"const": "rlvr_train_dataset"},
+    "path": {"type": "string", "pattern": "^/[^\\n\\r\\u0000]+$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_data": {"const": "ck46/hendrycks_math"},
+    "source_row_count": {"const": 7500},
+    "filtered_row_count": {"const": 7405},
+    "filtered_row_ids_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "prompt_template_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}
