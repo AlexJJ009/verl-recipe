@@ -13,6 +13,8 @@ FROZEN_CONFIG_PATH="${SCRIPT_DIR}/frozen_grpo_v2.env"
 : "${INIT_MODEL_PATH:?INIT_MODEL_PATH must be set by a thin wrapper}"
 
 export ROOT=${ROOT:-/data-1}
+export DATASET_ROOT=${DATASET_ROOT:-"${ROOT}"}
+export STATE_ROOT=${STATE_ROOT:-"${ROOT}"}
 
 # shellcheck disable=SC1091
 source "$FROZEN_CONFIG_PATH"
@@ -79,14 +81,14 @@ if [ ! -d "$INIT_MODEL_PATH" ]; then
     exit 2
 fi
 
-export TRAIN_FILE=${TRAIN_FILE:-"${ROOT}/dataset/math/train_rl_format.parquet"}
-export MATH7_AIME_FILE=${MATH7_AIME_FILE:-"${ROOT}/dataset/AIME-2025/aime-2025_with_system_prompt.parquet"}
-export MATH7_MATH500_FILE=${MATH7_MATH500_FILE:-"${ROOT}/dataset/MATH-500/math500-test_with_system_prompt.parquet"}
-export MATH7_AMC23_FILE=${MATH7_AMC23_FILE:-"${ROOT}/dataset/AMC23/amc23-test_with_system_prompt.parquet"}
-export MATH7_AQUA_FILE=${MATH7_AQUA_FILE:-"${ROOT}/dataset/AQUA/aqua-test_with_system_prompt.parquet"}
-export MATH7_GSM8K_FILE=${MATH7_GSM8K_FILE:-"${ROOT}/dataset/gsm8k/gsm8k-test_with_system_prompt.parquet"}
-export MATH7_MAWPS_FILE=${MATH7_MAWPS_FILE:-"${ROOT}/dataset/MAWPS/mawps-test_with_system_prompt.parquet"}
-export MATH7_SVAMP_FILE=${MATH7_SVAMP_FILE:-"${ROOT}/dataset/SVAMP/svamp-test_with_system_prompt.parquet"}
+export TRAIN_FILE=${TRAIN_FILE:-"${DATASET_ROOT}/dataset/math/train_rl_format.parquet"}
+export MATH7_AIME_FILE=${MATH7_AIME_FILE:-"${DATASET_ROOT}/dataset/AIME-2025/aime-2025_with_system_prompt.parquet"}
+export MATH7_MATH500_FILE=${MATH7_MATH500_FILE:-"${DATASET_ROOT}/dataset/MATH-500/math500-test_with_system_prompt.parquet"}
+export MATH7_AMC23_FILE=${MATH7_AMC23_FILE:-"${DATASET_ROOT}/dataset/AMC23/amc23-test_with_system_prompt.parquet"}
+export MATH7_AQUA_FILE=${MATH7_AQUA_FILE:-"${DATASET_ROOT}/dataset/AQUA/aqua-test_with_system_prompt.parquet"}
+export MATH7_GSM8K_FILE=${MATH7_GSM8K_FILE:-"${DATASET_ROOT}/dataset/gsm8k/gsm8k-test_with_system_prompt.parquet"}
+export MATH7_MAWPS_FILE=${MATH7_MAWPS_FILE:-"${DATASET_ROOT}/dataset/MAWPS/mawps-test_with_system_prompt.parquet"}
+export MATH7_SVAMP_FILE=${MATH7_SVAMP_FILE:-"${DATASET_ROOT}/dataset/SVAMP/svamp-test_with_system_prompt.parquet"}
 
 for input_file in \
     "$TRAIN_FILE" \
@@ -123,18 +125,18 @@ export NCCL_IBEXT_DISABLE=${NCCL_IBEXT_DISABLE:-1}
 export NCCL_NVLS_ENABLE=${NCCL_NVLS_ENABLE:-1}
 export NCCL_TIMEOUT=${NCCL_TIMEOUT:-3600}
 
-export OUTPUT_ROOT=${OUTPUT_ROOT:-"${ROOT}/verl-exp"}
+export OUTPUT_ROOT=${OUTPUT_ROOT:-"${STATE_ROOT}/verl-exp"}
 export BASE_CKPT_DIR=${BASE_CKPT_DIR:-"${OUTPUT_ROOT}/checkpoints/rebuttal_rlvr"}
 export EVAL_ROOT=${EVAL_ROOT:-"${OUTPUT_ROOT}/eval/rebuttal_rlvr"}
 export LOG_DIR=${LOG_DIR:-"${OUTPUT_ROOT}/logs/rebuttal_rlvr"}
 export WANDB_DIR=${WANDB_DIR:-"${OUTPUT_ROOT}/wandb_runs/rebuttal_rlvr"}
 export RECEIPT_ROOT=${RECEIPT_ROOT:-"${OUTPUT_ROOT}/receipts/rebuttal_rlvr"}
-export HF_HOME=${HF_HOME:-"${ROOT}/.cache/huggingface"}
+export HF_HOME=${HF_HOME:-"${STATE_ROOT}/.cache/huggingface"}
 export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-"${HF_HOME}/hub"}
 export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-"${HF_HOME}/datasets"}
-export XDG_CACHE_HOME=${XDG_CACHE_HOME:-"${ROOT}/.cache"}
-export RAY_TMPDIR=${RAY_TMPDIR:-"${ROOT}/ray_tmp"}
-export TMPDIR=${TMPDIR:-"${ROOT}/tmp"}
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-"${STATE_ROOT}/.cache"}
+export RAY_TMPDIR=${RAY_TMPDIR:-"${STATE_ROOT}/ray_tmp"}
+export TMPDIR=${TMPDIR:-"${STATE_ROOT}/tmp"}
 export VLLM_CONFIG_ROOT=${VLLM_CONFIG_ROOT:-"${XDG_CACHE_HOME}/vllm"}
 export VERL_ZMQ_IPC_DIR=${VERL_ZMQ_IPC_DIR:-"${TMPDIR}"}
 
@@ -151,7 +153,16 @@ export WANDB_PROJECT=${WANDB_PROJECT:-Rebuttal-RLVR-MATH}
 export WANDB_RUN_NAME=${WANDB_RUN_NAME:-"${RUN_PREFIX}-${JOB_TAG}-${ATTEMPT_ID}"}
 export WANDB_MODE=${WANDB_MODE:-offline}
 export WANDB_DIR="$RUN_WANDB_DIR"
-export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${RUN_LOG_DIR}/metrics"}
+if [ "${REQUIRE_PLATFORM_RECEIPTS:-0}" = "1" ]; then
+    export REGISTRY_ROOT="${STATE_ROOT}/experiment_registry"
+    export EXPERIMENT_REGISTRY_DB="${REGISTRY_ROOT}/experiment_registry.sqlite"
+    export TRAINING_RELEASE_GATE_STATE="${REGISTRY_ROOT}/training_release_gate.jsonl"
+    export RELEASE_LOG_FILE="${ATTEMPT_ROOT}/release.log"
+    export RELEASE_STATUS_FILE="${ATTEMPT_ROOT}/release_status.env"
+    export VERL_FILE_LOGGER_ROOT="${RUN_LOG_DIR}/metrics"
+else
+    export VERL_FILE_LOGGER_ROOT=${VERL_FILE_LOGGER_ROOT:-"${RUN_LOG_DIR}/metrics"}
+fi
 
 NNODES=${NNODES:-1}
 NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}

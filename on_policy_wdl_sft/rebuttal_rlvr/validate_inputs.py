@@ -624,6 +624,9 @@ def validate_h20_profile(
 def validate_path_override_receipt(
     receipt: dict[str, Any],
     root: Path,
+    dataset_root: Path,
+    model_root: Path,
+    state_root: Path,
     repo_subpath: str,
     init_model_path: Path,
     run_mode: str,
@@ -632,17 +635,44 @@ def validate_path_override_receipt(
     validate_json_schema(receipt, PATH_OVERRIDE_RECEIPT_SCHEMA, "path-override receipt")
     validate_self_hash(receipt, "receipt_sha256", "path-override receipt")
     subpath = Path(repo_subpath)
-    if not root.is_absolute() or subpath.is_absolute() or any(part in {"", ".", ".."} for part in subpath.parts):
+    if (
+        not root.is_absolute()
+        or any(not path.is_absolute() for path in (dataset_root, model_root, state_root))
+        or subpath.is_absolute()
+        or any(part in {"", ".", ".."} for part in subpath.parts)
+    ):
         raise ValidationError("path-override validator received an unsafe root/repo_subpath")
-    output_root = root / "verl-exp"
+    controlled_roots = {
+        "dataset_root": dataset_root,
+        "model_root": model_root,
+        "state_root": state_root,
+    }
+    resolved_root = root.resolve()
+    outside_roots = []
+    for name, path in controlled_roots.items():
+        try:
+            relative = path.resolve().relative_to(resolved_root)
+        except ValueError:
+            outside_roots.append(name)
+            continue
+        if not relative.parts:
+            outside_roots.append(name)
+    if outside_roots:
+        raise ValidationError(
+            "dataset_root, model_root, and state_root must be strict children of root: "
+            f"{outside_roots}"
+        )
+    output_root = state_root / "verl-exp"
     expected = {
         "root": str(root),
+        "dataset_root": str(dataset_root),
+        "state_root": str(state_root),
         "repo_subpath": repo_subpath,
         "repo_root": str(root / repo_subpath),
-        "model_root": str(root / "models/rebuttal_rlvr/init"),
+        "model_root": str(model_root),
         "init_model_path": str(init_model_path),
-        "train_file": str(root / "data/math/train_rl_format.parquet"),
-        "math7_root": str(root / "data/math7"),
+        "train_file": str(dataset_root / "data/math/train_rl_format.parquet"),
+        "math7_root": str(dataset_root / "data/math7"),
         "output_root": str(output_root),
         "checkpoint_root": str(output_root / "checkpoints/rebuttal_rlvr"),
         "eval_root": str(output_root / "eval/rebuttal_rlvr"),
@@ -660,15 +690,15 @@ def validate_path_override_receipt(
     }
     mismatches = [key for key, wanted in expected.items() if receipt.get(key) != wanted]
     if mismatches:
-        raise ValidationError(f"path-override receipt differs from the one-root layout: {mismatches}")
+        raise ValidationError(f"path-override receipt differs from the controlled multi-root layout: {mismatches}")
     runtime_mismatches = [key for key, wanted in expected.items() if key in runtime_paths and str(runtime_paths[key]) != wanted]
     if runtime_mismatches:
-        raise ValidationError(f"live platform paths differ from the one-root layout: {runtime_mismatches}")
+        raise ValidationError(f"live platform paths differ from the controlled multi-root layout: {runtime_mismatches}")
     if run_mode == "formal":
-        model_root = (root / "models/rebuttal_rlvr/init").resolve()
+        resolved_model_root = model_root.resolve()
         resolved_model = init_model_path.resolve()
         try:
-            relative = resolved_model.relative_to(model_root)
+            relative = resolved_model.relative_to(resolved_model_root)
         except ValueError as exc:
             raise ValidationError("formal init model must be below the receipt model_root") from exc
         if not relative.parts:
@@ -945,6 +975,9 @@ def build_parser() -> argparse.ArgumentParser:
     artifacts.add_argument("--image-digest", required=True)
     artifacts.add_argument("--repo-root", type=Path, required=True)
     artifacts.add_argument("--root", type=Path, required=True)
+    artifacts.add_argument("--dataset-root", type=Path, required=True)
+    artifacts.add_argument("--model-root", type=Path, required=True)
+    artifacts.add_argument("--state-root", type=Path, required=True)
     artifacts.add_argument("--repo-subpath", required=True)
     artifacts.add_argument("--init-model-path", type=Path, required=True)
     for name in (
@@ -1019,6 +1052,9 @@ def main() -> int:
             validate_path_override_receipt(
                 path_override_receipt,
                 args.root,
+                args.dataset_root,
+                args.model_root,
+                args.state_root,
                 args.repo_subpath,
                 args.init_model_path,
                 args.run_mode,

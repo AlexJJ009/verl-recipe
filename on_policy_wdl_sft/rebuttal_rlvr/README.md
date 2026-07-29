@@ -28,6 +28,15 @@ same signature binds the exact NVIDIA-driver/CUDA/PyTorch/vLLM/FlashInfer
 runtime projection. Both calibration worker receipts are strict JSON, and each
 formal worker re-probes that projection before training.
 
+Formal Hope manifests use `root` as the storage-security boundary and bind
+three strict child roots: `dataset_root`, `model_root`, and `state_root`.
+Repository checkout remains at `$ROOT/$REPO_SUBPATH`; training and Math-7 data
+come from `$DATASET_ROOT/data`, initialization comes from `$MODEL_ROOT`, and
+persistent run state derives from `$STATE_ROOT`. The formal adapter discards
+inherited host path overrides. Local/direct entry remains backward compatible:
+when the three variables are unset, `DATASET_ROOT` and `STATE_ROOT` default to
+`ROOT`, while `MODEL_ROOT` keeps its existing ROOT-derived default.
+
 ## Unified experiment entry
 
 All local and platform launches resolve wrappers relative to this directory:

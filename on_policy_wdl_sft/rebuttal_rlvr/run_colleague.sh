@@ -7,7 +7,7 @@ EXPERIMENT=${1:-${EXPERIMENT:-}}
 RLVR_SEED=${2:-${RLVR_SEED:-20260727}}
 
 : "${ROOT:?ROOT must point to the colleague persistent Meituan root}"
-# Reuse the one-root adapter so train/eval/output/cache paths are identical to
+# Reuse the controlled multi-root adapter so train/eval/output/cache paths match
 # manifest-launched workers, while leaving platform receipt validation disabled.
 export REQUIRE_PLATFORM_RECEIPTS=0
 # shellcheck disable=SC1091
