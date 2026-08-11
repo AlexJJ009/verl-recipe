@@ -172,12 +172,13 @@ echo "Log file: $LOG_FILE"
 # ===================== Section 8: Algorithm Config ============================
 # Matched to 1A/1B/1C so the only delta is model count + loss choice.
 adv_estimator=grpo
-loss_agg_mode="seq-mean-token-sum"
+loss_agg_mode=${LOSS_AGG_MODE:-"seq-mean-token-sum"}
 
 use_kl_in_reward=${USE_KL_IN_REWARD:-False}
 kl_coef=${KL_COEF:-0.0}
 use_kl_loss=${USE_KL_LOSS:-False}
 kl_loss_coef=${KL_LOSS_COEF:-0.0}
+kl_loss_type=${KL_LOSS_TYPE:-low_var_kl}
 
 # GRPO advantage normalization. Default False (matches 1A/B/C and 2A/B/C/Z).
 # Canonical DeepSeek GRPO uses True (divide advantage by group std).
@@ -246,18 +247,22 @@ use_dynamic_bsz=True
 # Default kept at 9192 for strict comparability; override via env if you need speed.
 actor_ppo_max_token_len=${ACTOR_PPO_MAX_TOKEN_LEN:-9192}
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 6))
-offload=False
+offload=${FSDP_OFFLOAD:-False}
+optimizer_offload=${FSDP_OPTIMIZER_OFFLOAD:-${offload}}
+ref_offload=${REF_FSDP_OFFLOAD:-${offload}}
 fsdp_size=-1
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
 
 GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-16}
 LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-4}
+REF_LOG_PROB_MICRO_BATCH_SIZE=${REF_LOG_PROB_MICRO_BATCH_SIZE:-${LOG_PROB_MICRO_BATCH_SIZE}}
 ROLLOUT_ENGINE=${ROLLOUT_ENGINE:-vllm}
 ROLLOUT_MODE=${ROLLOUT_MODE:-async}
 ROLLOUT_ENFORCE_EAGER=${ROLLOUT_ENFORCE_EAGER:-true}
 ROLLOUT_MAX_MODEL_LEN=${ROLLOUT_MAX_MODEL_LEN:-$((max_prompt_length + max_response_length))}
 LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-$((max_prompt_length + max_response_length))}
+REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}}
 ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.4}
 ROLLOUT_TP_SIZE=${ROLLOUT_TP_SIZE:-1}
 ROLLOUT_AGENT_NUM_WORKERS=${ROLLOUT_AGENT_NUM_WORKERS:-4}
@@ -345,6 +350,7 @@ python3 -m verl.trainer.main_ppo \
     `# --- Actor (policy) ---` \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
+    actor_rollout_ref.actor.kl_loss_type=${kl_loss_type} \
     actor_rollout_ref.actor.clip_ratio_low=${clip_ratio_low} \
     actor_rollout_ref.actor.clip_ratio_high=${clip_ratio_high} \
     actor_rollout_ref.actor.clip_ratio_c=10.0 \
@@ -356,7 +362,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr_warmup_steps=${LR_WARMUP_STEPS} \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=${offload} \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=${optimizer_offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.calculate_entropy=${ACTOR_CALCULATE_ENTROPY:-True} \
@@ -367,11 +373,11 @@ python3 -m verl.trainer.main_ppo \
     "${LOSS_EXTRA_ARGS[@]}" \
     actor_rollout_ref.actor.ulysses_sequence_parallel_size=${sp_size} \
     \
-    `# --- Reference model (disabled) ---` \
+    `# --- Reference model (used when actor KL loss is enabled) ---` \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
-    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH_SIZE} \
-    actor_rollout_ref.ref.fsdp_config.param_offload=${offload} \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${REF_LOG_PROB_MICRO_BATCH_SIZE} \
+    actor_rollout_ref.ref.fsdp_config.param_offload=${ref_offload} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     \
     `# --- Model (single-model path: joint_training stays at default=False) ---` \
