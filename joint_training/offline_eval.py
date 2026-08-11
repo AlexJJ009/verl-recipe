@@ -28,6 +28,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -50,6 +51,48 @@ except ImportError:
 
 import numpy as np
 import pandas as pd
+
+
+def parse_optional_bool(value: str) -> bool:
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "y", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"invalid boolean value: {value}")
+
+
+def normalize_messages(prompt_value) -> list[dict[str, str]]:
+    if hasattr(prompt_value, "tolist"):
+        prompt_value = prompt_value.tolist()
+    return [{"role": str(item["role"]), "content": str(item["content"])} for item in prompt_value]
+
+
+def render_chat_prompt(tokenizer, messages, enable_thinking: bool | None) -> str:
+    kwargs = {}
+    if enable_thinking is not None:
+        kwargs["enable_thinking"] = enable_thinking
+    return tokenizer.apply_chat_template(
+        normalize_messages(messages),
+        tokenize=False,
+        add_generation_prompt=True,
+        **kwargs,
+    )
+
+
+def stable_prompt_id(data_source: str, messages, ground_truth) -> str:
+    payload = json.dumps(
+        {
+            "data_source": data_source,
+            "prompt": normalize_messages(messages),
+            "ground_truth": ground_truth,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -188,15 +231,42 @@ def main():
                         help="Per-dataset n overrides as path:n pairs, e.g. /data-1/dataset/AIME-2025/aime-2025.parquet:16")
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=0.95)
+    parser.add_argument("--top_k", type=int, default=-1)
+    parser.add_argument("--min_p", type=float, default=0.0)
     parser.add_argument("--max_tokens", type=int, default=4096)
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.85)
+    parser.add_argument("--max-num-seqs", type=int, default=None)
+    parser.add_argument("--max-num-batched-tokens", type=int, default=None)
+    parser.add_argument("--enforce-eager", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--test_files", type=str, nargs="+", default=[
         "/data-1/dataset/MATH-500/math500-test.parquet",
         "/data-1/dataset/AIME-2025/aime-2025.parquet",
     ])
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--enable-thinking",
+        type=parse_optional_bool,
+        default=None,
+        help="Explicit Qwen chat-template thinking switch. Pass true for the Qwen3 diversity contract.",
+    )
+    parser.add_argument(
+        "--require-explicit-thinking",
+        action="store_true",
+        help="Fail unless --enable-thinking was explicitly provided and changes the rendered chat template.",
+    )
+    parser.add_argument(
+        "--sample-offset",
+        type=int,
+        default=0,
+        help="Global sample-index offset for merging independent n-sample shards.",
+    )
     args = parser.parse_args()
+
+    if args.require_explicit_thinking and args.enable_thinking is None:
+        parser.error("--require-explicit-thinking requires --enable-thinking true|false")
+    if args.sample_offset < 0:
+        parser.error("--sample-offset must be non-negative")
 
     # Parse per-dataset n overrides into a dict {filepath: n}
     n_overrides = {}
@@ -221,11 +291,15 @@ def main():
     for fpath in args.test_files:
         effective_n = n_overrides.get(fpath, args.n)
         df = pd.read_parquet(fpath)
-        for _, row in df.iterrows():
+        for dataset_row_index, (_, row) in enumerate(df.iterrows()):
+            prompt_id = stable_prompt_id(row["data_source"], row["prompt"], row["reward_model"]["ground_truth"])
             samples_by_n[effective_n].append({
                 "data_source": row["data_source"],
                 "prompt": row["prompt"],  # list of dicts (chat format)
                 "ground_truth": row["reward_model"]["ground_truth"],
+                "dataset_path": fpath,
+                "dataset_row_index": dataset_row_index,
+                "prompt_id": prompt_id,
             })
         total_samples += len(df)
         n_label = f"n={effective_n}" + (" (override)" if fpath in n_overrides else " (default)")
@@ -241,10 +315,22 @@ def main():
     all_prompts_flat = []
     for n_val in n_values_used:
         for sample in samples_by_n[n_val]:
-            text = tokenizer.apply_chat_template(
-                sample["prompt"], tokenize=False, add_generation_prompt=True
-            )
+            text = render_chat_prompt(tokenizer, sample["prompt"], args.enable_thinking)
             all_prompts_flat.append(text)
+
+    thinking_canary = None
+    if all_prompts_flat:
+        first_sample = samples_by_n[n_values_used[0]][0]
+        rendered_true = render_chat_prompt(tokenizer, first_sample["prompt"], True)
+        rendered_false = render_chat_prompt(tokenizer, first_sample["prompt"], False)
+        thinking_canary = {
+            "enabled_requested": args.enable_thinking,
+            "template_effect": rendered_true != rendered_false,
+            "rendered_true_sha256": hashlib.sha256(rendered_true.encode("utf-8")).hexdigest(),
+            "rendered_false_sha256": hashlib.sha256(rendered_false.encode("utf-8")).hexdigest(),
+        }
+        if args.require_explicit_thinking and not thinking_canary["template_effect"]:
+            raise RuntimeError("enable_thinking true/false produced identical prompts; refusing thinking-required eval")
 
     # ---- Initialize vLLM (once) ----
     print("=" * 60)
@@ -256,15 +342,21 @@ def main():
     max_model_len = min(max_prompt_tokens + args.max_tokens + 64, 32768)
     print(f"  Max prompt tokens: {max_prompt_tokens}, max_model_len: {max_model_len}")
 
+    engine_kwargs = {}
+    if args.max_num_seqs is not None:
+        engine_kwargs["max_num_seqs"] = args.max_num_seqs
+    if args.max_num_batched_tokens is not None:
+        engine_kwargs["max_num_batched_tokens"] = args.max_num_batched_tokens
     llm = LLM(
         model=args.model_path,
         tensor_parallel_size=args.tensor_parallel,
         dtype="bfloat16",
         gpu_memory_utilization=args.gpu_memory_utilization,
-        enforce_eager=True,
+        enforce_eager=args.enforce_eager,
         trust_remote_code=True,
         max_model_len=max_model_len,
         seed=args.seed,
+        **engine_kwargs,
     )
 
     # ---- vLLM inference (one pass per distinct n value) ----
@@ -276,15 +368,14 @@ def main():
         samples = samples_by_n[n_val]
         prompts = []
         for sample in samples:
-            text = tokenizer.apply_chat_template(
-                sample["prompt"], tokenize=False, add_generation_prompt=True
-            )
+            text = render_chat_prompt(tokenizer, sample["prompt"], args.enable_thinking)
             prompts.append(text)
 
         sampling_params = SamplingParams(
             temperature=args.temperature,
             top_p=args.top_p,
-            top_k=-1,
+            top_k=args.top_k,
+            min_p=args.min_p,
             max_tokens=args.max_tokens,
             n=n_val,
         )
@@ -343,6 +434,9 @@ def main():
             if ds not in results_by_source:
                 results_by_source[ds] = {"n": n_val, "entries": []}
             results_by_source[ds]["entries"].append({
+                "prompt_id": sample["prompt_id"],
+                "dataset_path": sample["dataset_path"],
+                "dataset_row_index": sample["dataset_row_index"],
                 "ground_truth": sample["ground_truth"],
                 "results": prompt_results,
             })
@@ -475,10 +569,20 @@ def main():
         "generation_params": {
             "temperature": args.temperature,
             "top_p": args.top_p,
+            "top_k": args.top_k,
+            "min_p": args.min_p,
             "n_default": args.n,
             "n_per_dataset": n_config,
             "max_tokens": args.max_tokens,
+            "max_num_seqs": args.max_num_seqs,
+            "max_num_batched_tokens": args.max_num_batched_tokens,
+            "enforce_eager": args.enforce_eager,
             "seed": args.seed,
+            "sample_offset": args.sample_offset,
+            "chat_template_kwargs": (
+                {"enable_thinking": args.enable_thinking} if args.enable_thinking is not None else {}
+            ),
+            "thinking_canary": thinking_canary,
         },
         "n_values_used": n_values_used,
         "generation_time_s": total_gen_time,
@@ -496,9 +600,13 @@ def main():
     total_generations = 0
     for data_source, info in results_by_source.items():
         for entry in info["entries"]:
-            for r in entry["results"]:
+            for local_sample_index, r in enumerate(entry["results"]):
                 detail_rows.append({
                     "data_source": data_source,
+                    "dataset_path": entry["dataset_path"],
+                    "dataset_row_index": entry["dataset_row_index"],
+                    "prompt_id": entry["prompt_id"],
+                    "sample_index": args.sample_offset + local_sample_index,
                     "ground_truth": entry["ground_truth"],
                     "acc": r["acc"],
                     "score": r["score"],
