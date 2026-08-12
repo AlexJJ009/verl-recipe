@@ -31,7 +31,12 @@ def first_row(path: Path) -> dict[str, Any]:
 def score(row: dict[str, Any], code: str) -> dict[str, Any]:
     return compute_score_code_official_aligned(
         data_source=row["data_source"],
-        solution_str=f"<answer>\n```python\n{code}\n```\n</answer>",
+        solution_str=(
+            "<think>\n"
+            "Verify the candidate with the frozen official scorer.\n"
+            "</think>\n"
+            f"<answer>\n```python\n{code}\n```\n</answer>"
+        ),
         ground_truth=row["reward_model"]["ground_truth"],
         extra_info=row.get("extra_info") or {},
     )
@@ -61,14 +66,14 @@ def main() -> int:
 
     ok = (
         results["humaneval_ref"]["score"] == 1.0
-        and results["humaneval_wrong"]["score"] == 0.0
+        and results["humaneval_wrong"]["score"] == -1.0
         and results["humaneval_ref"]["verification_method"] == "evalplus"
         and results["mbpp_ref"]["score"] == 1.0
-        and results["mbpp_wrong"]["score"] == 0.0
+        and results["mbpp_wrong"]["score"] == -1.0
         and results["mbpp_ref"]["verification_method"] == "evalplus"
-        and results["bigcodebench_wrong"]["score"] == 0.0
+        and results["bigcodebench_wrong"]["score"] == -1.0
         and results["bigcodebench_wrong"]["verification_method"] == "bigcodebench"
-        and results["livecodebench_wrong"]["score"] == 0.0
+        and results["livecodebench_wrong"]["score"] == -1.0
         and results["livecodebench_wrong"]["verification_method"] == "livecodebench"
     )
     payload = {
