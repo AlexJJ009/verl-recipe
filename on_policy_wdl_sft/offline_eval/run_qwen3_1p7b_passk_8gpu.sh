@@ -40,8 +40,8 @@ if [ "${EVAL_CONFIG_ONLY:-0}" = 1 ]; then
         "enforce_eager=${ENFORCE_EAGER:-false}"
     exit 0
 fi
-if [ -z "${TMUX:-}" ]; then
-    echo "ERROR: 8-GPU offline evaluation must run inside tmux" >&2
+if [ -z "${TMUX:-}" ] && [ "${EVAL_SCHEDULER_MANAGED:-0}" != 1 ]; then
+    echo "ERROR: 8-GPU offline evaluation must run inside tmux or an admitted scheduler-managed worker" >&2
     exit 2
 fi
 
