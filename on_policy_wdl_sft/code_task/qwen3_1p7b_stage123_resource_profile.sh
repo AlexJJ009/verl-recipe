@@ -176,9 +176,10 @@ PY
     [ "$ROLLOUT_AGENT_NUM_WORKERS" -eq 64 ] || { echo "ERROR: Stage123 full-validation profile requires 64 agent workers" >&2; return 1; }
     [ "$NGPUS_PER_NODE" = 8 ] || { echo "ERROR: NGPUS_PER_NODE must equal 8" >&2; return 1; }
     [ "$ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE" = 1 ] || { echo "ERROR: Qwen3-1.7B Stage123 TP must equal 1" >&2; return 1; }
-    [ -f "$LCB_INPUT_OUTPUT_INDEX" ] || { echo "ERROR: LiveCodeBench index missing: $LCB_INPUT_OUTPUT_INDEX" >&2; return 1; }
-    [ -f "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" ] || { echo "ERROR: LiveCodeBench index receipt missing" >&2; return 1; }
-    python3 - "$LCB_INPUT_OUTPUT_INDEX" "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" "$LCB_INPUT_OUTPUT_INDEX_SHA256" <<'PY' || return 1
+    if [ "${STAGE123_VALIDATE_EXTERNAL_ASSETS:-1}" = 1 ]; then
+        [ -f "$LCB_INPUT_OUTPUT_INDEX" ] || { echo "ERROR: LiveCodeBench index missing: $LCB_INPUT_OUTPUT_INDEX" >&2; return 1; }
+        [ -f "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" ] || { echo "ERROR: LiveCodeBench index receipt missing" >&2; return 1; }
+        python3 - "$LCB_INPUT_OUTPUT_INDEX" "$LCB_INPUT_OUTPUT_INDEX_RECEIPT" "$LCB_INPUT_OUTPUT_INDEX_SHA256" <<'PY' || return 1
 import json,os,sys
 index,receipt_path,expected_sha=sys.argv[1:]
 receipt=json.load(open(receipt_path,encoding='utf-8'))
@@ -188,6 +189,7 @@ assert receipt.get('row_count') == 880
 assert receipt.get('sha256') == expected_sha
 assert receipt.get('size_bytes') == os.path.getsize(index)
 PY
+    fi
     mkdir -p "$RAY_object_spilling_directory" "$RAY_TMPDIR" "$TMPDIR"
 }
 

@@ -18,8 +18,12 @@ export LR=${LR:-5e-7}
 export LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-0}
 export TRAIN_PROMPT_BSZ=${TRAIN_PROMPT_BSZ:-64}
 export ROLLOUT_N=${ROLLOUT_N:-8}
-export TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-$((TRAIN_PROMPT_BSZ * ROLLOUT_N))}
-export LOSS_AGG_MODE=${LOSS_AGG_MODE:-token-mean}
+STANDARD_GRPO_TRAIN_PROMPT_MINI_BSZ=${TRAIN_PROMPT_MINI_BSZ:-${TRAIN_PROMPT_BSZ}}
+# Stage123 resource profiles still validate their historical response-count
+# convention while being sourced. Restore the GRPO prompt-group value below.
+unset TRAIN_PROMPT_MINI_BSZ
+export LOSS_AGG_MODE=${LOSS_AGG_MODE:-seq-mean-token-mean}
+export ACTOR_GRAD_CLIP=${ACTOR_GRAD_CLIP:-1.0}
 export NORM_ADV_BY_STD_IN_GRPO=${NORM_ADV_BY_STD_IN_GRPO:-True}
 export CLIP_RATIO_LOW=${CLIP_RATIO_LOW:-0.2}
 export CLIP_RATIO_HIGH=${CLIP_RATIO_HIGH:-0.2}
@@ -36,6 +40,9 @@ export TOP_P=${TOP_P:-1.0}
 export TOP_K=${TOP_K:--1}
 export TEST_FREQ=${TEST_FREQ:-5}
 export SAVE_FREQ=${SAVE_FREQ:-5}
+# Keep only scientific phase boundaries plus best/latest. Older retained
+# checkpoints are model-only; latest keeps optimizer state for continuation.
+export PROTECTED_CKPT_STRIP_OPTIMIZER=${PROTECTED_CKPT_STRIP_OPTIMIZER:-True}
 export VAL_N=${VAL_N:-3}
 export VAL_TEMPERATURE=${VAL_TEMPERATURE:-0.2}
 export VAL_TOP_P=${VAL_TOP_P:-0.95}
@@ -70,6 +77,9 @@ case "${TASK}" in
     ;;
   code)
     # shellcheck disable=SC1091
+    if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
+      export STAGE123_VALIDATE_EXTERNAL_ASSETS=0
+    fi
     source "${RECIPE_ROOT}/on_policy_wdl_sft/code_task/qwen3_1p7b_stage123_resource_profile.sh"
     DATASET_ROOT=${DATASET_ROOT:-/data-2/dataset/code/verl_rl/qwen3_1p7b_code_stage123_author_signature_v2_seed20260706}
     COLD_START_MODEL_PATH=${COLD_START_MODEL_PATH:-/data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/candidates/step_20}
@@ -94,6 +104,8 @@ case "${TASK}" in
   *) echo "ERROR: unsupported TASK=${TASK}" >&2; exit 2 ;;
 esac
 
+export TRAIN_PROMPT_MINI_BSZ=${STANDARD_GRPO_TRAIN_PROMPT_MINI_BSZ}
+
 case "${PIPELINE}" in
   stage1_grpo)
     if [ -z "${STAGE1_MODEL_PATH}" ]; then
@@ -103,14 +115,14 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-60}
-    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,45,50,60]'}
+    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,60]'}
     export RUN_PREFIX=${RUN_PREFIX:-"${TASK^^}-QWEN3-1P7B-STAGE1-GRPO"}
     ;;
   cold_start_grpo)
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${COLD_START_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/cold_start_grpo_stage1_stage2_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
-    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,60,80,100]'}
+    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[40,60,80,100]'}
     export RUN_PREFIX=${RUN_PREFIX:-"${TASK^^}-QWEN3-1P7B-COLD-START-GRPO"}
     ;;
   *) echo "ERROR: unsupported PIPELINE=${PIPELINE}" >&2; exit 2 ;;
@@ -124,6 +136,7 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "total_training_steps=${TOTAL_TRAINING_STEPS}" "train_prompt_bsz=${TRAIN_PROMPT_BSZ}" \
     "rollout_n=${ROLLOUT_N}" "responses_per_step=$((TRAIN_PROMPT_BSZ * ROLLOUT_N))" \
     "ppo_mini_batch_size=${TRAIN_PROMPT_MINI_BSZ}" "learning_rate=${LR}" \
+    "actor_grad_clip=${ACTOR_GRAD_CLIP}" \
     "loss_mode=${LOSS_MODE}" "loss_agg_mode=${LOSS_AGG_MODE}" \
     "norm_adv_by_std_in_grpo=${NORM_ADV_BY_STD_IN_GRPO}" \
     "use_kl_in_reward=${USE_KL_IN_REWARD}" "use_kl_loss=${USE_KL_LOSS}" \
@@ -131,7 +144,8 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "ref_log_prob_micro_batch_size=${REF_LOG_PROB_MICRO_BATCH_SIZE}" \
     "ref_log_prob_max_token_len_per_gpu=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}}" \
     "rollout_is=${ROLLOUT_IS}" "enable_thinking=${ENABLE_THINKING}" \
-    "data_shuffle=${DATA_SHUFFLE}" "protected_ckpt_steps=${PROTECTED_CKPT_STEPS}"
+    "data_shuffle=${DATA_SHUFFLE}" "protected_ckpt_steps=${PROTECTED_CKPT_STEPS}" \
+    "protected_ckpt_strip_optimizer=${PROTECTED_CKPT_STRIP_OPTIMIZER}"
   exit 0
 fi
 

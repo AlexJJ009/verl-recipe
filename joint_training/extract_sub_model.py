@@ -11,8 +11,10 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 import torch
@@ -21,12 +23,26 @@ from safetensors.torch import load_file, save_file
 from verl.models.joint_model.weight_utils import extract_sub_model_weights
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Extract sub-model from joint model weights")
     parser.add_argument("--joint_model_path", type=str, required=True, help="Path to merged joint model directory")
     parser.add_argument("--output_path", type=str, required=True, help="Output directory for extracted model")
     parser.add_argument("--sub_model_index", type=int, default=1, choices=[0, 1],
                         help="Which sub-model to extract: 0=model1 (anchor), 1=model2 (trainable, default)")
+    parser.add_argument(
+        "--provenance_path",
+        type=str,
+        default=None,
+        help="Optional JSON receipt binding extracted files to the source joint weights",
+    )
     args = parser.parse_args()
 
     joint_path = Path(args.joint_model_path)
@@ -86,6 +102,34 @@ def main():
     gen_config_src = joint_path / "generation_config.json"
     if gen_config_src.exists():
         shutil.copy2(gen_config_src, output_path / "generation_config.json")
+
+    if args.provenance_path:
+        output_files = sorted(path for path in output_path.iterdir() if path.is_file())
+        receipt = {
+            "schema_version": 1,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "operation": "extract_joint_submodel",
+            "source": {
+                "joint_model_path": str(joint_path.resolve()),
+                "sub_model_index": args.sub_model_index,
+                "safetensors": [
+                    {"name": path.name, "size_bytes": path.stat().st_size, "sha256": sha256(path)}
+                    for path in sorted(safetensors_files)
+                ],
+            },
+            "output": {
+                "model_path": str(output_path.resolve()),
+                "parameter_count": sub_params,
+                "files": [
+                    {"name": path.name, "size_bytes": path.stat().st_size, "sha256": sha256(path)}
+                    for path in output_files
+                ],
+            },
+        }
+        provenance_path = Path(args.provenance_path)
+        provenance_path.parent.mkdir(parents=True, exist_ok=True)
+        provenance_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"  Provenance receipt: {provenance_path}")
 
     print(f"\nDone. Standard Qwen3ForCausalLM saved to: {output_path}")
     print(f"  Sub-model: {'model1 (anchor)' if args.sub_model_index == 0 else 'model2 (trainable)'}")

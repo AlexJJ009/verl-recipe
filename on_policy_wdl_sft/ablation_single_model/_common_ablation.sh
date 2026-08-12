@@ -229,6 +229,7 @@ max_response_length=${MAX_RESPONSE_LENGTH:-4096}
 train_prompt_bsz=${TRAIN_PROMPT_BSZ:-64}
 n_resp_per_prompt=${ROLLOUT_N:-8}
 train_prompt_mini_bsz=${TRAIN_PROMPT_MINI_BSZ:-8}
+actor_grad_clip=${ACTOR_GRAD_CLIP:-500.0}
 
 # ===================== Section 11: Sampling Parameters ========================
 temperature=${TEMPERATURE:-1.0}
@@ -367,7 +368,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.calculate_entropy=${ACTOR_CALCULATE_ENTROPY:-True} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
-    actor_rollout_ref.actor.grad_clip=500.0 \
+    actor_rollout_ref.actor.grad_clip=${actor_grad_clip} \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.actor.policy_loss.loss_mode=${LOSS_MODE} \
     "${LOSS_EXTRA_ARGS[@]}" \
