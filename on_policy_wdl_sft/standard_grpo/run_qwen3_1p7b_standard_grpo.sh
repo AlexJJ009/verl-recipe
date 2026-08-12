@@ -62,6 +62,9 @@ case "${TASK}" in
     DATASET_ROOT=${DATASET_ROOT:-/data-2/dataset/math/qwen3_1p7b_stage123_seed20260719}
     COLD_START_MODEL_PATH=${COLD_START_MODEL_PATH:-/data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20}
     STAGE1_MODEL_PATH=${STAGE1_MODEL_PATH:-}
+    MATH_STAGE1_MODEL_PROVENANCE_PATH=${MATH_STAGE1_MODEL_PROVENANCE_PATH:-${STAGE1_MODEL_PATH}/model_input_provenance.json}
+    MATH_STAGE1_MODEL_WEIGHTS_SHA256=${MATH_STAGE1_MODEL_WEIGHTS_SHA256:-ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0}
+    MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256=${MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256:-a327d9975f9f95d36505fc80fcaf689fe3f13a9a80bd72a74d436e5106a5c850}
     MATH7_VALIDATION_ROOT=${MATH7_VALIDATION_ROOT:-/data-1/dataset/math/qwen3_1p7b_math7_validation_v1}
     export TEST_FILES=${CALLER_TEST_FILES:-"['${MATH7_VALIDATION_ROOT}/aime-2025_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/math500-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/amc23-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/aqua-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/gsm8k-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/mawps-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/svamp-test_with_system_prompt_schema_aligned.parquet']"}
     export CUSTOM_REWARD_FN_PATH=${CUSTOM_REWARD_FN_PATH:-"${RECIPE_ROOT}/on_policy_wdl_sft/custom_reward_function_latex_verify.py"}
@@ -163,6 +166,49 @@ for required_path in "${INIT_MODEL_PATH}" "${TRAIN_FILE}"; do
     exit 2
   fi
 done
+
+if [ "${TASK}" = math ] && [ "${PIPELINE}" = stage1_grpo ]; then
+  if [ ! -f "${MATH_STAGE1_MODEL_PROVENANCE_PATH}" ]; then
+    echo "ERROR: Math S1-P0 provenance receipt missing: ${MATH_STAGE1_MODEL_PROVENANCE_PATH}" >&2
+    exit 2
+  fi
+  python3 - "${INIT_MODEL_PATH}" "${MATH_STAGE1_MODEL_PROVENANCE_PATH}" \
+    "${MATH_STAGE1_MODEL_WEIGHTS_SHA256}" "${MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256}" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+model_path = Path(sys.argv[1])
+receipt_path = Path(sys.argv[2])
+expected_model_sha, expected_source_sha = sys.argv[3:]
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+if receipt.get("operation") != "extract_joint_submodel" or receipt.get("source", {}).get("sub_model_index") != 1:
+    raise SystemExit("Math S1-P0 receipt is not a Model2 joint-submodel extraction")
+source_hashes = {item.get("sha256") for item in receipt.get("source", {}).get("safetensors", [])}
+if expected_source_sha not in source_hashes:
+    raise SystemExit("Math S1-P0 source joint hash mismatch")
+files = {item.get("name"): item for item in receipt.get("output", {}).get("files", [])}
+model_entry = files.get("model.safetensors")
+if not model_entry or model_entry.get("sha256") != expected_model_sha:
+    raise SystemExit("Math S1-P0 model hash mismatch in provenance receipt")
+for name, item in files.items():
+    path = model_path / name
+    if not path.is_file() or path.stat().st_size != item.get("size_bytes"):
+        raise SystemExit(f"Math S1-P0 file missing or size mismatch: {name}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest() != item.get("sha256"):
+        raise SystemExit(f"Math S1-P0 file hash mismatch: {name}")
+PY
+fi
+
+if [ "${GRPO_PREFLIGHT_ONLY:-0}" = 1 ]; then
+  echo "GRPO preflight passed: task=${TASK} pipeline=${PIPELINE}"
+  exit 0
+fi
 
 common_overrides=(
   "data.shuffle=${DATA_SHUFFLE}"
