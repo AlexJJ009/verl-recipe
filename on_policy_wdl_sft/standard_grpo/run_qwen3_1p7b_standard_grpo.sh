@@ -288,6 +288,7 @@ if [ "${TASK}" = math ]; then
     echo "ERROR: Math reward contract checker missing: ${MATH_REWARD_CONTRACT_CHECKER}" >&2
     exit 2
   fi
+  PYTHONPATH="${REPO_PYTHONPATH_ROOT:-${SCRIPT_DIR}/../../..}:${PYTHONPATH:-}" \
   python3 "${MATH_REWARD_CONTRACT_CHECKER}" \
     --reward-path "${CUSTOM_REWARD_FN_PATH}" \
     --function "${CUSTOM_REWARD_FN_NAME}"
