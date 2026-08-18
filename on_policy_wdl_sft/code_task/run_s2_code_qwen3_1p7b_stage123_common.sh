@@ -13,6 +13,8 @@ stage123_print_profile STAGE2
 export LR=${LR:-1e-6}
 export LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-0}
 export TRACK_JOINT_SUBMODEL_LOSSES=${TRACK_JOINT_SUBMODEL_LOSSES:-true}
+export JOINT_VALIDATION_VIEWS=${JOINT_VALIDATION_VIEWS:-"[model1,model2]"}
+export BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-val-core/model2/code3_macro/acc/mean@3}
 
 export RAY_TMPDIR="${STAGE123_RAY_TMPDIR:-/tmp/stage123-ray-${STAGE123_RUN_ID}}"
 cleanup_stage123_ray() {
@@ -26,7 +28,8 @@ ray start --head --port=22000 --min-worker-port=21000 --max-worker-port=21999 \
 export RAY_ADDRESS="127.0.0.1:22000"
 
 set +e
-bash "${SCRIPT_DIR}/run_s2_code_kodcode_qwen3_1p7b_instruct_ctx8k_p40_common.sh" "$@"
+mapfile -t macro_overrides < <(code_stage123_macro_overrides)
+bash "${SCRIPT_DIR}/run_s2_code_model2_rollout_common.sh" "${macro_overrides[@]}" "$@"
 status=$?
 set -e
 exit "$status"

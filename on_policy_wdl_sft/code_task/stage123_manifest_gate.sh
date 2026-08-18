@@ -20,6 +20,49 @@ PY
 stage123_require_formal_admission() {
     local run_id=${1:?run id required}
     [ "${DRY_RUN:-0}" = 1 ] && return 0
+    if [ "${CODE_STAGE123_GPU_PROBE_ADMITTED:-0}" = 1 ]; then
+        : "${CODE_STAGE123_MANIFEST:?CODE_STAGE123_MANIFEST required}"
+        : "${CODE_STAGE123_MANIFEST_SHA256:?CODE_STAGE123_MANIFEST_SHA256 required}"
+        : "${CODE_STAGE123_MODEL1_SELECTION_SHA256:?CODE_STAGE123_MODEL1_SELECTION_SHA256 required}"
+        : "${CODE_STAGE123_DATASET_RECEIPT_SHA256:?CODE_STAGE123_DATASET_RECEIPT_SHA256 required}"
+        : "${CODE_STAGE123_GPU_PROBE_OUTPUT_ROOT:?CODE_STAGE123_GPU_PROBE_OUTPUT_ROOT required}"
+        python3 - "$CODE_STAGE123_MANIFEST" "$run_id" "$CODE_STAGE123_MANIFEST_SHA256" \
+            "$CODE_STAGE123_MODEL1_SELECTION_SHA256" "$CODE_STAGE123_DATASET_RECEIPT_SHA256" \
+            "$CODE_STAGE123_GPU_PROBE_OUTPUT_ROOT" <<'PY'
+import hashlib,sys,yaml
+from pathlib import Path
+path,run_id,manifest_sha,selection_sha,receipt_sha,output_root=sys.argv[1:]
+raw=Path(path).read_bytes()
+if hashlib.sha256(raw).hexdigest() != manifest_sha:
+    raise SystemExit("Code Stage123 probe manifest hash drift")
+manifest=yaml.safe_load(raw)
+if manifest.get("task") != "code" or manifest.get("status") != "blocked_pending_gpu_utilization_probe":
+    raise SystemExit("Code Stage123 probe requires the blocked step-20 manifest")
+if manifest.get("launch_allowed") is not False:
+    raise SystemExit("Code Stage123 probe must not use a launchable formal manifest")
+if run_id not in {run["id"] for run in manifest.get("runs", [])}:
+    raise SystemExit("Code Stage123 probe run is absent from the manifest")
+for key,expected in (("model1_selection",selection_sha),("dataset_receipt",receipt_sha)):
+    artifact=Path(manifest["paths"][key]).read_bytes()
+    if hashlib.sha256(artifact).hexdigest() != expected:
+        raise SystemExit(f"Code Stage123 probe {key} hash drift")
+resolved=Path(output_root).resolve()
+scratch=Path("/data-1/tmp/verl_agent_scratch/code_stage123_gpu_utilization_probe").resolve()
+if resolved != scratch and scratch not in resolved.parents:
+    raise SystemExit("Code Stage123 probe output escaped the dedicated scratch root")
+PY
+        stage123_check_machine
+        printf 'Code Stage123 GPU probe admission valid for %s\n' "$run_id"
+        return 0
+    fi
+    if [ "${CODE_STAGE123_QUEUE_ADMITTED:-0}" = 1 ]; then
+        : "${CODE_STAGE123_ADMISSION:?CODE_STAGE123_ADMISSION required}"
+        python3 "$STAGE123_GATE_REPO_ROOT/scripts/code_stage123_admission.py" validate \
+            --admission "$CODE_STAGE123_ADMISSION" --run-id "$run_id" --repo-root "$STAGE123_GATE_REPO_ROOT" >/dev/null
+        stage123_check_machine
+        printf 'immutable Code Stage123 admission valid for %s\n' "$run_id"
+        return 0
+    fi
     if [ -n "${STAGE123_MATRIX_ADMISSION:-}" ]; then
         python3 "$STAGE123_GATE_REPO_ROOT/scripts/stage123_matrix_admission.py" validate \
             --admission "$STAGE123_MATRIX_ADMISSION" \

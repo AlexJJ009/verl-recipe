@@ -13,7 +13,9 @@ export ACTOR_PPO_MAX_TOKEN_LEN=${ACTOR_PPO_MAX_TOKEN_LEN:-9216}
 export GENERATION_MICRO_BATCH_SIZE=${GENERATION_MICRO_BATCH_SIZE:-32}
 export LOG_PROB_MICRO_BATCH_SIZE=${LOG_PROB_MICRO_BATCH_SIZE:-8}
 export REF_LOG_PROB_MICRO_BATCH_SIZE=${REF_LOG_PROB_MICRO_BATCH_SIZE:-1}
-export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.40}
+export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.35}
+export ACTOR_CALCULATE_ENTROPY=${ACTOR_CALCULATE_ENTROPY:-False}
+export CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 export ROLLOUT_FREE_CACHE_ENGINE=${ROLLOUT_FREE_CACHE_ENGINE:-False}
 export ROLLOUT_ENABLE_SLEEP_MODE=${ROLLOUT_ENABLE_SLEEP_MODE:-False}
 export REF_FSDP_OFFLOAD=${REF_FSDP_OFFLOAD:-True}
@@ -26,8 +28,9 @@ export TEST_FREQ=${TEST_FREQ:-5}
 export SAVE_FREQ=${SAVE_FREQ:-5}
 export TEMPERATURE=${TEMPERATURE:-1.0}
 export TOP_P=${TOP_P:-1.0}
+export TOP_K=${TOP_K:--1}
 export ROLLOUT_DO_SAMPLE=${ROLLOUT_DO_SAMPLE:-True}
-export VAL_N=${VAL_N:-1}
+export VAL_N=${VAL_N:-3}
 export VAL_TEMPERATURE=${VAL_TEMPERATURE:-0.2}
 export VAL_TOP_P=${VAL_TOP_P:-0.95}
 export VAL_DO_SAMPLE=${VAL_DO_SAMPLE:-True}
@@ -55,6 +58,8 @@ export TMPDIR=${STAGE123_TMPDIR:-/data-2/tmp}
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-8}
 export NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 export ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE=${ROLLOUT_TENSOR_MODEL_PARALLEL_SIZE:-1}
+export CODE3_MACRO_SOURCES=${CODE3_MACRO_SOURCES:-"[HumanEval+,MBPP+,LiveCodeBench]"}
+export BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-val-core/code3_macro/acc/mean@3}
 
 stage123_profile_fields() {
     printf '%s\n' \
@@ -62,9 +67,9 @@ stage123_profile_fields() {
         ROLLOUT_MAX_MODEL_LEN ROLLOUT_MAX_NUM_BATCHED_TOKENS \
         LOG_PROB_MAX_TOKEN_LEN_PER_GPU REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU ACTOR_PPO_MAX_TOKEN_LEN \
         GENERATION_MICRO_BATCH_SIZE LOG_PROB_MICRO_BATCH_SIZE REF_LOG_PROB_MICRO_BATCH_SIZE \
-        ROLLOUT_GPU_MEMORY_UTILIZATION ROLLOUT_FREE_CACHE_ENGINE \
+        ROLLOUT_GPU_MEMORY_UTILIZATION ACTOR_CALCULATE_ENTROPY CALCULATE_ENTROPY ROLLOUT_FREE_CACHE_ENGINE \
         ROLLOUT_ENABLE_SLEEP_MODE REF_FSDP_OFFLOAD FSDP_OFFLOAD FSDP_OPTIMIZER_OFFLOAD TRAIN_PROMPT_BSZ ROLLOUT_N \
-        TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ TEMPERATURE TOP_P ROLLOUT_DO_SAMPLE \
+        TRAIN_PROMPT_MINI_BSZ TEST_FREQ SAVE_FREQ TEMPERATURE TOP_P TOP_K ROLLOUT_DO_SAMPLE \
         VAL_N VAL_TEMPERATURE VAL_TOP_P VAL_DO_SAMPLE VAL_BEFORE_TRAIN \
         TRAIN_MAX_SAMPLES CODE_REWARD_NUM_WORKERS CODE_REWARD_MAX_CONCURRENCY_PER_WORKER \
         ROLLOUT_AGENT_NUM_WORKERS CODE_REWARD_TIMEOUT \
@@ -127,9 +132,17 @@ stage123_validate_profile() {
 import sys
 
 utilization = float(sys.argv[1])
-if not 0.4 <= utilization < 1.0:
-    raise SystemExit("rollout GPU memory utilization must be throughput-qualified in [0.4, 1.0)")
+if not 0.35 <= utilization < 1.0:
+    raise SystemExit("rollout GPU memory utilization must be throughput-qualified in [0.35, 1.0)")
 PY
+    [ "$ACTOR_CALCULATE_ENTROPY" = False ] || {
+        echo "ERROR: Stage123 actor entropy calculation must remain disabled" >&2
+        return 1
+    }
+    [ "$CALCULATE_ENTROPY" = False ] || {
+        echo "ERROR: Stage123 joint entropy calculation must remain disabled" >&2
+        return 1
+    }
     [ "$ROLLOUT_FREE_CACHE_ENGINE" = False ] || {
         echo "ERROR: vLLM cache unloading is not admitted on this async stack" >&2
         return 1
@@ -163,12 +176,13 @@ PY
     [ "$TRAIN_PROMPT_MINI_BSZ" = $((TRAIN_PROMPT_BSZ * ROLLOUT_N)) ] || return 1
     [ "$TEMPERATURE" = 1.0 ] || { echo "ERROR: Stage123 rollout temperature must equal 1.0" >&2; return 1; }
     [ "$TOP_P" = 1.0 ] || { echo "ERROR: Stage123 rollout top_p must equal 1.0" >&2; return 1; }
+    [ "$TOP_K" = -1 ] || { echo "ERROR: Stage123 top_k must remain disabled at -1" >&2; return 1; }
     [ "$ROLLOUT_DO_SAMPLE" = True ] || { echo "ERROR: Stage123 rollout do_sample must equal True" >&2; return 1; }
     [ "$VAL_TEMPERATURE" = 0.2 ] || { echo "ERROR: Stage123 validation temperature must equal 0.2" >&2; return 1; }
     [ "$VAL_TOP_P" = 0.95 ] || { echo "ERROR: Stage123 validation top_p must equal 0.95" >&2; return 1; }
     [ "$VAL_DO_SAMPLE" = True ] || { echo "ERROR: Stage123 validation do_sample must equal True" >&2; return 1; }
-    [ "$VAL_N" = "${STAGE123_EXPECTED_VAL_N:-1}" ] || {
-        echo "ERROR: Stage123 validation n must equal ${STAGE123_EXPECTED_VAL_N:-1}" >&2
+    [ "$VAL_N" = "${STAGE123_EXPECTED_VAL_N:-3}" ] || {
+        echo "ERROR: Stage123 validation n must equal ${STAGE123_EXPECTED_VAL_N:-3}" >&2
         return 1
     }
     [ "$CODE_REWARD_NUM_WORKERS" -eq 8 ] || { echo "ERROR: Stage123 reward workers must equal 8" >&2; return 1; }
@@ -202,5 +216,12 @@ stage123_check_machine() {
 }
 
 stage123_print_profile() { stage123_assert_expected_profile "${1:?phase required}"; }
+
+code_stage123_macro_overrides() {
+    printf '%s\n' \
+        "+trainer.validation_macro_average_sources=${CODE3_MACRO_SOURCES}" \
+        "+trainer.validation_macro_average_name=code3_macro" \
+        "+trainer.validation_macro_average_metric=acc/mean@3"
+}
 
 stage123_validate_profile

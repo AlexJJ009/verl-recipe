@@ -17,4 +17,5 @@ export CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE=${CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE:-
 export CODE_VAL_FILES=${CODE_VAL_FILES:-"['/data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet','/data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet','$CODE_ONLINE_LCB_V5_SUBSET_VAL_FILE']"}
 export TEST_FILES="$CODE_VAL_FILES"
 stage123_print_profile STAGE1
-exec bash "${SCRIPT_DIR}/run_s1_code_base.sh" "$@"
+mapfile -t macro_overrides < <(code_stage123_macro_overrides)
+exec bash "${SCRIPT_DIR}/run_s1_code_base.sh" "${macro_overrides[@]}" "$@"

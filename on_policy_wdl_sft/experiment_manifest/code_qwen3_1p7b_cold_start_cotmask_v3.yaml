@@ -1,0 +1,48 @@
+schema_version: 1
+experiment_id: code_qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2
+status: launch_ready
+seed: 20260706
+paths:
+  raw_model: /data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B/snapshots/70d244cc86ccca08cf5af4e1e306ecf908b1ad5e
+  rl_train_file: /data-1/dataset/code/verl_rl/kodcode_light_rl_10k_train_rl_format_author_signature_v2.parquet
+  train_file: /data-1/dataset/code/format_cold_start_cotmask_v3_author_signature_v2/kodcode_light_sft_messages.parquet
+  checkpoint_root: /data-1/checkpoints/code_qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps
+  artifact_root: /data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps
+  output_root: /data-1/eval_outputs/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps
+  event_log: /data-1/eval_outputs/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/events.jsonl
+  selection_file: /data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/model1_selection.json
+  pause_marker: /data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/PAUSE_FOR_STAGE123_ADMISSION
+training:
+  max_steps: 30
+  step_interval: 5
+  train_batch_size: 64
+  learning_rate: 5.0e-06
+  warmup_steps: 5
+  max_length: 9216
+  max_response_length: 8192
+  run_name: CODE-CS-QWEN3-1P7B-SEED20260706-COTMASK-V3-AUTHOR-SIGNATURE-V2
+  data_shuffle: false
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  top_k: -1
+  max_tokens: 8192
+  seed: 20260706
+  tensor_parallel: 4
+  gpu_memory_utilization: 0.75
+  official_parallel: 8
+  livecodebench_release: release_v5
+  enable_thinking: true
+  benchmarks:
+    humaneval: /data-1/dataset/code/verl_rl/online_full_humaneval_plus/official_humaneval_plus_val.parquet
+    mbpp: /data-1/dataset/code/verl_rl/online_full_mbpp_plus/official_mbpp_plus_val.parquet
+    livecodebench: /data-1/dataset/code/verl_rl/online_full_livecodebench_v5/official_livecodebench_val.parquet
+admission_thresholds:
+  format_contract_success_rate: 0.85
+execution:
+  launch_allowed: true
+  stop_after_first_passing_checkpoint: false
+  auto_select_first_passing_checkpoint: true
+  continue_to_stage123: false
+  requires_whole_message_loss_mask: true

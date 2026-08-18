@@ -1,0 +1,92 @@
+schema_version: 1
+experiment_id: code_qwen3_1p7b_wdl_acd0_p60_beta0
+task: code
+status: admitted_for_launch
+launch_allowed: true
+blockers: []
+paths:
+  model1: /data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/candidates/step_20
+  model2: /data-2/model_weights/code_task/qwen3_1p7b_stage123_cotmask_v3_author_signature_v2_step20/b0-stage1/final_model
+  model2_provenance: /data-2/model_weights/code_task/qwen3_1p7b_stage123_cotmask_v3_author_signature_v2_step20/b0-stage1/provenance.json
+  dataset_receipt: /data-1/dataset/code/verl_rl/qwen3_1p7b_code_stage123_author_signature_v2_seed20260706/dataset_receipt.json
+  train_file: /data-1/dataset/code/verl_rl/qwen3_1p7b_code_stage123_author_signature_v2_seed20260706/stage1_control_stage2_then_stage3.parquet
+  validation_dir: recipe/on_policy_wdl_sft/code_task/validation/CODE-B0_STAGE1-QWEN3-1P7B-COTMASK-V3-AUTHOR-SIGNATURE-V2-STEP20_1784965213
+  artifact_root: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60
+  checkpoint_root: /data-1/checkpoints
+  stage1_reuse_receipt: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60/admission/stage1_reuse_receipt.json
+  eos_regression_receipt: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60/admission/eos_regression_receipt.json
+  evaluator_receipt: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60/admission/evaluator_receipt.json
+  gpu_probe_receipt: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60/admission/gpu_probe_receipt.json
+  review_receipt: /data-2/model_weights/code_task/qwen3_1p7b_wdl_acd0_p60/admission/review_receipt.json
+identity:
+  model1_source_sha256: 3dc86e2398a07e05b622e67e8d8f0bbfa231e2d89ba638738938b249e6b7d4f1
+  model1_config_sha256: d0cd49de1bdd99bc3420e9f605db1bfdd54be14eb244e585263729d351570126
+  model1_weights_sha256: 8330ea21b26e3d6f780df10e473dbf4393bea0438ccf861d1d994eb0a8abc955
+  model2_provenance_sha256: b00548d70a2bf0a2ea4df46b80f4c12bf0b7365dab1f35db29a3bb2fe42c5eac
+  model2_config_sha256: a4a451865e8d45a519133031f19cda7d347813159fde1756d63e2beaf67f2288
+  model2_weights_sha256: a6c69262975ada9e1bc5054128d9f6f79b14167653ba817809bc771799d43c74
+  dataset_receipt_sha256: a8f49d365031ff977246f14563b3f0089b8f7ce9d0e8570b5c2c14da0931e61a
+  train_rows: 3840
+  train_sha256: 686856aa28c5928abf20922f3e4d4cec1ddd47e71650c1a62d4d592d83035f42
+  reward_sha256: 2854639c4bd3e34b89b3b4d53d553406b46a800fb44ff0c3657670f2792c59a2
+  dapo_reward_manager_sha256: 4d05aaf514a199bca81d393d9d057eeb5f38b7067303e010f16a4c2b17c4829b
+  async_dapo_reward_manager_sha256: 54c24d5df68c0c6afc86b534e2ecd0fef3842de3b6295d71dbfbac852dc701ba
+training_contract:
+  beta: 0.0
+  negative_loss_gradient_contribution: 0.0
+  loss_mode: wdl_sft
+  kl_enabled: false
+  rollout_source: model2
+  final_step: 60
+  lr: 1.0e-6
+  lr_warmup_steps: 0
+  data_shuffle: false
+  train_prompt_batch_size: 64
+  rollouts_per_prompt: 8
+  validation_frequency: 5
+  save_frequency: 5
+  protected_checkpoint_steps: [20, 40, 45, 50, 60]
+  stage3: omitted
+format_admission:
+  evaluator: strict_think_answer_python_eos
+  min_strict_format_given_not_truncated: 0.99
+  max_native_truncation: 0.50
+  min_usable_positive_rate: 0.30
+  diagnostic_raw_micro_format_target: 0.85
+  diagnostic_raw_each_source_format_target: 0.80
+  diagnostic_native_truncation_target: 0.25
+  require_no_format_bad_reward_positive: true
+  require_no_truncated_reward_positive: true
+  checkpoint_format_drop_hard_stop: 0.05
+evaluator_contract:
+  reward_path: recipe/on_policy_wdl_sft/code_task/official_aligned_reward.py
+  reward_function: compute_score_code_official_aligned
+  official_sources: [HumanEval+, MBPP+, LiveCodeBench]
+  lcb_index: /data-2/evaluator_assets/livecodebench_cache/index/release_v5_input_output.sqlite
+  lcb_index_sha256: 2f049e91c20f55b3967655c2828f4188cef4bc13108fd3a6d0407046375954b4
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  primary_metric: val-core/model2/code3_macro/acc/mean@3
+  mandatory_format_metrics: [strict_format_rate, native_truncation_rate, extraction_success_rate]
+runs:
+  - id: arm-a-stage1-continuation
+    run_prefix: CODE-WDL-ACD0-P60-ARM-A-QWEN3-1P7B
+    model_kind: single
+    init: model2
+    fusion_lambda: null
+    fusion_mode: null
+  - id: arm-d0-matched-scale-no-weak
+    run_prefix: CODE-WDL-ACD0-P60-ARM-D0-QWEN3-1P7B
+    model_kind: joint
+    init: [model1, model2]
+    fusion_lambda: 0.8
+    fusion_mode: strong_scaled
+  - id: arm-c-mixture
+    run_prefix: CODE-WDL-ACD0-P60-ARM-C-QWEN3-1P7B
+    model_kind: joint
+    init: [model1, model2]
+    fusion_lambda: 0.8
+    fusion_mode: mixture
+queue_order: [arm-a-stage1-continuation, arm-d0-matched-scale-no-weak, arm-c-mixture]

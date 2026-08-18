@@ -57,7 +57,8 @@ ray start --head --port=22000 --min-worker-port=21000 --max-worker-port=21999 \
 export RAY_ADDRESS="127.0.0.1:22000"
 
 set +e
-bash "${SCRIPT_DIR}/run_s1_code_base.sh" "$@"
+mapfile -t macro_overrides < <(code_stage123_macro_overrides)
+bash "${SCRIPT_DIR}/run_s1_code_base.sh" "${macro_overrides[@]}" "$@"
 status=$?
 set -e
 exit "$status"
