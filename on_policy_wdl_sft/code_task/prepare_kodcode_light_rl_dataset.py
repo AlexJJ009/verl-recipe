@@ -9,6 +9,7 @@ system+user chat prompt, rule reward, and Python code inside
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -23,7 +24,15 @@ import pandas as pd
 
 DATASET_ID = "KodCode/KodCode-Light-RL-10K"
 DATASET_FILE = "data/train-00000-of-00001.parquet"
-PROMPT_TEMPLATE_VERSION = "code-think-answer-python-v1"
+AUTHOR_PREPROCESSING_REPOSITORY = "https://github.com/KodCode-AI/code-r1"
+AUTHOR_PREPROCESSING_COMMIT = "c348f894a803d0eff3c4d529dbf82af6e1262ae1"
+AUTHOR_PREPROCESSING_PATH = "examples/data_preprocess/kodcode.py"
+AUTHOR_FUNCTION_DECLARATION_TEMPLATE = (
+    "Note that the function declaration is `{function_declaration}`. "
+    "Preserve this exact function name and parameter signature. "
+    "Your code should be wrapped in a markdown code block."
+)
+PROMPT_TEMPLATE_VERSION = "code-think-answer-python-v2-kodcode-author-signature"
 SYSTEM_PROMPT = (
     "You are a code generation assistant. Think through the problem, then return executable Python code only in "
     "<answer> fenced with ```python ... ```."
@@ -71,22 +80,43 @@ def normalize_problem(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def build_prompt(problem: str) -> list[dict[str, str]]:
+def extract_function_contract(row: dict[str, Any]) -> dict[str, str]:
+    test_info = parse_jsonish(row.get("test_info"), default=None)
+    if not isinstance(test_info, list) or len(test_info) != 1 or not isinstance(test_info[0], dict):
+        raise ValueError("KodCode-Light row must contain exactly one test_info function contract")
+    info = test_info[0]
+    contract = {
+        key: str(info.get(key) or "").strip()
+        for key in ("function_declaration", "function_name", "parameter_list")
+    }
+    if not contract["function_declaration"] or not contract["function_name"]:
+        raise ValueError("KodCode-Light test_info must contain function_declaration and function_name")
+    try:
+        declaration_module = ast.parse(f"{contract['function_declaration']}\n    pass\n")
+    except SyntaxError as exc:
+        raise ValueError("KodCode-Light function_declaration is not valid Python") from exc
+    declaration = declaration_module.body[0] if declaration_module.body else None
+    if not isinstance(declaration, (ast.FunctionDef, ast.AsyncFunctionDef)) or declaration.name != contract["function_name"]:
+        raise ValueError("KodCode-Light function_declaration does not match function_name")
+    return contract
+
+
+def build_prompt(problem: str, function_declaration: str) -> list[dict[str, str]]:
+    user_content = normalize_problem(problem)
+    user_content += "\n\n" + AUTHOR_FUNCTION_DECLARATION_TEMPLATE.format(
+        function_declaration=function_declaration
+    )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": normalize_problem(problem) + CONTRACT_SUFFIX},
+        {"role": "user", "content": user_content + CONTRACT_SUFFIX},
     ]
 
 
 def extract_function_name(row: dict[str, Any]) -> str | None:
-    test_info = parse_jsonish(row.get("test_info"), default=None)
-    if isinstance(test_info, list) and len(test_info) == 1:
-        info = test_info[0]
-        if isinstance(info, dict):
-            for key in ("function_name", "fn_name", "entry_point", "name"):
-                value = info.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
+    try:
+        return extract_function_contract(row)["function_name"]
+    except ValueError:
+        pass
     for code_key in ("solution", "r1_solution"):
         code = row.get(code_key) or ""
         match = re.search(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", str(code), re.M)
@@ -200,11 +230,17 @@ def convert(raw_path: Path, output_path: Path, report_path: Path, tokenizer_path
     r1_pass_trial_nums: list[int] = []
     missing_tests = 0
     missing_entry_point = 0
+    missing_function_declaration = 0
 
     for idx, row_obj in raw_df.iterrows():
         row = row_obj.to_dict()
         problem = row.get("question") or row.get("problem") or row.get("instruction") or row.get("prompt") or ""
-        prompt = build_prompt(str(problem))
+        try:
+            function_contract = extract_function_contract(row)
+        except ValueError:
+            missing_function_declaration += 1
+            raise
+        prompt = build_prompt(str(problem), function_contract["function_declaration"])
         if tokenizer is not None:
             prompt_tokens.append(prompt_token_len(tokenizer, prompt))
         user_content = prompt[1]["content"]
@@ -251,6 +287,9 @@ def convert(raw_path: Path, output_path: Path, report_path: Path, tokenizer_path
                     "original_solution": row.get("solution") or "",
                     "r1_solution": row.get("r1_solution") or "",
                     "entry_point": gt["entry_point"],
+                    "function_declaration": function_contract["function_declaration"],
+                    "function_name": function_contract["function_name"],
+                    "parameter_list": function_contract["parameter_list"],
                     "difficulty_proxy": diff,
                     "prompt_template_version": PROMPT_TEMPLATE_VERSION,
                 },
@@ -277,6 +316,14 @@ def convert(raw_path: Path, output_path: Path, report_path: Path, tokenizer_path
         "data_source": "kodcode_light_rl_10k",
         "missing_tests": missing_tests,
         "missing_entry_point": missing_entry_point,
+        "missing_function_declaration": missing_function_declaration,
+        "prompt_function_declaration_count": int(len(out_df)),
+        "author_preprocessing_reference": {
+            "repository": AUTHOR_PREPROCESSING_REPOSITORY,
+            "commit": AUTHOR_PREPROCESSING_COMMIT,
+            "path": AUTHOR_PREPROCESSING_PATH,
+            "function_declaration_template": AUTHOR_FUNCTION_DECLARATION_TEMPLATE,
+        },
         "source_counts_top20": dict(source_counts.most_common(20)),
         "style_counts": dict(style_counts),
         "gpt_difficulty_counts": dict(gpt_difficulty_counts),
