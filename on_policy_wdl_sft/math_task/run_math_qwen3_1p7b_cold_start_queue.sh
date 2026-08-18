@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_HOST=${REPO_HOST:-/data-1/code/verl}
-MANIFEST=${MATH_COLD_START_MANIFEST:-${REPO_HOST}/recipe/on_policy_wdl_sft/experiment_manifest/math_qwen3_1p7b_cold_start.yaml}
+MANIFEST=${MATH_COLD_START_MANIFEST:-${REPO_HOST}/recipe/on_policy_wdl_sft/experiment_manifest/math_qwen3_1p7b_cold_start_cotmask_v3.yaml}
 container_manifest=${MANIFEST/${REPO_HOST}/\/workspace\/verl}
 
 if [ "${DRY_RUN:-0}" != "1" ] && [ -z "${TMUX:-}" ]; then

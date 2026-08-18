@@ -1,9 +1,20 @@
 schema_version: 1
 experiment_id: qwen3_1p7b_stage123_p40
+status: invalidated_answer_only_model1
+launch_allowed: false
 resource_profile:
   name: l40s8x46g_ram582g_cpu176_ctx9k_v3
-  sha256: fdaf9c66d62018b24aad5918b125ed513c9368e350d2b7ef72067cc44350e8de
+  sha256: 75d6ee9635fdd6e3576352c9eedfc464ab36703852c4de321ae72e82d177044a
   max_response_length: 8192
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  top_k: -1
+  do_sample: true
+  single_primary_metric: val-core/code3_macro/acc/mean@3
+  joint_primary_metric: val-core/model2/code3_macro/acc/mean@3
+  secondary_metrics: [acc/pass@3, acc/std@3]
 semantics:
   formal_validation_scope: full
   validation_datasets:

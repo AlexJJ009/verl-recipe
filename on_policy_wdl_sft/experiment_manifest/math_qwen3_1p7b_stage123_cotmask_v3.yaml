@@ -27,7 +27,8 @@ validation:
 resources:
   max_prompt_length: 500
   max_response_length: 4096
-  rollout_gpu_memory_utilization: 0.6
+  rollout_gpu_memory_utilization: 0.55
+  actor_calculate_entropy: false
   gpu_probe_required: true
 matrix:
   betas:

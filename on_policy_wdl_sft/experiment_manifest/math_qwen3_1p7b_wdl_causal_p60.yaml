@@ -1,0 +1,79 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_wdl_causal_p60
+task: math
+status: admitted_for_launch
+launch_allowed: true
+admission:
+  admitted_at: 2026-07-27T02:30:15Z
+  focused_pytest: 93_passed
+  manipulation_receipt_status: pass
+  local_dry_run_status: pass
+  meituan_dispatcher_dry_run_status: pass
+seed: 20260719
+paths:
+  model1: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20
+  model2: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/launches/20260720T091917Z/artifacts/b0-stage1/final_model
+  model2_provenance: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/launches/20260720T091917Z/artifacts/b0-stage1/provenance.json
+  dataset_receipt: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/dataset_receipt.json
+  train_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_wdl_causal_p60
+  checkpoint_root: /data-1/checkpoints
+  manipulation_receipt: /data-2/model_weights/math_task/qwen3_1p7b_wdl_causal_p60/admission/manipulation_receipt.json
+  historical_controls:
+    A: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/launches/20260720T091917Z/artifacts/b0-stage1-control/final_model
+    B: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/launches/20260720T091917Z/artifacts/b0-stage3-nokl-model2/final_model
+identity:
+  model1_source_sha256: 18bcc83838081df2a2bbcffc74fb8b070b70a105116c7cdb6e9b00f3ad975f8c
+  model1_config_sha256: a4a451865e8d45a519133031f19cda7d347813159fde1756d63e2beaf67f2288
+  model1_weights_sha256: 9ef4bee31240d3bd8de17d5e7ea2d74b1b8b78b3797f56fe440b0170d53bc207
+  model2_provenance_sha256: 072eb8e7f2a372a4121c5ca0848d27ead11cf54057a47e58d02f4e003e79b9e3
+  model2_config_sha256: a4a451865e8d45a519133031f19cda7d347813159fde1756d63e2beaf67f2288
+  model2_weights_sha256: f0692c0f545a692501709e93db839e60b01687215a9ddfbc098f189c6069b1a8
+  train_rows: 3840
+  train_sha256: 88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66
+training_contract:
+  beta: 0.0
+  loss_mode: wdl_sft
+  kl_enabled: false
+  rollout_source: model2
+  final_step: 60
+  lr: 1.0e-6
+  lr_warmup_steps: 0
+  data_shuffle: false
+  validation_frequency: 5
+  save_frequency: 5
+  protected_checkpoint_steps: [20, 40, 45, 50, 60]
+  validation_views: [model1, model2]
+  track_counterfactual_submodel_losses: true
+reward_contract:
+  path: recipe/joint_training/custom_reward_function_latex_verify.py
+  sha256: 6fc2364da021bc5d14e1e3e8788d52cd49a3036088cacbb96d4eb5535e4473e5
+  function: compute_score_latex_verify
+  missing_answer_tag_reward: -1.0
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  confirmatory_n: 8
+  primary_metric: val-core/model2/math7_macro/acc/mean@3
+runs:
+  - id: arm-c-mixture
+    fusion_lambda: 0.8
+    fusion_mode: mixture
+    execution: required
+    interpretation: weak-plus-strong fused training objective
+  - id: arm-d-strong-only
+    fusion_lambda: 1.0
+    fusion_mode: mixture
+    execution: optional
+    default_in_queue: false
+    omit_if_manipulation_checks:
+      - D_is_direct_model2
+      - D_ignores_and_does_not_update_model1
+      - D_and_D0_are_model1_invariant
+    interpretation: optional direct-Model2 equivalence arm; omitted after the equivalence probe passes
+  - id: arm-d0-matched-scale-no-weak
+    fusion_lambda: 0.8
+    fusion_mode: strong_scaled
+    execution: required
+    interpretation: matched-strong-scale no-weak causal control

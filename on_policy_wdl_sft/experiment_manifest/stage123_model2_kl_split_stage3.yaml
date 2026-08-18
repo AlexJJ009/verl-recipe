@@ -1,10 +1,13 @@
 base_manifest: recipe/on_policy_wdl_sft/experiment_manifest/stage123.yaml
 experiment_id: qwen3_1p7b_stage123_model2_kl_split_stage3_v2
+status: invalidated_answer_only_model1
+launch_allowed: false
 resource_profile:
   name: l40s8x46g_ram582g_cpu176_ctx9k_v3
-  sha256: 3aa283f850600fff87cee3e2bc52320a2ee66159dad0ca9dbef9fa0c85bda4b2
+  sha256: 75d6ee9635fdd6e3576352c9eedfc464ab36703852c4de321ae72e82d177044a
   max_response_length: 8192
-  rollout_gpu_memory_utilization: 0.40
+  rollout_gpu_memory_utilization: 0.55
+  actor_calculate_entropy: false
   rollout_max_num_batched_tokens: 32768
   rollout_free_cache_engine: false
   rollout_enable_sleep_mode: false
@@ -23,8 +26,10 @@ validation:
   n: 3
   temperature: 0.2
   top_p: 0.95
+  top_k: -1
   do_sample: true
-  primary_metric: val-core/model2/HumanEval+/acc/mean@3
+  single_primary_metric: val-core/code3_macro/acc/mean@3
+  joint_primary_metric: val-core/model2/code3_macro/acc/mean@3
   secondary_metrics: [acc/pass@3, acc/std@3]
 hypotheses:
   primary: model2_only_kl_improves_stage2_model2_and_persists_into_model2_stage3

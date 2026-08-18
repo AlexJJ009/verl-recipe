@@ -12,7 +12,7 @@ paths:
   artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3
   selection_file: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/model1_selection.json
   pause_marker: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/PAUSE_FOR_MODEL1_SELECTION
-  step_zero_validation: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_v1/validation/step_0_n1
+  step_zero_validation: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/validation/step_0_n1
   event_log: /data-2/model_weights/math_task/qwen3_1p7b_integrated_cotmask_v3/events.jsonl
   loss_mask_preflight_receipt: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/loss_mask_preflight.json
 training:
@@ -44,6 +44,6 @@ execution:
   launch_allowed: false
   stop_after_first_passing_checkpoint: true
   auto_select_first_passing_checkpoint: true
-  continue_to_stage123: true
+  continue_to_stage123: false
   requires_whole_message_loss_mask: true
   stage123_manifest: /workspace/verl/recipe/on_policy_wdl_sft/experiment_manifest/math_qwen3_1p7b_stage123_cotmask_v3.yaml
