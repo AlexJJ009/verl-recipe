@@ -47,6 +47,10 @@ fi
 
 export TOTAL_N N_PER_SHARD
 export TENSOR_PARALLEL=1
+# Code evaluation imports VERL's tokenizer helper before vLLM starts its
+# EngineCore. Importing VERL probes CUDA availability, so vLLM must not fork
+# the already CUDA-initialized parent process.
+export VLLM_WORKER_MULTIPROC_METHOD=${VLLM_WORKER_MULTIPROC_METHOD:-spawn}
 export GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.90}
 export MAX_NUM_SEQS
 export MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-8192}

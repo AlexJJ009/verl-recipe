@@ -117,18 +117,18 @@ def _attach_format_contract(
     extraction_success: bool,
 ) -> dict[str, Any]:
     format_contract_success = all(format_telemetry.values()) and extraction_success
+    answer_correct = payload["score"] == 1.0
     payload.update(
         {
             **format_telemetry,
             "extraction_success": extraction_success,
             "format_contract_success": format_contract_success,
-            "answer_correct": payload["score"] == 1.0,
+            "answer_correct": answer_correct,
         }
     )
     if not format_contract_success and payload["score"] == 1.0:
         payload["score"] = -1.0
         payload["acc"] = 0.0
-        payload["answer_correct"] = False
     return payload
 
 
@@ -370,10 +370,14 @@ def _run_subprocess(
         cmd = [*(command_prefix or []), py, "-"] if stdin_script else [*(command_prefix or []), py, str(runner)]
         max_as_mb = _int_env("CODE_REWARD_EXEC_MAX_AS_MB", 4096)
         run_token = ""
-        child_env = None
+        child_env = {
+            key: value
+            for key, value in os.environ.items()
+            if key in {"HOME", "LANG", "LC_ALL", "PATH", "PYTHONHOME", "PYTHONPATH", "TMPDIR", "TZ"}
+        }
+        child_env.setdefault("PATH", os.defpath)
         if not command_prefix:
             run_token = f"code_reward_{method}_{os.getpid()}_{uuid.uuid4().hex}"
-            child_env = os.environ.copy()
             child_env["CODE_REWARD_RUN_TOKEN"] = run_token
 
         def setup_child_process() -> None:
@@ -1145,46 +1149,69 @@ def compute_score_code_official_aligned(
     **_: Any,
 ) -> dict[str, Any]:
     format_telemetry = compute_format_telemetry(solution_str)
+    valid_length = extra_info.get("valid_response_length") if extra_info else None
+    max_resp_len = extra_info.get("max_resp_len") if extra_info else None
+    native_eos = extra_info.get("response_eos_present") if extra_info else None
+    if native_eos is not None:
+        has_eos = bool(native_eos)
+    else:
+        # Backward-compatible fallback for callers that only provide lengths.
+        # The DAPO reward manager supplies response_eos_present explicitly.
+        has_eos = not (
+            valid_length is not None
+            and max_resp_len is not None
+            and valid_length >= max_resp_len
+        )
+    format_telemetry["has_eos"] = has_eos
     extraction = extract_code(solution_str)
     format_contract_success = all(format_telemetry.values()) and extraction.ok
     if not format_contract_success:
         method = OFFICIAL_METHODS.get(str(data_source), "local_exec")
         status = "format_error" if not all(format_telemetry.values()) else "extraction_fail"
         payload = _base_payload(-1.0, status, extraction.code, method, 0, 0)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=extraction.ok)
     if not extraction.ok:
         method = OFFICIAL_METHODS.get(str(data_source), "local_exec")
         payload = _base_payload(-1.0, "extraction_fail", "[NO_CODE]", method, 0, 0)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=False)
 
     test_case = _parse_tests(ground_truth, extra_info)
     if test_case is None:
         payload = _base_payload(-1.0, "runtime_error", extraction.code, "local_exec", 0, 0, "missing ground_truth")
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
 
     data_source = str(data_source)
 
     if data_source in {"HumanEval", "HumanEval+", "MBPP", "MBPP+"}:
         payload = score_evalplus_official(extraction.code, test_case)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source == "BigCodeBench":
         payload = score_bigcodebench_official(extraction.code, test_case)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source == "LiveCodeBench":
         payload = score_livecodebench_official(extraction.code, test_case)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     timeout = float(os.environ.get("CODE_REWARD_TIMEOUT", "5"))
     if data_source == "kodcode_light_rl_10k" or (
         isinstance(test_case, dict) and test_case.get("verification_method") == "kodcode_exec"
     ):
         payload = score_kodcode_exec(extraction.code, test_case, timeout)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     if data_source.startswith("deepcoder_preview") or (
         isinstance(test_case, dict) and test_case.get("verification_method") == "stdin_stdout_exec"
     ):
         payload = score_stdin_stdout_exec(extraction.code, test_case, timeout)
+        payload["truncated"] = not has_eos
         return _attach_format_contract(payload, format_telemetry, extraction_success=True)
     payload = score_local_exec(extraction.code, test_case, timeout)
+    payload["truncated"] = not has_eos
     return _attach_format_contract(payload, format_telemetry, extraction_success=True)
 
 

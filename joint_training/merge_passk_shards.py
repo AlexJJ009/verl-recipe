@@ -32,23 +32,30 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def _prompt_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """Identify one dataset row even when a benchmark contains duplicate prompts."""
+    if "dataset_path" in row and "dataset_row_index" in row:
+        return (str(row["dataset_path"]), int(row["dataset_row_index"]), str(row["prompt_id"]))
+    return (str(row["prompt_id"]),)
+
+
 def _validate_coverage(rows: list[dict[str, Any]], expected_n: int) -> dict[str, Any]:
     required = {"prompt_id", "sample_index", "data_source"}
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for position, row in enumerate(rows):
         missing = required - row.keys()
         if missing:
             raise ValueError(f"row {position} missing fields: {sorted(missing)}")
-        grouped[str(row["prompt_id"])].append(row)
+        grouped[_prompt_key(row)].append(row)
 
     expected = list(range(expected_n))
     failures = []
-    for prompt_id, prompt_rows in grouped.items():
+    for prompt_key, prompt_rows in grouped.items():
         indices = sorted(int(row["sample_index"]) for row in prompt_rows)
         if indices != expected:
             failures.append(
                 {
-                    "prompt_id": prompt_id,
+                    "prompt_key": prompt_key,
                     "count": len(indices),
                     "missing": sorted(set(expected) - set(indices))[:20],
                     "duplicates": sorted({index for index in indices if indices.count(index) > 1})[:20],
@@ -61,10 +68,10 @@ def _validate_coverage(rows: list[dict[str, Any]], expected_n: int) -> dict[str,
 
 
 def _response_diversity(rows: list[dict[str, Any]], text_key: str) -> dict[str, float]:
-    grouped: dict[str, list[str]] = defaultdict(list)
+    grouped: dict[tuple[Any, ...], list[str]] = defaultdict(list)
     for row in rows:
         text = str(row.get(text_key, "")).strip()
-        grouped[str(row["prompt_id"])].append(hashlib.sha256(text.encode("utf-8")).hexdigest())
+        grouped[_prompt_key(row)].append(hashlib.sha256(text.encode("utf-8")).hexdigest())
     counts = [len(set(values)) for values in grouped.values()]
     n_values = [len(values) for values in grouped.values()]
     return {
@@ -120,14 +127,15 @@ def merge_math(inputs: list[Path], output: Path, expected_n: int) -> dict[str, A
     frame = pd.concat([pd.read_parquet(path) for path in inputs], ignore_index=True)
     rows = frame.to_dict("records")
     coverage = _validate_coverage(rows, expected_n)
-    frame = frame.sort_values(["data_source", "prompt_id", "sample_index"], kind="stable")
+    prompt_columns = ["dataset_path", "dataset_row_index", "prompt_id"]
+    frame = frame.sort_values(["data_source", *prompt_columns, "sample_index"], kind="stable")
     output.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(output, index=False)
 
     metrics: dict[str, Any] = {}
     for data_source, source_frame in frame.groupby("data_source", sort=True):
         entries = []
-        for _, prompt_frame in source_frame.groupby("prompt_id", sort=True):
+        for _, prompt_frame in source_frame.groupby(prompt_columns, sort=True):
             results = prompt_frame.to_dict("records")
             entries.append({"results": results})
         source_metrics = compute_shared_metrics(entries, expected_n)
@@ -137,7 +145,7 @@ def merge_math(inputs: list[Path], output: Path, expected_n: int) -> dict[str, A
             source_metrics.update(compute_metrics_for_k(entries, k))
         pred_counts = [
             len({str(value) for value in prompt_frame["pred"].dropna() if str(value) not in {"", "[NO_BOXED]"}})
-            for _, prompt_frame in source_frame.groupby("prompt_id", sort=True)
+            for _, prompt_frame in source_frame.groupby(prompt_columns, sort=True)
         ]
         source_metrics["mean_unique_prediction_count"] = sum(pred_counts) / max(len(pred_counts), 1)
         source_metrics[f"oracle_uplift_pass{expected_n}_minus_pass1"] = (

@@ -86,6 +86,15 @@ NGPUS_PER_NODE=${NGPUS_PER_NODE:-8}
 BASE_MODEL_PATH=${BASE_MODEL_PATH:-"${DATA_ROOT}/.cache/huggingface/models--Qwen--Qwen3-4B-Base/snapshots/906bfd4b4dc7f14ee4320094d8b41684abff8539"}
 MODEL2_PATH=${MODEL2_PATH:-"${DATA_ROOT}/.cache/Qwen3-4B-Base-SFT-stage-1"}
 FUSION_LAMBDA=${FUSION_LAMBDA:-0.50}
+FUSION_MODE=${FUSION_MODE:-mixture}
+FREEZE_MODEL1=${FREEZE_MODEL1:-false}
+case "${FREEZE_MODEL1,,}" in
+    true|false) ;;
+    *)
+        echo "ERROR: FREEZE_MODEL1 must be true or false, got: $FREEZE_MODEL1" >&2
+        exit 1
+        ;;
+esac
 
 MODEL2_CACHE_TAG=$(basename "$MODEL2_PATH")
 MODEL2_CACHE_TAG=${MODEL2_CACHE_TAG//[^[:alnum:]._-]/-}
@@ -125,11 +134,18 @@ if ! joint_cache_complete; then
         exit 1
     fi
     mkdir -p "$(dirname "$MODEL_PATH")"
-    python3 -m verl.models.joint_model.prepare_joint_weights \
-        --base_model_path "$BASE_MODEL_PATH" \
-        --model2_path "$MODEL2_PATH" \
-        --output_path "$MODEL_PATH" \
+    prepare_joint_args=(
+        --base_model_path "$BASE_MODEL_PATH"
+        --model2_path "$MODEL2_PATH"
+        --output_path "$MODEL_PATH"
         --fusion_lambda "$FUSION_LAMBDA"
+        --fusion_mode "$FUSION_MODE"
+    )
+    if [ "${FREEZE_MODEL1,,}" = "true" ]; then
+        prepare_joint_args+=(--freeze_model1)
+    fi
+    python3 -m verl.models.joint_model.prepare_joint_weights \
+        "${prepare_joint_args[@]}"
 fi
 
 if [ -n "${EXPECTED_MODEL1_PATH:-}" ]; then
@@ -169,23 +185,40 @@ refresh_joint_remote_code() {
 }
 refresh_joint_remote_code
 
-python3 - "$MODEL_PATH" "$FUSION_LAMBDA" <<'PY'
+python3 - "$MODEL_PATH" "$FUSION_LAMBDA" "$FUSION_MODE" "$FREEZE_MODEL1" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 model_path = Path(sys.argv[1])
 expected = float(sys.argv[2])
+expected_mode = sys.argv[3]
+expected_freeze_model1 = sys.argv[4].lower() == "true"
 config_path = model_path / "config.json"
 if not config_path.is_file():
     raise SystemExit(f"ERROR: joint config missing: {config_path}")
-actual = float(json.loads(config_path.read_text()).get("fusion_lambda"))
+config = json.loads(config_path.read_text())
+actual = float(config.get("fusion_lambda"))
+actual_mode = config.get("fusion_mode", "mixture")
+actual_freeze_model1 = bool(config.get("freeze_model1", False))
 if abs(actual - expected) > 1e-9:
     raise SystemExit(
         "ERROR: joint model fusion_lambda mismatch: "
         f"path={model_path} expected={expected} actual={actual}"
     )
 print(f"Joint fusion_lambda verified: {actual}")
+if actual_mode != expected_mode:
+    raise SystemExit(
+        "ERROR: joint model fusion_mode mismatch: "
+        f"path={model_path} expected={expected_mode} actual={actual_mode}"
+    )
+print(f"Joint fusion_mode verified: {actual_mode}")
+if actual_freeze_model1 != expected_freeze_model1:
+    raise SystemExit(
+        "ERROR: joint model freeze_model1 mismatch: "
+        f"path={model_path} expected={expected_freeze_model1} actual={actual_freeze_model1}"
+    )
+print(f"Joint freeze_model1 verified: {actual_freeze_model1}")
 PY
 
 if [ ! -f "$TRAIN_FILE" ]; then
@@ -203,6 +236,8 @@ BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-"val-core/HuggingFaceH4/MATH-500/ac
 BEST_CKPT_METRIC_MODE=${BEST_CKPT_METRIC_MODE:-max}
 BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER:-True}
 CHECKPOINT_SAVE_CONTENTS=${CHECKPOINT_SAVE_CONTENTS:-"[model,optimizer,extra]"}
+PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-"[]"}
+JOINT_VALIDATION_VIEWS=${JOINT_VALIDATION_VIEWS:-"[model2]"}
 BASE_CKPT_DIR=${BASE_CKPT_DIR:-"${DATA_ROOT}/checkpoints"}
 
 get_df_target() {
@@ -229,10 +264,25 @@ mkdir -p "$BASE_CKPT_DIR"
 
 LATEST_CKPT_DIR=$(find "$BASE_CKPT_DIR" -maxdepth 1 -type d -name "${RUN_PREFIX}_*" 2>/dev/null | sort | tail -1)
 if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
-    EXPERIMENT_NAME=$(basename "$LATEST_CKPT_DIR")
-    export WANDB_RUN_NAME="$EXPERIMENT_NAME"
-    CKPTS_DIR="$LATEST_CKPT_DIR"
-    IS_RESUME=true
+    latest_step=""
+    if [ -f "$LATEST_CKPT_DIR/latest_checkpointed_iteration.txt" ]; then
+        latest_step=$(tr -dc '0-9' < "$LATEST_CKPT_DIR/latest_checkpointed_iteration.txt")
+    fi
+    if [ -z "$latest_step" ]; then
+        latest_step=$(find "$LATEST_CKPT_DIR" -maxdepth 1 -type d -name 'global_step_*' 2>/dev/null \
+            | sed 's/.*global_step_//' | sort -n | tail -1)
+    fi
+    if [ -n "$latest_step" ]; then
+        EXPERIMENT_NAME=$(basename "$LATEST_CKPT_DIR")
+        export WANDB_RUN_NAME="$EXPERIMENT_NAME"
+        CKPTS_DIR="$LATEST_CKPT_DIR"
+        IS_RESUME=true
+    else
+        echo "Ignoring checkpoint directory without a saved step: $LATEST_CKPT_DIR"
+        CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
+        mkdir -p "$CKPTS_DIR"
+        IS_RESUME=false
+    fi
 else
     CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
     mkdir -p "$CKPTS_DIR"
@@ -303,6 +353,14 @@ offload=${FSDP_OFFLOAD:-False}
 optimizer_offload=${FSDP_OPTIMIZER_OFFLOAD:-${offload}}
 ref_offload=${REF_FSDP_OFFLOAD:-${offload}}
 fsdp_size=${FSDP_SIZE:--1}
+actor_use_orig_params="${ACTOR_FSDP_USE_ORIG_PARAMS:-$FREEZE_MODEL1}"
+case "${actor_use_orig_params,,}" in
+    true|false) ;;
+    *)
+        echo "ERROR: ACTOR_FSDP_USE_ORIG_PARAMS must be true or false, got: $actor_use_orig_params" >&2
+        exit 1
+        ;;
+esac
 LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${LOG_PROB_MICRO_BATCH_SIZE+x}
 REF_LOG_PROB_MICRO_BATCH_SIZE_WAS_SET=${REF_LOG_PROB_MICRO_BATCH_SIZE+x}
 USE_REMOVE_PADDING=${USE_REMOVE_PADDING:-True}
@@ -364,6 +422,8 @@ BASE_MODEL_PATH=${BASE_MODEL_PATH}
 MODEL2_PATH=${MODEL2_PATH}
 MODEL_PATH=${MODEL_PATH}
 FUSION_LAMBDA=${FUSION_LAMBDA}
+FUSION_MODE=${FUSION_MODE}
+FREEZE_MODEL1=${FREEZE_MODEL1}
 TRAIN_FILE=${TRAIN_FILE}
 TEST_FILES=${TEST_FILES}
 LOSS_MODE=${loss_mode}
@@ -396,6 +456,8 @@ KEEP_BEST_CKPT=${KEEP_BEST_CKPT}
 BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY}
 BEST_CKPT_STRIP_OPTIMIZER=${BEST_CKPT_STRIP_OPTIMIZER}
 CHECKPOINT_SAVE_CONTENTS=${CHECKPOINT_SAVE_CONTENTS}
+PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS}
+JOINT_VALIDATION_VIEWS=${JOINT_VALIDATION_VIEWS}
 EOF
 
 python3 -m verl.trainer.main_ppo \
@@ -423,6 +485,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${optimizer_offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
+    actor_rollout_ref.actor.fsdp_config.use_orig_params=${actor_use_orig_params} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.calculate_entropy=${calculate_entropy} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
@@ -506,6 +569,8 @@ python3 -m verl.trainer.main_ppo \
     +trainer.best_ckpt_metric_key="${BEST_CKPT_METRIC_KEY}" \
     +trainer.best_ckpt_metric_mode=${BEST_CKPT_METRIC_MODE} \
     +trainer.best_ckpt_strip_optimizer=${BEST_CKPT_STRIP_OPTIMIZER} \
+    +trainer.protected_ckpt_steps="${PROTECTED_CKPT_STEPS}" \
+    trainer.joint_validation_views="${JOINT_VALIDATION_VIEWS}" \
     trainer.log_val_generations=${VAL_GENERATIONS_TO_LOG} \
     +trainer.log_val_generations_to_tracking=${VAL_GENERATIONS_TO_TRACKING} \
     trainer.validation_data_dir="${VALIDATION_DATA_DIR}" \
