@@ -3,7 +3,7 @@
 # cold-start SFT fractions.
 set -euo pipefail
 
-REPO_HOST=${REPO_HOST:-/data-1/verl07/verl}
+REPO_HOST=${REPO_HOST:-/data-1/code/verl}
 REPO_CONTAINER=${REPO_CONTAINER:-/workspace/verl}
 DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness:latest}
 CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints}
@@ -21,8 +21,8 @@ WXPUSHER_SCRIPT=${WXPUSHER_SCRIPT:-/root/agent-core/skills/wxpusher-notify/scrip
 
 PROTECTED_CKPT_STEPS_DEFAULT=${PROTECTED_CKPT_STEPS_DEFAULT:-[40,60,80,100,120,150]}
 
-FRAC25_INIT_MODEL_PATH=${FRAC25_INIT_MODEL_PATH:-/data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac25}
-FRAC50_INIT_MODEL_PATH=${FRAC50_INIT_MODEL_PATH:-/data-1/model_weights/format_cold_start_fraction/qwen3-1p7b-kodcode-format-sft-frac50}
+FRAC25_INIT_MODEL_PATH=${FRAC25_INIT_MODEL_PATH:-/data-1/model_weights/format_cold_start_fraction_cot_v3/qwen3-1p7b-kodcode-format-sft-frac25}
+FRAC50_INIT_MODEL_PATH=${FRAC50_INIT_MODEL_PATH:-/data-1/model_weights/format_cold_start_fraction_cot_v3/qwen3-1p7b-kodcode-format-sft-frac50}
 
 RUN_LABELS=(
   "kodcode-qwen3-1p7b-coldstart-frac25-ctx8k-s1-beta0"
@@ -37,10 +37,10 @@ RUN_SCRIPTS=(
   "${REPO_CONTAINER}/recipe/on_policy_wdl_sft/code_task/run_s1_code_kodcode_qwen3_1p7b_instruct_ctx8k_beta_01.sh"
 )
 RUN_PREFIXES=(
-  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA0-V1"
-  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1"
-  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-CODE-KODCODE-CTX8K-S1-BETA0-V1"
-  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-CODE-KODCODE-CTX8K-S1-BETA01-V1"
+  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-COT-V3-CODE-KODCODE-CTX8K-S1-BETA0-V1"
+  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-COT-V3-CODE-KODCODE-CTX8K-S1-BETA01-V1"
+  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-COT-V3-CODE-KODCODE-CTX8K-S1-BETA0-V1"
+  "ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-COT-V3-CODE-KODCODE-CTX8K-S1-BETA01-V1"
 )
 RUN_INIT_MODEL_PATHS=(
   "$FRAC25_INIT_MODEL_PATH"

@@ -31,5 +31,23 @@ done
     exit 2
 }
 
+if [ "${DRY_RUN:-0}" != "1" ]; then
+python3 - "$BATCH_MANIFEST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+try:
+    payload = json.loads(text)
+except json.JSONDecodeError:
+    import yaml
+    payload = yaml.safe_load(text)
+if payload.get("launch_allowed") is not True:
+    raise SystemExit("ERROR: code Stage123 batch manifest is not launchable; retrain CoT-v3 Cold Start/Stage1 and regenerate formal admission")
+PY
+fi
+
 exec python3 "${REPO_ROOT}/scripts/experiment_execution_core.py" batch-run \
     --manifest "$BATCH_MANIFEST" --state-root "$STATE_ROOT" --repo-root "$REPO_ROOT"

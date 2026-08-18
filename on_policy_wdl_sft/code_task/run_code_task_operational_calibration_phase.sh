@@ -112,14 +112,26 @@ import json,sys
 from pathlib import Path
 model=Path(sys.argv[1]).resolve(); provenance=Path(sys.argv[2])
 data=json.loads(provenance.read_text())
-if Path(data.get("target_dir", "")).resolve() != model:
+provenance_model = data.get("target_dir") or data.get("identity", {}).get("model_path")
+if Path(provenance_model or "").resolve() != model:
     raise SystemExit("Stage1 calibration provenance target mismatch")
 PY
   env "${common[@]}" INIT_MODEL_PATH="${STAGE1_INIT_MODEL_PATH:?}" CODE_TRAIN_FILE="${CALIBRATION_TRAIN_FILE:?}" TRAIN_FILE="$CALIBRATION_TRAIN_FILE" WDL_SFT_BETA=0.1 DATA_SHUFFLE=False bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"
   ;;
  stage2)
-  : "${CALIBRATION_STAGE1_CKPT_DIR:?}" "${CALIBRATION_STAGE1_MODEL2:?}"
-  env "${common[@]}" BASE_MODEL_PATH="${BASE_MODEL_PATH:?}" SUBMODEL_KL_MODEL1_REF_PATH="${SUBMODEL_KL_MODEL1_REF_PATH:-$BASE_MODEL_PATH}" MODEL_PATH="$CALIBRATION_OUTPUT_ROOT/joint_model" MODEL2_CACHE_TAG=calibration-s2-1p7b STAGE1_CKPT_DIR="$CALIBRATION_STAGE1_CKPT_DIR" STAGE1_RUN_PREFIX="${CALIBRATION_STAGE1_RUN_PREFIX:?}" STAGE2_HANDOFF_STEP="${CALIBRATION_STAGE1_HANDOFF_STEP:?}" MERGED_MODEL2_DIR="$CALIBRATION_STAGE1_MODEL2" MODEL2_PATH="$CALIBRATION_STAGE1_MODEL2" REQUIRE_MERGED_MODEL2_PROVENANCE=False CODE_TRAIN_FILE="${CALIBRATION_TRAIN_FILE:?}" TRAIN_FILE="$CALIBRATION_TRAIN_FILE" WDL_SFT_BETA=0.1 EXPECTED_STAGE1_BETA=0.1 FUSION_LAMBDA=0.8 bash "$SCRIPT_DIR/run_s2_code_model2_rollout_common.sh" "${hydra_overrides[@]}"
+  : "${CALIBRATION_STAGE1_MODEL2:?}"
+  stage2_source=(
+    MODEL2_PATH="$CALIBRATION_STAGE1_MODEL2"
+    MERGED_MODEL2_DIR="$CALIBRATION_STAGE1_MODEL2"
+    REQUIRE_MERGED_MODEL2_PROVENANCE=False
+  )
+  if [ -n "${CALIBRATION_STAGE1_MODEL2_PROVENANCE:-}" ]; then
+    stage2_source+=(ALLOW_EXTERNAL_MODEL2=1 STAGE1_MODEL2_PROVENANCE_FILE="$CALIBRATION_STAGE1_MODEL2_PROVENANCE")
+  else
+    : "${CALIBRATION_STAGE1_CKPT_DIR:?}"
+    stage2_source+=(STAGE1_CKPT_DIR="$CALIBRATION_STAGE1_CKPT_DIR")
+  fi
+  env "${common[@]}" BASE_MODEL_PATH="${BASE_MODEL_PATH:?}" SUBMODEL_KL_MODEL1_REF_PATH="${SUBMODEL_KL_MODEL1_REF_PATH:-$BASE_MODEL_PATH}" MODEL_PATH="$CALIBRATION_OUTPUT_ROOT/joint_model" MODEL2_CACHE_TAG=calibration-s2-1p7b STAGE1_RUN_PREFIX="${CALIBRATION_STAGE1_RUN_PREFIX:?}" STAGE2_HANDOFF_STEP="${CALIBRATION_STAGE1_HANDOFF_STEP:?}" "${stage2_source[@]}" CODE_TRAIN_FILE="${CALIBRATION_TRAIN_FILE:?}" TRAIN_FILE="$CALIBRATION_TRAIN_FILE" WDL_SFT_BETA=0.1 EXPECTED_STAGE1_BETA=0.1 FUSION_LAMBDA=0.8 bash "$SCRIPT_DIR/run_s2_code_model2_rollout_common.sh" "${hydra_overrides[@]}"
   ;;
  stage3)
   env "${common[@]}" INIT_MODEL_PATH="${CALIBRATION_STAGE3_MODEL_PATH:?}" WDL_SFT_BETA=0.1 DATA_SHUFFLE=False bash "$SCRIPT_DIR/run_s1_code_base.sh" "${hydra_overrides[@]}"

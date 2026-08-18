@@ -9,10 +9,10 @@ set -euo pipefail
 REPO_HOST=${REPO_HOST:-/data-1/verl07/verl}
 REPO_CONTAINER=${REPO_CONTAINER:-/workspace/verl}
 DOCKER_IMAGE=${DOCKER_IMAGE:-verl-harness:latest}
-CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints/format_cold_start_fraction}
-MERGED_ROOT=${MERGED_ROOT:-/data-1/model_weights/format_cold_start_fraction}
-DATA_ROOT=${DATA_ROOT:-/data-1/dataset/code/format_cold_start_fraction}
-OUTPUT_ROOT=${OUTPUT_ROOT:-/data-1/eval_outputs/code_task/qwen3_1p7b_coldstart_sft_fraction}
+CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints/format_cold_start_fraction_cot_v3}
+MERGED_ROOT=${MERGED_ROOT:-/data-1/model_weights/format_cold_start_fraction_cot_v3}
+DATA_ROOT=${DATA_ROOT:-/data-1/dataset/code/format_cold_start_fraction_cot_v3}
+OUTPUT_ROOT=${OUTPUT_ROOT:-/data-1/eval_outputs/code_task/qwen3_1p7b_coldstart_sft_fraction_cot_v3}
 LOG_FILE=${LOG_FILE:-"${REPO_HOST}/recipe/on_policy_wdl_sft/code_task/run_code_task_qwen3_1p7b_coldstart_sft_fraction_queue.log"}
 QUEUE_STATUS_FILE=${QUEUE_STATUS_FILE:-"${LOG_FILE%.log}_status.tsv"}
 QUEUE_TMUX=${QUEUE_TMUX:-code_task_qwen3_1p7b_coldstart_sft_fraction_queue}
@@ -31,15 +31,20 @@ MODEL_PATH=${MODEL_PATH:-/data-1/.cache/huggingface/hub/models--Qwen--Qwen3-1.7B
 BASE_TOTAL_SAMPLES=${BASE_TOTAL_SAMPLES:-10000}
 BASE_TOTAL_STEPS=${BASE_TOTAL_STEPS:-120}
 TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-64}
+LR=${LR:-5e-6}
+LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-5}
 SAVE_FREQ=${SAVE_FREQ:-0}
 MAX_CKPT_TO_KEEP=${MAX_CKPT_TO_KEEP:-1}
 DATA_SEED=${DATA_SEED:-20260706}
+TRAIN_SEED=${TRAIN_SEED:-$DATA_SEED}
+DATA_SHUFFLE=${DATA_SHUFFLE:-False}
 
 EVAL_BENCHMARKS=${EVAL_BENCHMARKS:-"humaneval mbpp livecodebench"}
-EVAL_N_SAMPLES=${EVAL_N_SAMPLES:-1}
+EVAL_N_SAMPLES=${EVAL_N_SAMPLES:-3}
 EVAL_TEMPERATURE=${EVAL_TEMPERATURE:-0.2}
 EVAL_TOP_P=${EVAL_TOP_P:-0.95}
-EVAL_MAX_TOKENS=${EVAL_MAX_TOKENS:-4096}
+EVAL_TOP_K=${EVAL_TOP_K:--1}
+EVAL_MAX_TOKENS=${EVAL_MAX_TOKENS:-8192}
 EVAL_TENSOR_PARALLEL=${EVAL_TENSOR_PARALLEL:-4}
 EVAL_GPU_MEMORY_UTILIZATION=${EVAL_GPU_MEMORY_UTILIZATION:-0.75}
 CODE_OFFICIAL_EVAL_PARALLEL=${CODE_OFFICIAL_EVAL_PARALLEL:-8}
@@ -50,7 +55,7 @@ RUN_FRACTIONS=("0.25" "0.50" "1.00")
 RUN_SAMPLES=(
   "${FRAC25_SAMPLES:-2500}"
   "${FRAC50_SAMPLES:-5000}"
-  "${FRAC100_SAMPLES:-10000}"
+  "${FRAC100_SAMPLES:--1}"
 )
 RUN_STEPS=(
   "${FRAC25_STEPS:-30}"
@@ -58,9 +63,9 @@ RUN_STEPS=(
   "${FRAC100_STEPS:-120}"
 )
 RUN_PREFIXES=(
-  "${FRAC25_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC25-V1}"
-  "${FRAC50_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC50-V1}"
-  "${FRAC100_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC100-V1}"
+  "${FRAC25_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC25-COT-V3}"
+  "${FRAC50_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC50-COT-V3}"
+  "${FRAC100_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC100-COT-V3}"
 )
 TMUX_NAMES=(
   "format_cold_start_sft_q17b_code_frac25"
@@ -138,16 +143,26 @@ prepare_dataset() {
     local label="${RUN_LABELS[$idx]}"
     local samples="${RUN_SAMPLES[$idx]}"
     local output="${DATA_ROOT}/kodcode_light_sft_messages_${label}.parquet"
-    local script="${REPO_HOST}/recipe/on_policy_wdl_sft/format_cold_start/prepare_code_kodcode_sft_dataset.py"
+    local container_script="${REPO_CONTAINER}/recipe/on_policy_wdl_sft/format_cold_start/prepare_code_kodcode_sft_dataset.py"
     if [ -f "$output" ] && [ "$ALLOW_OVERWRITE_DATA" != "1" ]; then
-        log "dataset exists; verify ${label}: ${output}"
+        if ! rg -q '"format_cold_start": "code-cot-python-answer-v3"' "${output}.manifest.json" 2>/dev/null; then
+            log "ERROR refusing stale or unfiltered dataset: ${output}; set ALLOW_OVERWRITE_DATA=1 to regenerate CoT-v3 data"
+            exit 1
+        fi
+        log "CoT-v3 dataset exists; verify ${label}: ${output}"
     elif [ "${DRY_RUN:-0}" = "1" ]; then
         log "DRY_RUN would prepare dataset ${label}: samples=${samples} output=${output}"
     else
-        python3 "$script" --output "$output" --max-samples "$samples" --seed "$DATA_SEED" >&2
+        docker run --rm --gpus all --ipc=host --network=host --shm-size=64g \
+            -v /data-1:/data-1 -v /data-2:/data-2 -v "$REPO_HOST":"$REPO_CONTAINER" \
+            -w "$REPO_CONTAINER" "$DOCKER_IMAGE" \
+            python "$container_script" --output "$output" --max-samples "$samples" --seed "$DATA_SEED" >&2
     fi
     if [ "${DRY_RUN:-0}" != "1" ] || [ -f "$output" ]; then
-        python3 "$script" --output "$output" --verify-only >&2
+        docker run --rm --gpus all --ipc=host --network=host --shm-size=64g \
+            -v /data-1:/data-1 -v /data-2:/data-2 -v "$REPO_HOST":"$REPO_CONTAINER" \
+            -w "$REPO_CONTAINER" "$DOCKER_IMAGE" \
+            python "$container_script" --output "$output" --verify-only >&2
     fi
     printf '%s\n' "$output"
 }
@@ -175,7 +190,7 @@ launch_train() {
     fi
     if [ "${DRY_RUN:-0}" = "1" ]; then
         log "DRY_RUN validate launcher ${label}: steps=${final} train_file=${train_file}"
-        DRY_RUN=1 TRAIN_FILE="$train_file" RUN_PREFIX="$prefix" MODEL_PATH="$MODEL_PATH" CKPT_ROOT="$CKPT_ROOT" TOTAL_TRAINING_STEPS="$final" TRAIN_BATCH_SIZE="$TRAIN_BATCH_SIZE" SAVE_FREQ="$final" MAX_CKPT_TO_KEEP="$MAX_CKPT_TO_KEEP" bash "$host_script"
+        DRY_RUN=1 TRAIN_FILE="$train_file" RUN_PREFIX="$prefix" MODEL_PATH="$MODEL_PATH" CKPT_ROOT="$CKPT_ROOT" TOTAL_TRAINING_STEPS="$final" TRAIN_BATCH_SIZE="$TRAIN_BATCH_SIZE" LR="$LR" LR_WARMUP_STEPS="$LR_WARMUP_STEPS" TRAIN_SEED="$TRAIN_SEED" DATA_SHUFFLE="$DATA_SHUFFLE" SAVE_FREQ="$final" MAX_CKPT_TO_KEEP="$MAX_CKPT_TO_KEEP" bash "$host_script"
         return
     fi
     if tmux has-session -t "$tmux_name" 2>/dev/null; then
@@ -186,7 +201,7 @@ launch_train() {
     [ "$save_freq" = "0" ] && save_freq="$final"
     log "launch training ${label}: tmux=${tmux_name} steps=${final} samples=${RUN_SAMPLES[$idx]} train_file=${train_file}"
     tmux new-session -d -s "$tmux_name" \
-        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v /data-2:/data-2 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"ALLOW_FORMAT_COLD_START_SFT=1 MODEL_PATH='$MODEL_PATH' TRAIN_FILE='$train_file' RUN_PREFIX='$prefix' CKPT_ROOT='$CKPT_ROOT' TOTAL_TRAINING_STEPS='$final' TRAIN_BATCH_SIZE='$TRAIN_BATCH_SIZE' SAVE_FREQ='$save_freq' MAX_CKPT_TO_KEEP='$MAX_CKPT_TO_KEEP' bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
+        "docker run --rm --gpus all --ipc=host --network=host --shm-size=64g -v /data-1:/data-1 -v /data-2:/data-2 -v '$REPO_HOST':'$REPO_CONTAINER' -w '$REPO_CONTAINER' '$DOCKER_IMAGE' bash -lc \"ALLOW_FORMAT_COLD_START_SFT=1 MODEL_PATH='$MODEL_PATH' TRAIN_FILE='$train_file' RUN_PREFIX='$prefix' CKPT_ROOT='$CKPT_ROOT' TOTAL_TRAINING_STEPS='$final' TRAIN_BATCH_SIZE='$TRAIN_BATCH_SIZE' LR='$LR' LR_WARMUP_STEPS='$LR_WARMUP_STEPS' TRAIN_SEED='$TRAIN_SEED' DATA_SHUFFLE='$DATA_SHUFFLE' SAVE_FREQ='$save_freq' MAX_CKPT_TO_KEEP='$MAX_CKPT_TO_KEEP' bash '$container_script'\" 2>&1 | tee -a '$LOG_FILE'"
 }
 
 wait_train() {
@@ -312,6 +327,7 @@ eval_model() {
                     --n '${EVAL_N_SAMPLES}' \
                     --temperature '${EVAL_TEMPERATURE}' \
                     --top-p '${EVAL_TOP_P}' \
+                    --top-k '${EVAL_TOP_K}' \
                     --max-tokens '${EVAL_MAX_TOKENS}' \
                     --gpu-memory-utilization '${EVAL_GPU_MEMORY_UTILIZATION}' \
                     --seed 42

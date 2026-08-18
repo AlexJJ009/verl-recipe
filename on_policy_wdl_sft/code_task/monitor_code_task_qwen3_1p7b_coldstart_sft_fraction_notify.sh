@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 QUEUE_TMUX=${QUEUE_TMUX:-code_task_qwen3_1p7b_coldstart_sft_fraction_queue}
-CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints/format_cold_start_fraction}
-MERGED_ROOT=${MERGED_ROOT:-/data-1/model_weights/format_cold_start_fraction}
+CKPT_ROOT=${CKPT_ROOT:-/data-1/checkpoints/format_cold_start_fraction_cot_v3}
+MERGED_ROOT=${MERGED_ROOT:-/data-1/model_weights/format_cold_start_fraction_cot_v3}
 OUTPUT_ROOT=${OUTPUT_ROOT:-/data-1/eval_outputs/code_task/qwen3_1p7b_coldstart_sft_fraction}
 LOG_FILE=${LOG_FILE:-"${SCRIPT_DIR}/monitor_code_task_qwen3_1p7b_coldstart_sft_fraction_notify.log"}
 POLL_SEC=${POLL_SEC:-300}
@@ -16,14 +16,14 @@ EVAL_BENCHMARKS=${EVAL_BENCHMARKS:-"humaneval mbpp livecodebench"}
 
 RUN_LABELS=("frac25" "frac50" "frac100")
 RUN_PREFIXES=(
-  "${FRAC25_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC25-V1}"
-  "${FRAC50_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC50-V1}"
-  "${FRAC100_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC100-V1}"
+  "${FRAC25_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC25-COT-V3}"
+  "${FRAC50_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC50-COT-V3}"
+  "${FRAC100_RUN_PREFIX:-SFT-FORMAT-COLDSTART-Qwen3-1P7B-CODE-KODCODE-FRAC100-COT-V3}"
 )
 TMUX_NAMES=(
-  "format_cold_start_sft_q17b_code_frac25"
-  "format_cold_start_sft_q17b_code_frac50"
-  "format_cold_start_sft_q17b_code_frac100"
+  "format_cold_start_sft_q17b_code_frac25_cot_v3"
+  "format_cold_start_sft_q17b_code_frac50_cot_v3"
+  "format_cold_start_sft_q17b_code_frac100_cot_v3"
 )
 FINAL_STEPS=(
   "${FRAC25_STEPS:-30}"

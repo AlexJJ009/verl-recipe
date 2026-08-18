@@ -818,13 +818,13 @@ Next action: Select or restore the Stage1 P40 handoff checkpoint before launchin
         lambda_tag="${RUN_LAMBDA_TAGS[$idx]}"
         fusion_lambda="${RUN_FUSION_LAMBDAS[$idx]}"
         handoff_step="$STAGE2_FRAC25_BETA01_P40_HANDOFF_STEP"
-        s1_prefix="${STAGE2_FRAC25_BETA01_STAGE1_PREFIX:-ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-CODE-KODCODE-CTX8K-S1-BETA01-V1}"
+        s1_prefix="${STAGE2_FRAC25_BETA01_STAGE1_PREFIX:-ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC25-COT-V3-CODE-KODCODE-CTX8K-S1-BETA01-V1}"
         s1_ckpt="${STAGE2_FRAC25_BETA01_STAGE1_CKPT_DIR:-$(latest_ckpt_dir "$s1_prefix" || true)}"
         train_file="${STAGE2_FRAC25_BETA01_TRAIN_FILE:-/data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac25_beta01_p40_handoff_s2steps60.parquet}"
         fraction_prefix_tag=FRAC25
         if [ "$fraction_tag" = "frac50" ]; then
             handoff_step="$STAGE2_FRAC50_BETA01_P40_HANDOFF_STEP"
-            s1_prefix="${STAGE2_FRAC50_BETA01_STAGE1_PREFIX:-ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-CODE-KODCODE-CTX8K-S1-BETA01-V1}"
+            s1_prefix="${STAGE2_FRAC50_BETA01_STAGE1_PREFIX:-ONPOLICY-SFT-Qwen3-1P7B-COLDSTART-FRAC50-COT-V3-CODE-KODCODE-CTX8K-S1-BETA01-V1}"
             s1_ckpt="${STAGE2_FRAC50_BETA01_STAGE1_CKPT_DIR:-$(latest_ckpt_dir "$s1_prefix" || true)}"
             train_file="${STAGE2_FRAC50_BETA01_TRAIN_FILE:-/data-1/dataset/code/verl_rl/kodcode_stage2_after_s1_seed20260604_qwen3_1p7b_coldstart_frac50_beta01_p40_handoff_s2steps60.parquet}"
             fraction_prefix_tag=FRAC50

@@ -50,7 +50,8 @@ verify(actual_path / "tokenizer_config.json", tokenizer_sha)
 verify(actual_path / "chat_template.jinja", template_sha)
 verify(Path(provenance_path), provenance_sha)
 provenance = json.loads(Path(provenance_path).read_text())
-if Path(provenance.get("target_dir", "")).resolve() != actual_path:
+provenance_model = provenance.get("target_dir") or provenance.get("identity", {}).get("model_path")
+if Path(provenance_model or "").resolve() != actual_path:
     raise SystemExit("Model1 provenance target mismatch")
 print(f"[code-s2] Model1 identity PASS: {actual_path}")
 PY
@@ -126,8 +127,24 @@ if [ ! -f "$TRAIN_FILE" ]; then
 fi
 
 EXTERNAL_DRY_RUN_MODEL2=0
+EXTERNAL_ADMITTED_MODEL2=0
 export MERGED_MODEL2_PROVENANCE_FILE=${MERGED_MODEL2_PROVENANCE_FILE:-"${MERGED_MODEL2_DIR:-}/stage1_source.json"}
-if [ -n "${MODEL2_PATH:-}" ] && [ "${ALLOW_EXTERNAL_MODEL2_FOR_DRY_RUN:-0}" = "1" ] && [ "${DRY_RUN:-0}" = "1" ]; then
+if [ -n "${MODEL2_PATH:-}" ] && [ "${ALLOW_EXTERNAL_MODEL2:-0}" = "1" ]; then
+    : "${STAGE1_MODEL2_PROVENANCE_FILE:?formal external Model2 requires Stage1 provenance}"
+    python3 - "$STAGE1_MODEL2_PROVENANCE_FILE" "$MODEL2_PATH" <<'PY'
+import json,sys
+from pathlib import Path
+provenance_path, expected_model = sys.argv[1:]
+provenance = json.loads(Path(provenance_path).read_text())
+if provenance.get("release_eligible") is not True:
+    raise SystemExit("Stage1 Model2 provenance is not release eligible")
+if Path(provenance.get("outputs", {}).get("model", "")).resolve() != Path(expected_model).resolve():
+    raise SystemExit("Stage1 Model2 path does not match provenance")
+PY
+    EXTERNAL_ADMITTED_MODEL2=1
+    export MERGED_MODEL2_DIR="$MODEL2_PATH"
+    export REQUIRE_MERGED_MODEL2_PROVENANCE=False
+elif [ -n "${MODEL2_PATH:-}" ] && [ "${ALLOW_EXTERNAL_MODEL2_FOR_DRY_RUN:-0}" = "1" ] && [ "${DRY_RUN:-0}" = "1" ]; then
     EXTERNAL_DRY_RUN_MODEL2=1
     echo "[code-s2] using explicit external MODEL2_PATH for dry-run plumbing only: $MODEL2_PATH"
 else
@@ -198,7 +215,7 @@ PY
 }
 
 check_expected_stage2_source() {
-    python3 - "$STAGE1_RUN_PREFIX" "$STAGE1_CKPT_DIR" "$WDL_SFT_BETA" "$TRAIN_FILE" "$MERGED_MODEL2_DIR" "$MERGED_MODEL2_PROVENANCE_FILE" "$EXPECTED_STAGE1_RUN_PREFIX" "$EXPECTED_STAGE1_BETA" <<'PY'
+    python3 - "$STAGE1_RUN_PREFIX" "${STAGE1_CKPT_DIR:-}" "$WDL_SFT_BETA" "$TRAIN_FILE" "$MERGED_MODEL2_DIR" "$MERGED_MODEL2_PROVENANCE_FILE" "$EXPECTED_STAGE1_RUN_PREFIX" "$EXPECTED_STAGE1_BETA" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -218,17 +235,18 @@ if expected_prefix and stage1_prefix != expected_prefix:
     raise SystemExit(f"[code-s2] ERROR: STAGE1_RUN_PREFIX mismatch: expected={expected_prefix} actual={stage1_prefix}")
 if expected_beta and stage2_beta != expected_beta:
     raise SystemExit(f"[code-s2] ERROR: WDL_SFT_BETA mismatch: expected={expected_beta} actual={stage2_beta}")
-if expected_beta == "0.0" and "beta0" not in train_file:
-    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 train shard: {train_file}")
-if expected_beta == "0.1" and "beta01" not in train_file:
-    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 train shard: {train_file}")
-if expected_beta == "0.0" and "/beta0/" not in merged_dir:
-    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 merged Model2 dir: {merged_dir}")
-if expected_beta == "0.1" and "/beta01/" not in merged_dir:
-    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 merged Model2 dir: {merged_dir}")
+if expected_beta == "0.0" and "beta0" not in train_file and "qwen3_1p7b_code_stage123" not in train_file:
+    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 or frozen shared Stage123 shard: {train_file}")
+if expected_beta == "0.1" and "beta01" not in train_file and "qwen3_1p7b_code_stage123" not in train_file:
+    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 or frozen shared Stage123 shard: {train_file}")
+admitted_external = bool(stage1_ckpt == "" and Path(merged_dir).is_dir())
+if expected_beta == "0.0" and "/beta0/" not in merged_dir and not Path(merged_dir).name.startswith("final_model") and not admitted_external:
+    raise SystemExit(f"[code-s2] ERROR: beta0 Stage2 must use beta0 or admitted final Model2 dir: {merged_dir}")
+if expected_beta == "0.1" and "/beta01/" not in merged_dir and not Path(merged_dir).name.startswith("final_model") and not admitted_external:
+    raise SystemExit(f"[code-s2] ERROR: beta0.1 Stage2 must use beta01 or admitted final Model2 dir: {merged_dir}")
 
 p = Path(provenance_file)
-if p.exists():
+if p.exists() and stage1_ckpt:
     actual = json.loads(p.read_text(encoding="utf-8"))
     if actual.get("stage1_run_prefix") != stage1_prefix:
         raise SystemExit(
@@ -256,6 +274,7 @@ PY
 
 prepare_model2_if_needed() {
     [ "$EXTERNAL_DRY_RUN_MODEL2" = "1" ] && return 0
+    [ "$EXTERNAL_ADMITTED_MODEL2" = "1" ] && return 0
     local actor_dir="${STAGE1_CKPT_DIR}/global_step_${STAGE2_HANDOFF_STEP}/actor"
     if [ ! -f "${TRAIN_FILE%.*}.manifest.json" ] && [ ! -f "$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).with_suffix(".manifest.json"))' "$TRAIN_FILE")" ]; then
         if [ "${DRY_RUN:-0}" = "1" ]; then
