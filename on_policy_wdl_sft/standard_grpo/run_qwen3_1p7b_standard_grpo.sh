@@ -332,6 +332,19 @@ for name, item in files.items():
 PY
 fi
 
+admission_source_args=()
+if [ "${GRPO_SCHEDULER_MANAGED:-0}" = 1 ]; then
+  : "${GRPO_ROOT_COMMIT:?scheduler launch requires the admitted root commit}"
+  : "${GRPO_RECIPE_COMMIT:?scheduler launch requires the admitted recipe commit}"
+  : "${GRPO_SNAPSHOT_DIGEST:?scheduler launch requires the admitted snapshot digest}"
+  admission_source_args=(
+    --scheduler-managed
+    --root-commit "${GRPO_ROOT_COMMIT}"
+    --recipe-commit "${GRPO_RECIPE_COMMIT}"
+    --snapshot-digest "${GRPO_SNAPSHOT_DIGEST}"
+  )
+fi
+
 python3 "${GRPO_ADMISSION_CHECKER}" \
   --task "${TASK}" \
   --pipeline "${PIPELINE}" \
@@ -344,6 +357,7 @@ python3 "${GRPO_ADMISSION_CHECKER}" \
   --runtime-image-digest "${GRPO_RUNTIME_IMAGE_DIGEST}" \
   --expected-image-digest "${GRPO_EXPECTED_IMAGE_DIGEST}" \
   --training-seed "${GRPO_TRAINING_SEED}" \
+  "${admission_source_args[@]}" \
   --receipt "${GRPO_ADMISSION_RECEIPT}"
 
 if [ "${GRPO_PREFLIGHT_ONLY:-0}" = 1 ]; then
