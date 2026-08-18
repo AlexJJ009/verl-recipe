@@ -5,7 +5,7 @@ set -euo pipefail
 # Formal launches are gated; GRPO_CONFIG_ONLY=1 prints the frozen contract.
 
 : "${TASK:?TASK must be math or code}"
-: "${PIPELINE:?PIPELINE must be stage1_grpo or cold_start_grpo}"
+: "${PIPELINE:?PIPELINE must be stage1_grpo, cold_start_grpo, or c_wdl_p60_grpo}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECIPE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -14,7 +14,7 @@ CALLER_WANDB_PROJECT=${WANDB_PROJECT-}
 CALLER_TEST_FILES=${TEST_FILES-}
 
 export LOSS_MODE=vanilla
-export LR=${LR:-5e-7}
+export LR=${LR:-1e-6}
 export LR_WARMUP_STEPS=${LR_WARMUP_STEPS:-0}
 export TRAIN_PROMPT_BSZ=${TRAIN_PROMPT_BSZ:-64}
 export ROLLOUT_N=${ROLLOUT_N:-8}
@@ -54,6 +54,14 @@ export ACTOR_CALCULATE_ENTROPY=${ACTOR_CALCULATE_ENTROPY:-False}
 export CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 # The historical Code Stage123 profile defaulted to n=1; this baseline owns n=3.
 export STAGE123_EXPECTED_VAL_N=${STAGE123_EXPECTED_VAL_N:-3}
+export PPO_EPOCHS=${PPO_EPOCHS:-1}
+export GRPO_TRAINING_SEED=${GRPO_TRAINING_SEED:-1}
+export TRAINING_SEED=${TRAINING_SEED:-${GRPO_TRAINING_SEED}}
+export ROLLOUT_SEED=${ROLLOUT_SEED:-${GRPO_TRAINING_SEED}}
+export RESUME_MODE=${RESUME_MODE:-disable}
+export TOTAL_EPOCHS=${TOTAL_EPOCHS:-2}
+GRPO_ADMISSION_CHECKER=${GRPO_ADMISSION_CHECKER:-"${SCRIPT_DIR}/../../../scripts/grpo_retrain_admission.py"}
+GRPO_EXPECTED_IMAGE_DIGEST=${GRPO_EXPECTED_IMAGE_DIGEST:-sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708}
 
 case "${TASK}" in
   math)
@@ -65,13 +73,19 @@ case "${TASK}" in
     MATH_STAGE1_MODEL_PROVENANCE_PATH=${MATH_STAGE1_MODEL_PROVENANCE_PATH:-${STAGE1_MODEL_PATH}/model_input_provenance.json}
     MATH_STAGE1_MODEL_WEIGHTS_SHA256=${MATH_STAGE1_MODEL_WEIGHTS_SHA256:-ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0}
     MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256=${MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256:-a327d9975f9f95d36505fc80fcaf689fe3f13a9a80bd72a74d436e5106a5c850}
+    MATH_COLD_START_MODEL_WEIGHTS_SHA256=${MATH_COLD_START_MODEL_WEIGHTS_SHA256:-9ef4bee31240d3bd8de17d5e7ea2d74b1b8b78b3797f56fe440b0170d53bc207}
     MATH7_VALIDATION_ROOT=${MATH7_VALIDATION_ROOT:-/data-1/dataset/math/qwen3_1p7b_math7_validation_v1}
     export TEST_FILES=${CALLER_TEST_FILES:-"['${MATH7_VALIDATION_ROOT}/aime-2025_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/math500-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/amc23-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/aqua-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/gsm8k-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/mawps-test_with_system_prompt_schema_aligned.parquet','${MATH7_VALIDATION_ROOT}/svamp-test_with_system_prompt_schema_aligned.parquet']"}
-    export CUSTOM_REWARD_FN_PATH=${CUSTOM_REWARD_FN_PATH:-"${RECIPE_ROOT}/on_policy_wdl_sft/custom_reward_function_latex_verify.py"}
+    # Match the frozen A/C/D0 reward contract. The older scorer under
+    # on_policy_wdl_sft/ accepts a correct boxed answer outside <answer>.
+    export CUSTOM_REWARD_FN_PATH=${CUSTOM_REWARD_FN_PATH:-"${RECIPE_ROOT}/joint_training/custom_reward_function_latex_verify.py"}
     export CUSTOM_REWARD_FN_NAME=${CUSTOM_REWARD_FN_NAME:-compute_score_latex_verify}
+    MATH_REWARD_CONTRACT_CHECKER=${MATH_REWARD_CONTRACT_CHECKER:-"${SCRIPT_DIR}/../../../scripts/check_math_reward_contract.py"}
     export WANDB_PROJECT=${CALLER_WANDB_PROJECT:-StandardGRPO-Qwen3-1P7B-Math}
     export BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-2/checkpoints/standard_grpo_qwen3_1p7b_math}
     export LOG_DIR=${LOG_DIR:-/data-2/logs/standard_grpo_qwen3_1p7b_math}
+    export BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-val-core/math7_macro/acc/mean@3}
+    GRPO_EXPECTED_REWARD_SHA256=${GRPO_EXPECTED_REWARD_SHA256:-6fc2364da021bc5d14e1e3e8788d52cd49a3036088cacbb96d4eb5535e4473e5}
     macro_overrides=(
       "+trainer.validation_macro_average_sources=${MATH7_MACRO_SOURCES}"
       "+trainer.validation_macro_average_name=math7_macro"
@@ -97,6 +111,10 @@ case "${TASK}" in
     export WANDB_PROJECT=${CALLER_WANDB_PROJECT:-StandardGRPO-Qwen3-1P7B-Code}
     export BASE_CKPT_DIR=${BASE_CKPT_DIR:-/data-2/checkpoints/standard_grpo_qwen3_1p7b_code}
     export LOG_DIR=${LOG_DIR:-/data-2/logs/standard_grpo_qwen3_1p7b_code}
+    export BEST_CKPT_METRIC_KEY=${BEST_CKPT_METRIC_KEY:-val-core/code3_macro/acc/mean@3}
+    CODE_COLD_START_MODEL_WEIGHTS_SHA256=${CODE_COLD_START_MODEL_WEIGHTS_SHA256:-8330ea21b26e3d6f780df10e473dbf4393bea0438ccf861d1d994eb0a8abc955}
+    CODE_STAGE1_MODEL_WEIGHTS_SHA256=${CODE_STAGE1_MODEL_WEIGHTS_SHA256:-a6c69262975ada9e1bc5054128d9f6f79b14167653ba817809bc771799d43c74}
+    GRPO_EXPECTED_REWARD_SHA256=${GRPO_EXPECTED_REWARD_SHA256:-bbe6cafb0e3dcaf63bb9ca26df6d377e76077a9f5d2a6e11b1ab009bee23088a}
     export PYTHONPATH="${REPO_PYTHONPATH_ROOT:-/workspace/verl}:${CODE_EVAL_OFFICIAL_SITE:-/data-1/code_eval_envs/official_site}:${LCB_REPO_DIR:-/data-1/code_eval_envs/LiveCodeBench}:${PYTHONPATH:-}"
     macro_overrides=(
       "+trainer.validation_macro_average_sources=${CODE3_MACRO_SOURCES}"
@@ -109,6 +127,55 @@ esac
 
 export TRAIN_PROMPT_MINI_BSZ=${STANDARD_GRPO_TRAIN_PROMPT_MINI_BSZ}
 
+require_equal() {
+  local name=$1 actual=$2 expected=$3
+  if [ "${actual}" != "${expected}" ]; then
+    echo "ERROR: canonical GRPO contract requires ${name}=${expected}, got ${actual}" >&2
+    exit 2
+  fi
+}
+
+case "${LR}" in
+  5e-7|1e-6) ;;
+  *) echo "ERROR: canonical GRPO LR must be one of 5e-7 or 1e-6, got ${LR}" >&2; exit 2 ;;
+esac
+require_equal LOSS_MODE "${LOSS_MODE}" vanilla
+require_equal LR_WARMUP_STEPS "${LR_WARMUP_STEPS}" 0
+require_equal TRAIN_PROMPT_BSZ "${TRAIN_PROMPT_BSZ}" 64
+require_equal ROLLOUT_N "${ROLLOUT_N}" 8
+require_equal TRAIN_PROMPT_MINI_BSZ "${TRAIN_PROMPT_MINI_BSZ}" 64
+require_equal LOSS_AGG_MODE "${LOSS_AGG_MODE}" seq-mean-token-mean
+require_equal ACTOR_GRAD_CLIP "${ACTOR_GRAD_CLIP}" 1.0
+require_equal NORM_ADV_BY_STD_IN_GRPO "${NORM_ADV_BY_STD_IN_GRPO}" True
+require_equal CLIP_RATIO_LOW "${CLIP_RATIO_LOW}" 0.2
+require_equal CLIP_RATIO_HIGH "${CLIP_RATIO_HIGH}" 0.2
+require_equal USE_KL_IN_REWARD "${USE_KL_IN_REWARD}" False
+require_equal USE_KL_LOSS "${USE_KL_LOSS}" True
+require_equal KL_LOSS_COEF "${KL_LOSS_COEF}" 0.001
+require_equal KL_LOSS_TYPE "${KL_LOSS_TYPE}" low_var_kl
+require_equal ROLLOUT_IS "${ROLLOUT_IS}" null
+require_equal DATA_SHUFFLE "${DATA_SHUFFLE}" False
+require_equal ENABLE_THINKING "${ENABLE_THINKING}" True
+require_equal TEMPERATURE "${TEMPERATURE}" 1.0
+require_equal TOP_P "${TOP_P}" 1.0
+require_equal TOP_K "${TOP_K}" -1
+require_equal VAL_N "${VAL_N}" 3
+require_equal VAL_TEMPERATURE "${VAL_TEMPERATURE}" 0.2
+require_equal VAL_TOP_P "${VAL_TOP_P}" 0.95
+require_equal TEST_FREQ "${TEST_FREQ}" 5
+require_equal SAVE_FREQ "${SAVE_FREQ}" 5
+require_equal PPO_EPOCHS "${PPO_EPOCHS}" 1
+require_equal TRAINING_SEED "${TRAINING_SEED}" "${GRPO_TRAINING_SEED}"
+require_equal ROLLOUT_SEED "${ROLLOUT_SEED}" "${GRPO_TRAINING_SEED}"
+require_equal RESUME_MODE "${RESUME_MODE}" disable
+if [ "${TASK}" = math ]; then
+  require_equal CUSTOM_REWARD_FN_PATH "${CUSTOM_REWARD_FN_PATH}" "${RECIPE_ROOT}/joint_training/custom_reward_function_latex_verify.py"
+  require_equal CUSTOM_REWARD_FN_NAME "${CUSTOM_REWARD_FN_NAME}" compute_score_latex_verify
+else
+  require_equal CUSTOM_REWARD_FN_PATH "${CUSTOM_REWARD_FN_PATH}" "${RECIPE_ROOT}/on_policy_wdl_sft/code_task/official_aligned_reward.py"
+  require_equal CUSTOM_REWARD_FN_NAME "${CUSTOM_REWARD_FN_NAME}" compute_score_code_official_aligned
+fi
+
 case "${PIPELINE}" in
   stage1_grpo)
     if [ -z "${STAGE1_MODEL_PATH}" ]; then
@@ -118,15 +185,54 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-60}
-    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,60]'}
+    # local P20 is the Stage2 -> Stage3 boundary. The terminal local P60 is
+    # retained independently as latest, so it need not be duplicated here.
+    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20]'}
     export RUN_PREFIX=${RUN_PREFIX:-"${TASK^^}-QWEN3-1P7B-STAGE1-GRPO"}
+    if [ "${TASK}" = math ]; then
+      GRPO_EXPECTED_INIT_MODEL_SHA256=${GRPO_EXPECTED_INIT_MODEL_SHA256:-${MATH_STAGE1_MODEL_WEIGHTS_SHA256}}
+      GRPO_EXPECTED_TRAIN_SHA256=${GRPO_EXPECTED_TRAIN_SHA256:-88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66}
+    else
+      GRPO_EXPECTED_INIT_MODEL_SHA256=${GRPO_EXPECTED_INIT_MODEL_SHA256:-${CODE_STAGE1_MODEL_WEIGHTS_SHA256}}
+      GRPO_EXPECTED_TRAIN_SHA256=${GRPO_EXPECTED_TRAIN_SHA256:-686856aa28c5928abf20922f3e4d4cec1ddd47e71650c1a62d4d592d83035f42}
+    fi
     ;;
   cold_start_grpo)
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${COLD_START_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/cold_start_grpo_stage1_stage2_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
-    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[40,60,80,100]'}
+    # P40/P60 are the Stage1 -> Stage2 and Stage2 -> Stage3 boundaries.
+    # Terminal P100 is retained independently as latest.
+    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[40,60]'}
     export RUN_PREFIX=${RUN_PREFIX:-"${TASK^^}-QWEN3-1P7B-COLD-START-GRPO"}
+    if [ "${TASK}" = math ]; then
+      GRPO_EXPECTED_INIT_MODEL_SHA256=${GRPO_EXPECTED_INIT_MODEL_SHA256:-${MATH_COLD_START_MODEL_WEIGHTS_SHA256}}
+      GRPO_EXPECTED_TRAIN_SHA256=${GRPO_EXPECTED_TRAIN_SHA256:-b17d6531ae9226b3fd6b5755423707060c1b7887c1a5542b5eef192e99a9d0d2}
+    else
+      GRPO_EXPECTED_INIT_MODEL_SHA256=${GRPO_EXPECTED_INIT_MODEL_SHA256:-${CODE_COLD_START_MODEL_WEIGHTS_SHA256}}
+      GRPO_EXPECTED_TRAIN_SHA256=${GRPO_EXPECTED_TRAIN_SHA256:-053d60f602dbd5526f11dfdda8e55b3dc3a50a7b3f52bcd6c973586de14a1c7f}
+    fi
+    ;;
+  c_wdl_p60_grpo)
+    if [ "${TASK}" != math ]; then
+      echo "ERROR: c_wdl_p60_grpo is defined only for Math C-P60" >&2
+      exit 2
+    fi
+    if [ -z "${STAGE1_MODEL_PATH}" ]; then
+      echo "ERROR: STAGE1_MODEL_PATH must identify the extracted C-P60 Model2" >&2
+      exit 2
+    fi
+    export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
+    export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
+    export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
+    export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,60,80]'}
+    export RUN_PREFIX=${RUN_PREFIX:-MATH-QWEN3-1P7B-C-WDL-P60-THEN-GRPO}
+    if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
+      GRPO_EXPECTED_INIT_MODEL_SHA256=${GRPO_EXPECTED_INIT_MODEL_SHA256:-CONFIG_ONLY}
+    else
+      : "${GRPO_EXPECTED_INIT_MODEL_SHA256:?C-P60 launch requires its admitted Model2 sha256}"
+    fi
+    GRPO_EXPECTED_TRAIN_SHA256=${GRPO_EXPECTED_TRAIN_SHA256:-88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66}
     ;;
   *) echo "ERROR: unsupported PIPELINE=${PIPELINE}" >&2; exit 2 ;;
 esac
@@ -135,10 +241,13 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
   printf '%s\n' \
     "task=${TASK}" "pipeline=${PIPELINE}" "run_prefix=${RUN_PREFIX}" \
     "wandb_project=${WANDB_PROJECT}" \
+    "custom_reward_fn_path=${CUSTOM_REWARD_FN_PATH}" "custom_reward_fn_name=${CUSTOM_REWARD_FN_NAME}" \
     "init_model_path=${INIT_MODEL_PATH}" "train_file=${TRAIN_FILE}" \
     "total_training_steps=${TOTAL_TRAINING_STEPS}" "train_prompt_bsz=${TRAIN_PROMPT_BSZ}" \
     "rollout_n=${ROLLOUT_N}" "responses_per_step=$((TRAIN_PROMPT_BSZ * ROLLOUT_N))" \
     "ppo_mini_batch_size=${TRAIN_PROMPT_MINI_BSZ}" "learning_rate=${LR}" \
+    "ppo_epochs=${PPO_EPOCHS}" "training_seed=${GRPO_TRAINING_SEED}" \
+    "resume_mode=${RESUME_MODE}" "total_epochs=${TOTAL_EPOCHS}" \
     "actor_grad_clip=${ACTOR_GRAD_CLIP}" \
     "loss_mode=${LOSS_MODE}" "loss_agg_mode=${LOSS_AGG_MODE}" \
     "norm_adv_by_std_in_grpo=${NORM_ADV_BY_STD_IN_GRPO}" \
@@ -148,7 +257,8 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "ref_log_prob_max_token_len_per_gpu=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU:-${LOG_PROB_MAX_TOKEN_LEN_PER_GPU}}" \
     "rollout_is=${ROLLOUT_IS}" "enable_thinking=${ENABLE_THINKING}" \
     "data_shuffle=${DATA_SHUFFLE}" "protected_ckpt_steps=${PROTECTED_CKPT_STEPS}" \
-    "protected_ckpt_strip_optimizer=${PROTECTED_CKPT_STRIP_OPTIMIZER}"
+    "protected_ckpt_strip_optimizer=${PROTECTED_CKPT_STRIP_OPTIMIZER}" \
+    "best_ckpt_metric_key=${BEST_CKPT_METRIC_KEY}"
   exit 0
 fi
 
@@ -166,6 +276,22 @@ for required_path in "${INIT_MODEL_PATH}" "${TRAIN_FILE}"; do
     exit 2
   fi
 done
+: "${GRPO_RUNTIME_IMAGE_DIGEST:?formal launch requires the observed runtime image digest}"
+: "${GRPO_ADMISSION_RECEIPT:?formal launch requires a unique external admission receipt path}"
+if [ ! -x "${GRPO_ADMISSION_CHECKER}" ]; then
+  echo "ERROR: GRPO admission checker missing or not executable: ${GRPO_ADMISSION_CHECKER}" >&2
+  exit 2
+fi
+
+if [ "${TASK}" = math ]; then
+  if [ ! -f "${MATH_REWARD_CONTRACT_CHECKER}" ]; then
+    echo "ERROR: Math reward contract checker missing: ${MATH_REWARD_CONTRACT_CHECKER}" >&2
+    exit 2
+  fi
+  python3 "${MATH_REWARD_CONTRACT_CHECKER}" \
+    --reward-path "${CUSTOM_REWARD_FN_PATH}" \
+    --function "${CUSTOM_REWARD_FN_NAME}"
+fi
 
 if [ "${TASK}" = math ] && [ "${PIPELINE}" = stage1_grpo ]; then
   if [ ! -f "${MATH_STAGE1_MODEL_PROVENANCE_PATH}" ]; then
@@ -204,6 +330,20 @@ for name, item in files.items():
         raise SystemExit(f"Math S1-P0 file hash mismatch: {name}")
 PY
 fi
+
+python3 "${GRPO_ADMISSION_CHECKER}" \
+  --task "${TASK}" \
+  --pipeline "${PIPELINE}" \
+  --model-path "${INIT_MODEL_PATH}" \
+  --train-file "${TRAIN_FILE}" \
+  --reward-path "${CUSTOM_REWARD_FN_PATH}" \
+  --expected-model-sha256 "${GRPO_EXPECTED_INIT_MODEL_SHA256}" \
+  --expected-train-sha256 "${GRPO_EXPECTED_TRAIN_SHA256}" \
+  --expected-reward-sha256 "${GRPO_EXPECTED_REWARD_SHA256}" \
+  --runtime-image-digest "${GRPO_RUNTIME_IMAGE_DIGEST}" \
+  --expected-image-digest "${GRPO_EXPECTED_IMAGE_DIGEST}" \
+  --training-seed "${GRPO_TRAINING_SEED}" \
+  --receipt "${GRPO_ADMISSION_RECEIPT}"
 
 if [ "${GRPO_PREFLIGHT_ONLY:-0}" = 1 ]; then
   echo "GRPO preflight passed: task=${TASK} pipeline=${PIPELINE}"

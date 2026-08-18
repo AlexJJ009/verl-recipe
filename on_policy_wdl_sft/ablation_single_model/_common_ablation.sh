@@ -299,6 +299,10 @@ save_freq=${SAVE_FREQ:-25}
 total_epochs=${TOTAL_EPOCHS:-2}
 total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
+resume_mode=${RESUME_MODE:-auto}
+training_seed=${TRAINING_SEED:-42}
+rollout_seed=${ROLLOUT_SEED:-${training_seed}}
+ppo_epochs=${PPO_EPOCHS:-1}
 
 # Meituan storage budget: keep latest full checkpoint plus best model-only checkpoint.
 KEEP_BEST_CKPT=${KEEP_BEST_CKPT:-True}
@@ -358,6 +362,8 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu=${actor_ppo_max_token_len} \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
+    actor_rollout_ref.actor.ppo_epochs=${ppo_epochs} \
+    actor_rollout_ref.actor.data_loader_seed=${training_seed} \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.actor.optim.lr=${LR} \
     actor_rollout_ref.actor.optim.lr_warmup_steps=${LR_WARMUP_STEPS} \
@@ -418,6 +424,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.rollout.val_kwargs.do_sample=${val_do_sample} \
     actor_rollout_ref.rollout.val_kwargs.n=${val_n} \
+    +actor_rollout_ref.rollout.seed=${rollout_seed} \
     \
     `# --- Data ---` \
     data.train_files="${TRAIN_FILE}" \
@@ -428,6 +435,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
+    data.seed=${training_seed} \
     data.train_max_samples=${TRAIN_MAX_SAMPLES} \
     data.val_max_samples=${VAL_MAX_SAMPLES} \
     \
@@ -465,6 +473,6 @@ python3 -m verl.trainer.main_ppo \
     trainer.log_val_generations=${VAL_GENERATIONS_TO_LOG} \
     +trainer.log_val_generations_to_tracking=${VAL_GENERATIONS_TO_TRACKING} \
     trainer.validation_data_dir="${VALIDATION_DATA_DIR}" \
-    trainer.resume_mode=auto \
+    trainer.resume_mode=${resume_mode} \
     \
     "$@" 2>&1 | tee "$LOG_FILE"
