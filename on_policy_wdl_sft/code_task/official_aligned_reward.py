@@ -258,9 +258,9 @@ def _classify_stderr(stderr: str) -> str:
     return "runtime_error"
 
 
-def _kill_processes_with_env_token(token: str) -> None:
+def _kill_processes_with_env_token(token: str) -> int:
     if os.name != "posix" or not token or not Path("/proc").is_dir():
-        return
+        return 0
     token_bytes = token.encode()
     victims: set[int] = set()
     for proc_dir in Path("/proc").iterdir():
@@ -280,6 +280,7 @@ def _kill_processes_with_env_token(token: str) -> None:
             pgids.add(os.getpgid(pid))
         except Exception:
             pass
+    return len(victims)
     for pgid in pgids:
         try:
             os.killpg(pgid, signal.SIGKILL)
@@ -416,6 +417,7 @@ def _run_subprocess(
 
         proc: subprocess.Popen[str] | None = None
         proc_pgid: int | None = None
+        residue_count = 0
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -442,9 +444,20 @@ def _run_subprocess(
         finally:
             kill_process_group(proc, proc_pgid)
             if run_token:
-                _kill_processes_with_env_token(run_token)
+                residue_count += _kill_processes_with_env_token(run_token)
             for cleanup_path in cleanup_paths or []:
                 _kill_processes_using_path(cleanup_path)
+
+    if residue_count:
+        return _base_payload(
+            0.0,
+            "runtime_error",
+            code,
+            method,
+            num_tests,
+            0,
+            f"candidate left {residue_count} background process(es)",
+        )
 
     try:
         result = json.loads(stdout.strip().splitlines()[-1])
@@ -614,7 +627,7 @@ def _stdin_stdout_runner_script(code: str, cases: list[dict[str, str]], case_tim
 
         def kill_candidate_residue(candidate, workdir):
             if os.name != "posix" or not Path("/proc").is_dir():
-                return
+                return 0
             candidate_bytes = str(candidate).encode()
             workdir_str = str(workdir)
             victims = set()
@@ -658,6 +671,7 @@ def _stdin_stdout_runner_script(code: str, cases: list[dict[str, str]], case_tim
                     pass
             if victims:
                 time.sleep(0.05)
+            return len(victims)
 
         td = {str(workdir)!r}
         try:
@@ -670,6 +684,7 @@ def _stdin_stdout_runner_script(code: str, cases: list[dict[str, str]], case_tim
             for idx, case in enumerate(cases):
                 proc = None
                 proc_pgid = None
+                residue_count = 0
                 try:
                     proc = subprocess.Popen(
                         [sys.executable, str(candidate)],
@@ -698,7 +713,10 @@ def _stdin_stdout_runner_script(code: str, cases: list[dict[str, str]], case_tim
                     continue
                 finally:
                     kill_process_group(proc, proc_pgid)
-                    kill_candidate_residue(candidate, Path(td))
+                    residue_count += kill_candidate_residue(candidate, Path(td))
+                if residue_count:
+                    failures.append({{"case": idx, "status": "runtime_error", "stderr": "candidate left background processes"}})
+                    continue
                 if proc.returncode != 0:
                     failures.append({{"case": idx, "status": "runtime_error", "stderr": stderr[-500:]}})
                     continue
