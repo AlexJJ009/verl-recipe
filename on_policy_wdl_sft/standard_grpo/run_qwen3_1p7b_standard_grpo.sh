@@ -133,6 +133,26 @@ esac
 
 export TRAIN_PROMPT_MINI_BSZ=${STANDARD_GRPO_TRAIN_PROMPT_MINI_BSZ}
 
+case "${TASK}:${PIPELINE}" in
+  math:stage1_grpo|math:c_wdl_p60_grpo)
+    # VERL filters 48 overlength prompts from the 3,840-row post-Stage1
+    # parquet with the frozen Math tokenizer/template, then drops the trailing
+    # 16 samples per epoch. The actual dataloader is therefore 59 batches/epoch.
+    GRPO_EXPECTED_FILTERED_TRAIN_ROWS=${GRPO_EXPECTED_FILTERED_TRAIN_ROWS:-3792}
+    GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH=${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH:-59}
+    ;;
+  math:cold_start_grpo)
+    # The 6,400-row Stage1->Stage2->Stage3 Math parquet filters to 6,324 rows;
+    # drop_last=True yields 98 optimizer batches per dataloader epoch.
+    GRPO_EXPECTED_FILTERED_TRAIN_ROWS=${GRPO_EXPECTED_FILTERED_TRAIN_ROWS:-6324}
+    GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH=${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH:-98}
+    ;;
+  *)
+    GRPO_EXPECTED_FILTERED_TRAIN_ROWS=${GRPO_EXPECTED_FILTERED_TRAIN_ROWS:-}
+    GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH=${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH:-}
+    ;;
+esac
+
 require_equal() {
   local name=$1 actual=$2 expected=$3
   if [ "${actual}" != "${expected}" ]; then
@@ -195,7 +215,11 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-60}
-    export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
+    if [ "${TASK}" = math ]; then
+      export TOTAL_EPOCHS=${TOTAL_EPOCHS:-2}
+    else
+      export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
+    fi
     # local P20 is the Stage2 -> Stage3 boundary. The terminal local P60 is
     # retained independently as latest, so it need not be duplicated here.
     export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20]'}
@@ -212,7 +236,11 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${COLD_START_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/cold_start_grpo_stage1_stage2_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
-    export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
+    if [ "${TASK}" = math ]; then
+      export TOTAL_EPOCHS=${TOTAL_EPOCHS:-2}
+    else
+      export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
+    fi
     # P40/P60 are the Stage1 -> Stage2 and Stage2 -> Stage3 boundaries.
     # Terminal P100 is retained independently as latest.
     export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[40,60]'}
@@ -263,6 +291,8 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "rollout_seed=${ROLLOUT_SEED}" "data_seed=${DATA_SEED}" \
     "actor_shuffle=${ACTOR_SHUFFLE}" \
     "resume_mode=${RESUME_MODE}" "total_epochs=${TOTAL_EPOCHS}" \
+    "expected_filtered_train_rows=${GRPO_EXPECTED_FILTERED_TRAIN_ROWS}" \
+    "expected_dataloader_steps_per_epoch=${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH}" \
     "actor_grad_clip=${ACTOR_GRAD_CLIP}" \
     "loss_mode=${LOSS_MODE}" "loss_agg_mode=${LOSS_AGG_MODE}" \
     "norm_adv_by_std_in_grpo=${NORM_ADV_BY_STD_IN_GRPO}" \
@@ -359,6 +389,13 @@ if [ "${GRPO_SCHEDULER_MANAGED:-0}" = 1 ]; then
     --snapshot-digest "${GRPO_SNAPSHOT_DIGEST}"
   )
 fi
+admission_data_args=()
+if [ -n "${GRPO_EXPECTED_FILTERED_TRAIN_ROWS}" ]; then
+  admission_data_args+=(--expected-filtered-train-rows "${GRPO_EXPECTED_FILTERED_TRAIN_ROWS}")
+fi
+if [ -n "${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH}" ]; then
+  admission_data_args+=(--expected-dataloader-steps-per-epoch "${GRPO_EXPECTED_DATALOADER_STEPS_PER_EPOCH}")
+fi
 
 python3 "${GRPO_ADMISSION_CHECKER}" \
   --task "${TASK}" \
@@ -378,6 +415,7 @@ python3 "${GRPO_ADMISSION_CHECKER}" \
   --train-prompt-bsz "${TRAIN_PROMPT_BSZ}" \
   --total-training-steps "${TOTAL_TRAINING_STEPS}" \
   --total-epochs "${TOTAL_EPOCHS}" \
+  "${admission_data_args[@]}" \
   "${admission_source_args[@]}" \
   --receipt "${GRPO_ADMISSION_RECEIPT}"
 

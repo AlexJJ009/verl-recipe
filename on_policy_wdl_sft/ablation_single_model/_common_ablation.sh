@@ -95,6 +95,7 @@ TRAIN_MAX_SAMPLES=${TRAIN_MAX_SAMPLES:--1}
 VAL_MAX_SAMPLES=${VAL_MAX_SAMPLES:--1}
 
 # ===================== Section 6: Checkpoint Directory ========================
+resume_mode=${RESUME_MODE:-auto}
 MIN_FREE_GB_FOR_CKPT=${MIN_FREE_GB_FOR_CKPT:-30}
 MIN_FREE_KB_FOR_CKPT=$((MIN_FREE_GB_FOR_CKPT * 1024 * 1024))
 MAX_ACTOR_CKPTS_TO_KEEP=${MAX_ACTOR_CKPTS_TO_KEEP:-13}
@@ -130,19 +131,31 @@ fi
 
 mkdir -p "$BASE_CKPT_DIR"
 
-LATEST_CKPT_DIR=$(find "$BASE_CKPT_DIR" -maxdepth 1 -type d -name "${RUN_PREFIX}_*" 2>/dev/null | sort | tail -1)
-
-if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
-    EXPERIMENT_NAME=$(basename "$LATEST_CKPT_DIR")
-    echo "Resuming from existing checkpoint: $LATEST_CKPT_DIR"
-    export WANDB_RUN_NAME="$EXPERIMENT_NAME"
-    CKPTS_DIR="$LATEST_CKPT_DIR"
-    IS_RESUME=true
-else
-    echo "No matching checkpoint found. Starting new training..."
+if [ "$resume_mode" = "disable" ]; then
+    # A formal fresh run must own a new namespace.  The trainer-level
+    # resume_mode only controls checkpoint loading; it does not prevent a new
+    # process from writing into an existing checkpoint directory.
     CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
+    if [ -e "$CKPTS_DIR" ]; then
+        echo "ERROR: fresh-run checkpoint namespace already exists: $CKPTS_DIR" >&2
+        exit 1
+    fi
     mkdir -p "$CKPTS_DIR"
     IS_RESUME=false
+else
+    LATEST_CKPT_DIR=$(find "$BASE_CKPT_DIR" -maxdepth 1 -type d -name "${RUN_PREFIX}_*" 2>/dev/null | sort | tail -1)
+    if [ -n "$LATEST_CKPT_DIR" ] && [ -d "$LATEST_CKPT_DIR" ]; then
+        EXPERIMENT_NAME=$(basename "$LATEST_CKPT_DIR")
+        echo "Resuming from existing checkpoint: $LATEST_CKPT_DIR"
+        export WANDB_RUN_NAME="$EXPERIMENT_NAME"
+        CKPTS_DIR="$LATEST_CKPT_DIR"
+        IS_RESUME=true
+    else
+        echo "No matching checkpoint found. Starting new training..."
+        CKPTS_DIR="$BASE_CKPT_DIR/${WANDB_RUN_NAME}"
+        mkdir -p "$CKPTS_DIR"
+        IS_RESUME=false
+    fi
 fi
 
 echo "Experiment Name : $WANDB_RUN_NAME"
@@ -299,7 +312,6 @@ save_freq=${SAVE_FREQ:-25}
 total_epochs=${TOTAL_EPOCHS:-2}
 total_training_steps=${TOTAL_TRAINING_STEPS:-300}
 val_before_train=${VAL_BEFORE_TRAIN:-True}
-resume_mode=${RESUME_MODE:-auto}
 training_seed=${TRAINING_SEED:-42}
 rollout_seed=${ROLLOUT_SEED:-${training_seed}}
 data_seed=${DATA_SEED:-${training_seed}}
