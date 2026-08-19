@@ -41,6 +41,11 @@ training_contract:
   lr: 1.0e-6
   lr_warmup_steps: 0
   data_shuffle: false
+  randomness:
+    actor_fsdp_seed: 42
+    actor_data_loader_seed: 42
+    rollout_base_seed: 0
+    data_seed: 20260706
   train_prompt_batch_size: 64
   rollouts_per_prompt: 8
   validation_frequency: 5

@@ -38,6 +38,7 @@ export ENABLE_THINKING=${ENABLE_THINKING:-True}
 export TEMPERATURE=${TEMPERATURE:-1.0}
 export TOP_P=${TOP_P:-1.0}
 export TOP_K=${TOP_K:--1}
+export ROLLOUT_DO_SAMPLE=${ROLLOUT_DO_SAMPLE:-True}
 export TEST_FREQ=${TEST_FREQ:-5}
 export SAVE_FREQ=${SAVE_FREQ:-5}
 # Keep only scientific phase boundaries plus best/latest. Older retained
@@ -55,11 +56,13 @@ export CALCULATE_ENTROPY=${CALCULATE_ENTROPY:-False}
 # The historical Code Stage123 profile defaulted to n=1; this baseline owns n=3.
 export STAGE123_EXPECTED_VAL_N=${STAGE123_EXPECTED_VAL_N:-3}
 export PPO_EPOCHS=${PPO_EPOCHS:-1}
-export GRPO_TRAINING_SEED=${GRPO_TRAINING_SEED:-1}
-export TRAINING_SEED=${TRAINING_SEED:-${GRPO_TRAINING_SEED}}
-export ROLLOUT_SEED=${ROLLOUT_SEED:-${GRPO_TRAINING_SEED}}
+export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-False}
+# Match the actual A/C/D0 resolved contract. These are separate random sources:
+# actor/FSDP and PPO data-loader use 42, vLLM used its legacy base default 0,
+# and the frozen task dataset owns its preparation/data seed.
+export TRAINING_SEED=${TRAINING_SEED:-42}
+export ROLLOUT_SEED=${ROLLOUT_SEED:-0}
 export RESUME_MODE=${RESUME_MODE:-disable}
-export TOTAL_EPOCHS=${TOTAL_EPOCHS:-2}
 GRPO_ADMISSION_CHECKER=${GRPO_ADMISSION_CHECKER:-"${SCRIPT_DIR}/../../../scripts/grpo_retrain_admission.py"}
 GRPO_EXPECTED_IMAGE_DIGEST=${GRPO_EXPECTED_IMAGE_DIGEST:-sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708}
 
@@ -67,6 +70,7 @@ case "${TASK}" in
   math)
     # shellcheck disable=SC1091
     source "${RECIPE_ROOT}/on_policy_wdl_sft/math_task/qwen3_1p7b_math_stage123_resource_profile.sh"
+    GRPO_EXPECTED_DATA_SEED=20260719
     DATASET_ROOT=${DATASET_ROOT:-/data-2/dataset/math/qwen3_1p7b_stage123_seed20260719}
     COLD_START_MODEL_PATH=${COLD_START_MODEL_PATH:-/data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20}
     STAGE1_MODEL_PATH=${STAGE1_MODEL_PATH:-}
@@ -98,6 +102,8 @@ case "${TASK}" in
       export STAGE123_VALIDATE_EXTERNAL_ASSETS=0
     fi
     source "${RECIPE_ROOT}/on_policy_wdl_sft/code_task/qwen3_1p7b_stage123_resource_profile.sh"
+    export DATA_SEED=${DATA_SEED:-20260706}
+    GRPO_EXPECTED_DATA_SEED=20260706
     DATASET_ROOT=${DATASET_ROOT:-/data-2/dataset/code/verl_rl/qwen3_1p7b_code_stage123_author_signature_v2_seed20260706}
     COLD_START_MODEL_PATH=${COLD_START_MODEL_PATH:-/data-1/model_weights/code_task/qwen3_1p7b_cold_start_cotmask_v3_author_signature_v2_steps/candidates/step_20}
     STAGE1_MODEL_PATH=${STAGE1_MODEL_PATH:-/data-2/model_weights/code_task/qwen3_1p7b_stage123_cotmask_v3_author_signature_v2_step20/b0-stage1/final_model}
@@ -159,14 +165,18 @@ require_equal ENABLE_THINKING "${ENABLE_THINKING}" True
 require_equal TEMPERATURE "${TEMPERATURE}" 1.0
 require_equal TOP_P "${TOP_P}" 1.0
 require_equal TOP_K "${TOP_K}" -1
+require_equal ROLLOUT_DO_SAMPLE "${ROLLOUT_DO_SAMPLE}" True
 require_equal VAL_N "${VAL_N}" 3
 require_equal VAL_TEMPERATURE "${VAL_TEMPERATURE}" 0.2
 require_equal VAL_TOP_P "${VAL_TOP_P}" 0.95
 require_equal TEST_FREQ "${TEST_FREQ}" 5
 require_equal SAVE_FREQ "${SAVE_FREQ}" 5
 require_equal PPO_EPOCHS "${PPO_EPOCHS}" 1
-require_equal TRAINING_SEED "${TRAINING_SEED}" "${GRPO_TRAINING_SEED}"
-require_equal ROLLOUT_SEED "${ROLLOUT_SEED}" "${GRPO_TRAINING_SEED}"
+require_equal ACTOR_SHUFFLE "${ACTOR_SHUFFLE}" False
+require_equal VAL_DO_SAMPLE "${VAL_DO_SAMPLE}" True
+require_equal TRAINING_SEED "${TRAINING_SEED}" 42
+require_equal ROLLOUT_SEED "${ROLLOUT_SEED}" 0
+require_equal DATA_SEED "${DATA_SEED}" "${GRPO_EXPECTED_DATA_SEED}"
 require_equal RESUME_MODE "${RESUME_MODE}" disable
 if [ "${TASK}" = math ]; then
   require_equal CUSTOM_REWARD_FN_PATH "${CUSTOM_REWARD_FN_PATH}" "${RECIPE_ROOT}/joint_training/custom_reward_function_latex_verify.py"
@@ -185,6 +195,7 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-60}
+    export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
     # local P20 is the Stage2 -> Stage3 boundary. The terminal local P60 is
     # retained independently as latest, so it need not be duplicated here.
     export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20]'}
@@ -201,6 +212,7 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${COLD_START_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/cold_start_grpo_stage1_stage2_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
+    export TOTAL_EPOCHS=${TOTAL_EPOCHS:-1}
     # P40/P60 are the Stage1 -> Stage2 and Stage2 -> Stage3 boundaries.
     # Terminal P100 is retained independently as latest.
     export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[40,60]'}
@@ -225,6 +237,7 @@ case "${PIPELINE}" in
     export INIT_MODEL_PATH=${INIT_MODEL_PATH:-${STAGE1_MODEL_PATH}}
     export TRAIN_FILE=${TRAIN_FILE:-${DATASET_ROOT}/stage1_control_stage2_then_stage3.parquet}
     export TOTAL_TRAINING_STEPS=${TOTAL_TRAINING_STEPS:-100}
+    export TOTAL_EPOCHS=${TOTAL_EPOCHS:-2}
     export PROTECTED_CKPT_STEPS=${PROTECTED_CKPT_STEPS:-'[20,40,60,80]'}
     export RUN_PREFIX=${RUN_PREFIX:-MATH-QWEN3-1P7B-C-WDL-P60-THEN-GRPO}
     if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
@@ -246,7 +259,9 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "total_training_steps=${TOTAL_TRAINING_STEPS}" "train_prompt_bsz=${TRAIN_PROMPT_BSZ}" \
     "rollout_n=${ROLLOUT_N}" "responses_per_step=$((TRAIN_PROMPT_BSZ * ROLLOUT_N))" \
     "ppo_mini_batch_size=${TRAIN_PROMPT_MINI_BSZ}" "learning_rate=${LR}" \
-    "ppo_epochs=${PPO_EPOCHS}" "training_seed=${GRPO_TRAINING_SEED}" \
+    "ppo_epochs=${PPO_EPOCHS}" "actor_seed=${TRAINING_SEED}" \
+    "rollout_seed=${ROLLOUT_SEED}" "data_seed=${DATA_SEED}" \
+    "actor_shuffle=${ACTOR_SHUFFLE}" \
     "resume_mode=${RESUME_MODE}" "total_epochs=${TOTAL_EPOCHS}" \
     "actor_grad_clip=${ACTOR_GRAD_CLIP}" \
     "loss_mode=${LOSS_MODE}" "loss_agg_mode=${LOSS_AGG_MODE}" \
@@ -356,7 +371,13 @@ python3 "${GRPO_ADMISSION_CHECKER}" \
   --expected-reward-sha256 "${GRPO_EXPECTED_REWARD_SHA256}" \
   --runtime-image-digest "${GRPO_RUNTIME_IMAGE_DIGEST}" \
   --expected-image-digest "${GRPO_EXPECTED_IMAGE_DIGEST}" \
-  --training-seed "${GRPO_TRAINING_SEED}" \
+  --actor-seed "${TRAINING_SEED}" \
+  --rollout-seed "${ROLLOUT_SEED}" \
+  --data-seed "${DATA_SEED}" \
+  --data-shuffle "${DATA_SHUFFLE}" \
+  --train-prompt-bsz "${TRAIN_PROMPT_BSZ}" \
+  --total-training-steps "${TOTAL_TRAINING_STEPS}" \
+  --total-epochs "${TOTAL_EPOCHS}" \
   "${admission_source_args[@]}" \
   --receipt "${GRPO_ADMISSION_RECEIPT}"
 

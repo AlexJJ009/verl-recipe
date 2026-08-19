@@ -302,6 +302,8 @@ val_before_train=${VAL_BEFORE_TRAIN:-True}
 resume_mode=${RESUME_MODE:-auto}
 training_seed=${TRAINING_SEED:-42}
 rollout_seed=${ROLLOUT_SEED:-${training_seed}}
+data_seed=${DATA_SEED:-${training_seed}}
+actor_shuffle=${ACTOR_SHUFFLE:-False}
 ppo_epochs=${PPO_EPOCHS:-1}
 
 # Meituan storage budget: keep latest full checkpoint plus best model-only checkpoint.
@@ -364,6 +366,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_mini_batch_size=${train_prompt_mini_bsz} \
     actor_rollout_ref.actor.ppo_epochs=${ppo_epochs} \
     actor_rollout_ref.actor.data_loader_seed=${training_seed} \
+    actor_rollout_ref.actor.shuffle=${actor_shuffle} \
     actor_rollout_ref.actor.use_torch_compile=False \
     actor_rollout_ref.actor.optim.lr=${LR} \
     actor_rollout_ref.actor.optim.lr_warmup_steps=${LR_WARMUP_STEPS} \
@@ -371,6 +374,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=${offload} \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=${optimizer_offload} \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=${fsdp_size} \
+    actor_rollout_ref.actor.fsdp_config.seed=${training_seed} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.calculate_entropy=${ACTOR_CALCULATE_ENTROPY:-True} \
     actor_rollout_ref.actor.entropy_from_logits_with_chunking=True \
@@ -385,6 +389,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=${REF_LOG_PROB_MAX_TOKEN_LEN_PER_GPU} \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${REF_LOG_PROB_MICRO_BATCH_SIZE} \
     actor_rollout_ref.ref.fsdp_config.param_offload=${ref_offload} \
+    actor_rollout_ref.ref.fsdp_config.seed=${training_seed} \
     actor_rollout_ref.ref.ulysses_sequence_parallel_size=${sp_size} \
     \
     `# --- Model (single-model path: joint_training stays at default=False) ---` \
@@ -435,7 +440,7 @@ python3 -m verl.trainer.main_ppo \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
-    data.seed=${training_seed} \
+    data.seed=${data_seed} \
     data.train_max_samples=${TRAIN_MAX_SAMPLES} \
     data.val_max_samples=${VAL_MAX_SAMPLES} \
     \
