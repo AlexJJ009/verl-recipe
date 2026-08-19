@@ -75,6 +75,11 @@ case "${TASK}" in
     COLD_START_MODEL_PATH=${COLD_START_MODEL_PATH:-/data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20}
     STAGE1_MODEL_PATH=${STAGE1_MODEL_PATH:-}
     MATH_STAGE1_MODEL_PROVENANCE_PATH=${MATH_STAGE1_MODEL_PROVENANCE_PATH:-${STAGE1_MODEL_PATH}/model_input_provenance.json}
+    # ff8... is the recovered S1-P0 Model2, not the trained C-P60 Model2.
+    # It was extracted from C's immutable prepared-input joint cache (a327...)
+    # before C's first optimizer step.  The standalone safetensors serialization
+    # differs from the deleted original file hash f069..., while every source
+    # joint-cache Model2 tensor is exactly equal.  C-P60 is separately a6d8....
     MATH_STAGE1_MODEL_WEIGHTS_SHA256=${MATH_STAGE1_MODEL_WEIGHTS_SHA256:-ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0}
     MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256=${MATH_STAGE1_SOURCE_JOINT_WEIGHTS_SHA256:-a327d9975f9f95d36505fc80fcaf689fe3f13a9a80bd72a74d436e5106a5c850}
     MATH_COLD_START_MODEL_WEIGHTS_SHA256=${MATH_COLD_START_MODEL_WEIGHTS_SHA256:-9ef4bee31240d3bd8de17d5e7ea2d74b1b8b78b3797f56fe440b0170d53bc207}
