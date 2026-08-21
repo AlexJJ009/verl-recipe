@@ -112,8 +112,24 @@ relay_files() {
         "${files[@]}" "${DYNPERM_EVIDENCE_RELAY_HOST}:${relay_job_root}/"
 }
 
+relay_terminal_verified() {
+    local local_sha remote_sha
+    local_sha="$(sha256sum "${job_root}/terminal.json" | awk '{print $1}')"
+    if ! rsync --archive --mkpath --protect-args \
+        -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' \
+        "${job_root}/terminal.json" "${DYNPERM_EVIDENCE_RELAY_HOST}:${relay_job_root}/"; then
+        echo "WARNING: terminal rsync returned nonzero; checking the controller SHA" >&2
+    fi
+    remote_sha="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+        "$DYNPERM_EVIDENCE_RELAY_HOST" sha256sum -- "${relay_job_root}/terminal.json" \
+        2>/dev/null | awk '{print $1}')" || return 1
+    [ "$remote_sha" = "$local_sha" ]
+}
+
 cleanup() {
     rc=$?
+    training_exit_code=$rc
+    evidence_set_relayed=true
     trap - EXIT TERM INT
     if [ -n "$training_pid" ]; then
         kill "$training_pid" >/dev/null 2>&1 || true
@@ -126,12 +142,18 @@ cleanup() {
     docker rm --force "$container_name" >/dev/null 2>&1 || true
     tail -n 200 "${job_root}/stdout.log" >"${job_root}/stdout.tail.log" 2>/dev/null || true
     tail -n 200 "${job_root}/stderr.log" >"${job_root}/stderr.tail.log" 2>/dev/null || true
-    printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"exit_code":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s"}\n' \
-        "$SLURM_JOB_ID" "$SLURMD_NODENAME" "$arm_id" "$DYNPERM_RHO" "$rc" \
+    if ! relay_files admission.json first-step.json first-step.log stdout.tail.log stderr.tail.log; then
+        echo "ERROR: failed to relay terminal evidence set to controller" >&2
+        evidence_set_relayed=false
+        rc=70
+    fi
+    printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"training_exit_code":%s,"evidence_set_relayed":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s"}\n' \
+        "$SLURM_JOB_ID" "$SLURMD_NODENAME" "$arm_id" "$DYNPERM_RHO" "$training_exit_code" \
+        "$evidence_set_relayed" \
         "$DYNPERM_PARENT_SHA" "$DYNPERM_RECIPE_SHA" "$DYNPERM_IMAGE_ID" \
         >"${job_root}/terminal.json"
-    if ! relay_files admission.json first-step.json first-step.log terminal.json stdout.tail.log stderr.tail.log; then
-        echo "ERROR: failed to relay terminal evidence to controller" >&2
+    if ! relay_terminal_verified; then
+        echo "ERROR: terminal receipt is not verifiable on controller" >&2
         rc=70
     fi
     exit "$rc"

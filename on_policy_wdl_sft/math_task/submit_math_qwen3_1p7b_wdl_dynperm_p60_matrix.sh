@@ -68,6 +68,67 @@ submission_root="${RECEIPT_ROOT}/submissions/$(date -u +%Y%m%dT%H%M%SZ)"
 test ! -e "$submission_root"
 mkdir -p "$submission_root"
 
+# Validate the entire authorization set before the first sbatch call. A missing
+# or stale later dose must never leave a partially authorized matrix queued.
+launch_receipts=()
+for rho in "${RHO_VALUES[@]}"; do
+    dose_tag="$(canonical_tag "$rho")"
+    launch_receipt="${RECEIPT_ROOT}/p60-${dose_tag}.json"
+    test -f "$launch_receipt"
+    launch_receipts+=("$launch_receipt")
+done
+python3 - "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" "${launch_receipts[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+parent_sha, recipe_sha, image_id, *paths = sys.argv[1:]
+rhos = [0.0, 1.0, 0.25, 0.5]
+if len(paths) != len(rhos):
+    raise SystemExit("incomplete DynPerm launch receipt set")
+for rho, raw_path in zip(rhos, paths, strict=True):
+    path = Path(raw_path)
+    receipt = json.loads(path.read_text())
+    expected = {
+        "status": "authorized",
+        "experiment_id": "math_qwen3_1p7b_wdl_dynperm_p60",
+        "rho": rho,
+        "max_training_steps": 60,
+        "parent_candidate_sha": parent_sha,
+        "recipe_candidate_sha": recipe_sha,
+        "image_id": image_id,
+    }
+    for key, value in expected.items():
+        if receipt.get(key) != value:
+            raise SystemExit(f"{path}: {key} mismatch")
+    if set(receipt.get("arms", [])) != {"fixed-m1-stage1", "standard-c"}:
+        raise SystemExit(f"{path}: exact two-arm authorization required")
+print("DynPerm four-dose launch receipt set PASS")
+PY
+
+# Exercise the real worker-to-controller rsync path on every Slurm node before
+# reserving GPUs. The resulting tiny hostname files are durable relay evidence.
+mapfile -t slurm_nodes < <(sinfo -N -h -p l40s -o '%N' | sort -u)
+relay_preflight_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/preflight/$(basename "$submission_root")"
+for node in "${slurm_nodes[@]}"; do
+    node_addr="$(scontrol show node "$node" -o | tr ' ' '\n' | sed -n 's/^NodeAddr=//p')"
+    [[ "$node_addr" =~ ^[A-Za-z0-9._:-]+$ ]]
+    [[ "$node" =~ ^[A-Za-z0-9._-]+$ ]]
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$node_addr" \
+        "rsync --archive --mkpath --protect-args -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' /etc/hostname '${DYNPERM_EVIDENCE_RELAY_HOST}:${relay_preflight_root}/${node}/'"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+        "$DYNPERM_EVIDENCE_RELAY_HOST" test -s "${relay_preflight_root}/${node}/hostname"
+done
+
+submitted_job_ids=()
+rollback_held_jobs() {
+    local job_id
+    for job_id in "${submitted_job_ids[@]}"; do
+        scancel "$job_id" >/dev/null 2>&1 || true
+    done
+}
+trap rollback_held_jobs EXIT
+
 for arm_index in "${!ARM_IDS[@]}"; do
     arm_id="${ARM_IDS[$arm_index]}"
     sbatch_file="${ARM_SBATCH[$arm_index]}"
@@ -75,11 +136,14 @@ for arm_index in "${!ARM_IDS[@]}"; do
     for rho in "${RHO_VALUES[@]}"; do
         dose_tag="$(canonical_tag "$rho")"
         launch_receipt="${RECEIPT_ROOT}/p60-${dose_tag}.json"
-        test -f "$launch_receipt"
         job_name="DP-${dose_tag}-${arm_id}"
-        job_id="$(sbatch --parsable --nice="$nice_value" --job-name="$job_name" \
+        if ! job_id="$(sbatch --parsable --hold --nice="$nice_value" --job-name="$job_name" \
             --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt},DYNPERM_EVIDENCE_RELAY_HOST=${DYNPERM_EVIDENCE_RELAY_HOST}" \
-            "$sbatch_file")"
+            "$sbatch_file")"; then
+            rollback_held_jobs
+            exit 1
+        fi
+        submitted_job_ids+=("$job_id")
         relay_job_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/${job_id}"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s:%s\n' \
             "$job_id" "$arm_id" "$rho" "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" \
@@ -88,4 +152,11 @@ for arm_index in "${!ARM_IDS[@]}"; do
         echo "SUBMITTED job=${job_id} arm=${arm_id} rho=${rho} nice=${nice_value}"
     done
 done
+job_id_list="$(IFS=,; echo "${submitted_job_ids[*]}")"
+if ! scontrol release "$job_id_list"; then
+    rollback_held_jobs
+    exit 1
+fi
+printf '%s\n' "$job_id_list" >"${submission_root}/released-job-ids.txt"
+trap - EXIT
 echo "Submission receipt: ${submission_root}/jobs.tsv"
