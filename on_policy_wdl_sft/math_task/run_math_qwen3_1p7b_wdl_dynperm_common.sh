@@ -98,6 +98,7 @@ export MODEL_PATH="/data-1/.cache/huggingface/math-wdl-dynperm-${DYNPERM_DOSE_TA
 # Appended after caller arguments by the shared causal entry. This makes the
 # non-treatment contract candidate-bound rather than merely a set of defaults.
 DYNPERM_FORMAL_OVERRIDES=(
+    hydra.run.dir="${LOG_DIR}/hydra/${SLURM_JOB_ID:-manual}"
     data.seed=20260719
     data.train_files="$TRAIN_FILE"
     data.val_files="$TEST_FILES"
