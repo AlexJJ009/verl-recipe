@@ -259,6 +259,8 @@ export DOCKER_IMAGE="$DYNPERM_IMAGE_ID"
 export DOCKER_CONTAINER_NAME="$container_name"
 export DATA1_HOST="$data1_host"
 export DATA2_HOST="$data2_host"
+export REPO_MOUNT_MODE=ro
+export PYTHONDONTWRITEBYTECODE=1
 export WANDB_MODE=offline
 
 bash "$repo_host/scripts/l40s/run_train.sh" \
