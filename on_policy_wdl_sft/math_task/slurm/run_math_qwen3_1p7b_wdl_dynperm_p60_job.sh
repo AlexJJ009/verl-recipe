@@ -92,6 +92,7 @@ test ! -e "$job_root" || die "job artifact root already exists: $job_root"
 mkdir -p "$job_root"
 container_name="dynperm-p60-${SLURM_JOB_ID}-${arm_id}"
 training_pid=""
+gate_pid=""
 relay_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${DYNPERM_PARENT_SHA}"
 relay_job_root="${relay_root}/${SLURM_JOB_ID}"
 [[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]] \
@@ -117,6 +118,10 @@ cleanup() {
     if [ -n "$training_pid" ]; then
         kill "$training_pid" >/dev/null 2>&1 || true
         wait "$training_pid" >/dev/null 2>&1 || true
+    fi
+    if [ -n "$gate_pid" ]; then
+        kill "$gate_pid" >/dev/null 2>&1 || true
+        wait "$gate_pid" >/dev/null 2>&1 || true
     fi
     docker rm --force "$container_name" >/dev/null 2>&1 || true
     tail -n 200 "${job_root}/stdout.log" >"${job_root}/stdout.tail.log" 2>/dev/null || true
@@ -151,7 +156,7 @@ bash "$repo_host/scripts/l40s/run_train.sh" \
 training_pid=$!
 
 run_prefix="MATH-WDL-DYNPERM-${dose_tag^^}-${arm_id^^}-P60-QWEN3-1P7B"
-if ! python3 "$repo_host/scripts/math_wdl_first_step_gate.py" \
+python3 "$repo_host/scripts/math_wdl_first_step_gate.py" \
     --metrics-root "${artifact_root}/logs/metrics" \
     --project OnPolicyWDLSFT-Math-1P7B-DynPerm-P60 \
     --run-prefix "$run_prefix" \
@@ -160,13 +165,39 @@ if ! python3 "$repo_host/scripts/math_wdl_first_step_gate.py" \
     --slurm-job-id "$SLURM_JOB_ID" \
     --timeout-seconds 43200 \
     --receipt "${job_root}/first-step.json" \
-    >"${job_root}/first-step.log" 2>&1; then
+    >"${job_root}/first-step.log" 2>&1 &
+gate_pid=$!
+
+while kill -0 "$training_pid" >/dev/null 2>&1 \
+    && kill -0 "$gate_pid" >/dev/null 2>&1; do
+    sleep 5
+done
+
+if ! kill -0 "$training_pid" >/dev/null 2>&1; then
+    set +e
+    wait "$training_pid"
+    training_rc=$?
+    set -e
+    training_pid=""
+    kill "$gate_pid" >/dev/null 2>&1 || true
+    wait "$gate_pid" >/dev/null 2>&1 || true
+    gate_pid=""
+    echo "training exited before first-step admission completed" >&2
+    if [ "$training_rc" -eq 0 ]; then
+        exit 66
+    fi
+    exit "$training_rc"
+fi
+
+if ! wait "$gate_pid"; then
+    gate_pid=""
     echo "first-step admission failed; stopping only this job's training container" >&2
     kill "$training_pid" >/dev/null 2>&1 || true
     wait "$training_pid" >/dev/null 2>&1 || true
     training_pid=""
     exit 65
 fi
+gate_pid=""
 if ! relay_files first-step.json first-step.log; then
     echo "first-step evidence relay failed; stopping only this job's training container" >&2
     kill "$training_pid" >/dev/null 2>&1 || true
