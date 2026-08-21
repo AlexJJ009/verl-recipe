@@ -55,5 +55,6 @@ node_root="$(realpath -e "$node_root")"
 [ "$node_root" != / ]
 workspace="$(realpath -e "${node_root}/${DYNPERM_STAGE_REL}")"
 case "$workspace" in "$node_root"/workspace/jobs/*) ;; *) exit 64 ;; esac
-trap - EXIT TERM INT
-exec bash "${workspace}/repo/recipe/on_policy_wdl_sft/math_task/slurm/run_math_qwen3_1p7b_wdl_dynperm_p60_job.sh" fixed-m1-stage1
+job_body="${workspace}/repo/recipe/on_policy_wdl_sft/math_task/slurm/run_math_qwen3_1p7b_wdl_dynperm_p60_job.sh"
+test -r "$job_body"
+exec bash "$job_body" fixed-m1-stage1
