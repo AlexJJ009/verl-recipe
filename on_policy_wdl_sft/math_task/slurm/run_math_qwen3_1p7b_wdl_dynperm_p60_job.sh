@@ -86,7 +86,8 @@ esac
 for required_name in \
     SLURM_JOB_ID SLURMD_NODENAME CUDA_VISIBLE_DEVICES DYNPERM_ENABLED \
     DYNPERM_RHO DYNPERM_PARENT_SHA DYNPERM_RECIPE_SHA DYNPERM_IMAGE_ID \
-    DYNPERM_LAUNCH_RECEIPT DYNPERM_EVIDENCE_RELAY_HOST; do
+    DYNPERM_LAUNCH_RECEIPT DYNPERM_EVIDENCE_RELAY_HOST \
+    DYNPERM_NODE_ROOT_MAP DYNPERM_STAGE_REL; do
     require_env "$required_name"
 done
 
@@ -115,8 +116,35 @@ case "$DYNPERM_RHO" in
 esac
 export DYNPERM_RHO
 
-repo_host=/data-1/code/verl
+[[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]] \
+    || die "invalid candidate stage path"
+node_root=""
+IFS=';' read -r -a node_roots <<<"$DYNPERM_NODE_ROOT_MAP"
+for entry in "${node_roots[@]}"; do
+    if [ "${entry%%=*}" = "$SLURMD_NODENAME" ]; then
+        node_root="${entry#*=}"
+        break
+    fi
+done
+[ -n "$node_root" ] || die "node root is not mapped"
+node_root="$(realpath -e "$node_root")" || die "node root is unavailable"
+[ "$node_root" != / ] || die "node root must not be filesystem root"
+workspace="$(realpath -e "${node_root}/${DYNPERM_STAGE_REL}")" \
+    || die "candidate stage is unavailable"
+case "$workspace" in
+    "$node_root"/workspace/jobs/*) ;;
+    *) die "candidate stage escapes node root" ;;
+esac
+data1_host="$(realpath -e "${workspace}/runtime/data-1")" \
+    || die "staged data-1 root is unavailable"
+data2_host="$(realpath -e "${workspace}/runtime/data-2")" \
+    || die "staged data-2 root is unavailable"
+repo_host="$(realpath -e "${workspace}/repo")" || die "staged repo is unavailable"
 recipe_host="$repo_host/recipe"
+test "$(tr -d '\n' <"${workspace}/.candidate-parent-sha")" = "$DYNPERM_PARENT_SHA" \
+    || die "staged parent marker mismatch"
+test "$(tr -d '\n' <"${workspace}/.candidate-recipe-sha")" = "$DYNPERM_RECIPE_SHA" \
+    || die "staged recipe marker mismatch"
 test -d "$repo_host/.git" || die "formal parent checkout missing: $repo_host"
 test -e "$recipe_host/.git" || die "formal recipe checkout missing: $recipe_host"
 test "$(git -C "$repo_host" branch --show-current)" = codex/stage123-validation-protocol-rerun \
@@ -144,7 +172,7 @@ test -z "$foreign_gpu_processes" || die "foreign GPU compute process present"
 mem_available_gib="$(awk '/MemAvailable:/ {print int($2 / 1024 / 1024)}' /proc/meminfo)"
 test "$mem_available_gib" -ge 300 || die "less than 300 GiB host memory available"
 
-artifact_root="/data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm/${dose_tag}/${arm_id}-p60"
+artifact_root="${data2_host}/model_weights/math_task/qwen3_1p7b_wdl_dynperm/${dose_tag}/${arm_id}-p60"
 job_root="${artifact_root}/slurm/${SLURM_JOB_ID}"
 test ! -e "$job_root" || die "job artifact root already exists: $job_root"
 mkdir -p "$job_root"
@@ -229,6 +257,8 @@ export REPO_HOST="$repo_host"
 export REPO_CONTAINER=/workspace/verl
 export DOCKER_IMAGE="$DYNPERM_IMAGE_ID"
 export DOCKER_CONTAINER_NAME="$container_name"
+export DATA1_HOST="$data1_host"
+export DATA2_HOST="$data2_host"
 export WANDB_MODE=offline
 
 bash "$repo_host/scripts/l40s/run_train.sh" \

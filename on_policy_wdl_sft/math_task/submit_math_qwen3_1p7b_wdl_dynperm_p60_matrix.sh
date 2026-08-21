@@ -60,9 +60,26 @@ test -z "$(git -C "$REPO_ROOT" status --porcelain)"
 test -z "$(git -C "$RECIPE_ROOT" status --porcelain)"
 test "$(sinfo -N -h -p l40s -o '%N' | sort -u | wc -l)" -eq 3
 : "${DYNPERM_EVIDENCE_RELAY_HOST:?set the controller SSH relay only after formal launch authorization}"
+: "${DYNPERM_NODE_ROOT_MAP:?set the semicolon-separated Slurm node-root map after staging}"
+: "${DYNPERM_STAGE_REL:?set the candidate-bound workspace/jobs stage path}"
 [[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]]
+[[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]]
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
     "$DYNPERM_EVIDENCE_RELAY_HOST" true
+
+node_root_for() {
+    local wanted=$1 entry found=""
+    local -a entries
+    IFS=';' read -r -a entries <<<"$DYNPERM_NODE_ROOT_MAP"
+    for entry in "${entries[@]}"; do
+        if [ "${entry%%=*}" = "$wanted" ]; then
+            [ -z "$found" ] || return 1
+            found="${entry#*=}"
+        fi
+    done
+    [ -n "$found" ] && [ "${found#/}" != "$found" ]
+    printf '%s\n' "$found"
+}
 
 submission_root="${RECEIPT_ROOT}/submissions/$(date -u +%Y%m%dT%H%M%SZ)"
 test ! -e "$submission_root"
@@ -112,12 +129,50 @@ mapfile -t slurm_nodes < <(sinfo -N -h -p l40s -o '%N' | sort -u)
 relay_preflight_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/preflight/$(basename "$submission_root")"
 for node in "${slurm_nodes[@]}"; do
     node_addr="$(scontrol show node "$node" -o | tr ' ' '\n' | sed -n 's/^NodeAddr=//p')"
+    node_root="$(node_root_for "$node")"
     [[ "$node_addr" =~ ^[A-Za-z0-9._:-]+$ ]]
     [[ "$node" =~ ^[A-Za-z0-9._-]+$ ]]
     ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$node_addr" \
         "rsync --archive --mkpath --protect-args -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' /etc/hostname '${DYNPERM_EVIDENCE_RELAY_HOST}:${relay_preflight_root}/${node}/'"
     ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
         "$DYNPERM_EVIDENCE_RELAY_HOST" test -s "${relay_preflight_root}/${node}/hostname"
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$node_addr" \
+        bash -s -- "$node_root" "$DYNPERM_STAGE_REL" "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" <<'REMOTE'
+set -euo pipefail
+node_root=$1
+stage_rel=$2
+parent_sha=$3
+recipe_sha=$4
+image_id=$5
+node_root="$(realpath -e "$node_root")"
+test "$node_root" != /
+workspace="$(realpath -e "${node_root}/${stage_rel}")"
+case "$workspace" in
+    "$node_root"/workspace/jobs/*) ;;
+    *) exit 64 ;;
+esac
+test "$(tr -d '\n' <"${workspace}/.candidate-parent-sha")" = "$parent_sha"
+test "$(tr -d '\n' <"${workspace}/.candidate-recipe-sha")" = "$recipe_sha"
+repo="${workspace}/repo"
+data1="${workspace}/runtime/data-1"
+data2="${workspace}/runtime/data-2"
+test "$(git -C "$repo" rev-parse HEAD)" = "$parent_sha"
+test "$(git -C "$repo/recipe" rev-parse HEAD)" = "$recipe_sha"
+test "$(git -C "$repo" rev-parse HEAD:recipe)" = "$recipe_sha"
+test -z "$(git -C "$repo" status --porcelain)"
+test -z "$(git -C "$repo/recipe" status --porcelain)"
+test "$(docker image inspect verl-harness:latest --format '{{.Id}}')" = "$image_id"
+test -f "${data1}/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet"
+test -d "${data1}/dataset/math/qwen3_1p7b_math7_validation_v1"
+test -f "${data1}/code/_artifacts/verl-v0.7/linear-gon-34-dynperm-mvp/slurm-job-146/runtime-output/gpu_fsdp_smoke_receipt.json"
+test -d "${data2}/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20"
+test -d "${data2}/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model"
+test -f "${data2}/model_weights/math_task/qwen3_1p7b_wdl_causal_p60/admission/manipulation_receipt.json"
+for tag in rho0 rho1 rho0p25 rho0p5; do
+    test -f "${data2}/model_weights/math_task/qwen3_1p7b_wdl_dynperm/admission/p60-${tag}.json"
+done
+test -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null)"
+REMOTE
 done
 
 submitted_job_ids=()
@@ -138,7 +193,7 @@ for arm_index in "${!ARM_IDS[@]}"; do
         launch_receipt="${RECEIPT_ROOT}/p60-${dose_tag}.json"
         job_name="DP-${dose_tag}-${arm_id}"
         if ! job_id="$(sbatch --parsable --hold --nice="$nice_value" --job-name="$job_name" \
-            --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt},DYNPERM_EVIDENCE_RELAY_HOST=${DYNPERM_EVIDENCE_RELAY_HOST}" \
+            --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt},DYNPERM_EVIDENCE_RELAY_HOST=${DYNPERM_EVIDENCE_RELAY_HOST},DYNPERM_NODE_ROOT_MAP=${DYNPERM_NODE_ROOT_MAP},DYNPERM_STAGE_REL=${DYNPERM_STAGE_REL}" \
             "$sbatch_file")"; then
             rollback_held_jobs
             exit 1

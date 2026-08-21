@@ -13,5 +13,20 @@
 #SBATCH --error=/dev/null
 
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec bash "${SCRIPT_DIR}/run_math_qwen3_1p7b_wdl_dynperm_p60_job.sh" fixed-m1-stage1
+: "${DYNPERM_NODE_ROOT_MAP:?node-root map required}"
+: "${DYNPERM_STAGE_REL:?candidate stage path required}"
+node_root=""
+IFS=';' read -r -a node_roots <<<"$DYNPERM_NODE_ROOT_MAP"
+for entry in "${node_roots[@]}"; do
+    if [ "${entry%%=*}" = "${SLURMD_NODENAME:?}" ]; then
+        node_root="${entry#*=}"
+        break
+    fi
+done
+[ -n "$node_root" ]
+[[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]]
+node_root="$(realpath -e "$node_root")"
+[ "$node_root" != / ]
+workspace="$(realpath -e "${node_root}/${DYNPERM_STAGE_REL}")"
+case "$workspace" in "$node_root"/workspace/jobs/*) ;; *) exit 64 ;; esac
+exec bash "${workspace}/repo/recipe/on_policy_wdl_sft/math_task/slurm/run_math_qwen3_1p7b_wdl_dynperm_p60_job.sh" fixed-m1-stage1
