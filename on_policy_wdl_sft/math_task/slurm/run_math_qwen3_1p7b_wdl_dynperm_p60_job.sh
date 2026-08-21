@@ -261,6 +261,10 @@ export DATA2_HOST="$data2_host"
 export REPO_MOUNT_MODE=ro
 export PYTHONDONTWRITEBYTECODE=1
 export WANDB_MODE=offline
+# Slurm's GRES plugin may export the ROCm visibility alias alongside CUDA.
+# This is an NVIDIA-only allocation, and VERL intentionally rejects both
+# visibility namespaces being present in Ray workers.
+unset ROCR_VISIBLE_DEVICES
 
 bash "$repo_host/scripts/l40s/run_train.sh" \
     bash "recipe/on_policy_wdl_sft/math_task/${arm_entry}" \
