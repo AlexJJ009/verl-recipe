@@ -59,6 +59,10 @@ test "$(git -C "$REPO_ROOT" rev-parse HEAD:recipe)" = "$RECIPE_SHA"
 test -z "$(git -C "$REPO_ROOT" status --porcelain)"
 test -z "$(git -C "$RECIPE_ROOT" status --porcelain)"
 test "$(sinfo -N -h -p l40s -o '%N' | sort -u | wc -l)" -eq 3
+: "${DYNPERM_EVIDENCE_RELAY_HOST:?set the controller SSH relay only after formal launch authorization}"
+[[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]]
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+    "$DYNPERM_EVIDENCE_RELAY_HOST" true
 
 submission_root="${RECEIPT_ROOT}/submissions/$(date -u +%Y%m%dT%H%M%SZ)"
 test ! -e "$submission_root"
@@ -74,10 +78,12 @@ for arm_index in "${!ARM_IDS[@]}"; do
         test -f "$launch_receipt"
         job_name="DP-${dose_tag}-${arm_id}"
         job_id="$(sbatch --parsable --nice="$nice_value" --job-name="$job_name" \
-            --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt}" \
+            --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt},DYNPERM_EVIDENCE_RELAY_HOST=${DYNPERM_EVIDENCE_RELAY_HOST}" \
             "$sbatch_file")"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        relay_job_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/${job_id}"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s:%s\n' \
             "$job_id" "$arm_id" "$rho" "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" \
+            "$DYNPERM_EVIDENCE_RELAY_HOST" "$relay_job_root" \
             >>"${submission_root}/jobs.tsv"
         echo "SUBMITTED job=${job_id} arm=${arm_id} rho=${rho} nice=${nice_value}"
     done

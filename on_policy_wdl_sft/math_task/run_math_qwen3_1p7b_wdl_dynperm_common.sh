@@ -91,6 +91,7 @@ export WANDB_MODE=offline
 export RUN_PREFIX="MATH-WDL-DYNPERM-${DYNPERM_DOSE_TAG^^}-${DYNPERM_ARM_TAG^^}-P60-QWEN3-1P7B"
 export WANDB_PROJECT=OnPolicyWDLSFT-Math-1P7B-DynPerm-P60
 export CAUSAL_ARTIFACT_ROOT="/data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm/${DYNPERM_DOSE_TAG}/${DYNPERM_ARM_TAG}-p60"
+export LOG_DIR="${CAUSAL_ARTIFACT_ROOT}/logs"
 export WDL_MANIPULATION_RECEIPT=/data-2/model_weights/math_task/qwen3_1p7b_wdl_causal_p60/admission/manipulation_receipt.json
 export MODEL_PATH="/data-1/.cache/huggingface/math-wdl-dynperm-${DYNPERM_DOSE_TAG}-${DYNPERM_ARM_TAG}-p60"
 

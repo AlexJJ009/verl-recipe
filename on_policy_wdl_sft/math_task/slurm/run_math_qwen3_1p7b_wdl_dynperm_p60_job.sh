@@ -34,6 +34,7 @@ esac
 : "${DYNPERM_RECIPE_SHA:?exact recipe candidate required}"
 : "${DYNPERM_IMAGE_ID:?exact container image id required}"
 : "${DYNPERM_LAUNCH_RECEIPT:?candidate-bound launch receipt required}"
+: "${DYNPERM_EVIDENCE_RELAY_HOST:?controller evidence relay host required}"
 
 case "${DYNPERM_ENABLED,,}" in
     true|1) export DYNPERM_ENABLED=true ;;
@@ -91,6 +92,24 @@ test ! -e "$job_root" || die "job artifact root already exists: $job_root"
 mkdir -p "$job_root"
 container_name="dynperm-p60-${SLURM_JOB_ID}-${arm_id}"
 training_pid=""
+relay_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${DYNPERM_PARENT_SHA}"
+relay_job_root="${relay_root}/${SLURM_JOB_ID}"
+[[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]] \
+    || die "invalid evidence relay host"
+
+relay_files() {
+    local -a files=()
+    local name
+    for name in "$@"; do
+        if [ -f "${job_root}/${name}" ]; then
+            files+=("${job_root}/${name}")
+        fi
+    done
+    [ "${#files[@]}" -gt 0 ] || return 0
+    rsync --archive --mkpath --protect-args \
+        -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' \
+        "${files[@]}" "${DYNPERM_EVIDENCE_RELAY_HOST}:${relay_job_root}/"
+}
 
 cleanup() {
     rc=$?
@@ -100,18 +119,25 @@ cleanup() {
         wait "$training_pid" >/dev/null 2>&1 || true
     fi
     docker rm --force "$container_name" >/dev/null 2>&1 || true
+    tail -n 200 "${job_root}/stdout.log" >"${job_root}/stdout.tail.log" 2>/dev/null || true
+    tail -n 200 "${job_root}/stderr.log" >"${job_root}/stderr.tail.log" 2>/dev/null || true
     printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"exit_code":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s"}\n' \
         "$SLURM_JOB_ID" "$SLURMD_NODENAME" "$arm_id" "$DYNPERM_RHO" "$rc" \
         "$DYNPERM_PARENT_SHA" "$DYNPERM_RECIPE_SHA" "$DYNPERM_IMAGE_ID" \
         >"${job_root}/terminal.json"
+    if ! relay_files admission.json first-step.json first-step.log terminal.json stdout.tail.log stderr.tail.log; then
+        echo "ERROR: failed to relay terminal evidence to controller" >&2
+        rc=70
+    fi
     exit "$rc"
 }
 trap cleanup EXIT TERM INT
 
-printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s","launch_receipt":"%s"}\n' \
+printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s","launch_receipt":"%s","node_local_job_root":"%s","relay_job_root":"%s"}\n' \
     "$SLURM_JOB_ID" "$SLURMD_NODENAME" "$arm_id" "$DYNPERM_RHO" \
     "$DYNPERM_PARENT_SHA" "$DYNPERM_RECIPE_SHA" "$DYNPERM_IMAGE_ID" \
-    "$DYNPERM_LAUNCH_RECEIPT" >"${job_root}/admission.json"
+    "$DYNPERM_LAUNCH_RECEIPT" "$job_root" "$relay_job_root" >"${job_root}/admission.json"
+relay_files admission.json || die "controller evidence relay admission failed"
 
 export REPO_HOST="$repo_host"
 export REPO_CONTAINER=/workspace/verl
@@ -140,6 +166,13 @@ if ! python3 "$repo_host/scripts/math_wdl_first_step_gate.py" \
     wait "$training_pid" >/dev/null 2>&1 || true
     training_pid=""
     exit 65
+fi
+if ! relay_files first-step.json first-step.log; then
+    echo "first-step evidence relay failed; stopping only this job's training container" >&2
+    kill "$training_pid" >/dev/null 2>&1 || true
+    wait "$training_pid" >/dev/null 2>&1 || true
+    training_pid=""
+    exit 70
 fi
 
 wait "$training_pid"

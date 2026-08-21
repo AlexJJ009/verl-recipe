@@ -77,6 +77,8 @@ execution:
   slurm_node_count: 3
   allocation: one exclusive 8xL40S node per run
   scheduling: submit all eight jobs; fixed-Model1 jobs have higher Slurm priority
+  evidence_relay: each worker relays admission, first-step, terminal, and bounded log tails to a controller path bound to parent SHA and job ID
+  checkpoint_locality: checkpoints and full logs remain on the executing node; relayed admission records their node and absolute path
   early_readout: inspect checkpoints on each continuous P60 trajectory; no separate P20/P30 jobs
   formal_runs_started: false
   required_before_any_run: clean exact-parent-and-recipe candidate, exact container image, and explicit rho-bound P60 launch receipt
