@@ -8,6 +8,38 @@ source "${SCRIPT_DIR}/qwen3_1p7b_math_stage123_resource_profile.sh"
 : "${FUSION_LAMBDA:?FUSION_LAMBDA required}"
 : "${FUSION_MODE:?FUSION_MODE required}"
 
+export DYNPERM_ENABLED=${DYNPERM_ENABLED:-false}
+export DYNPERM_RHO=${DYNPERM_RHO:-0.0}
+DYNPERM_FORMAL_OVERRIDES=()
+case "${DYNPERM_ENABLED,,}" in
+    true|1) DYNPERM_ENABLED=true ;;
+    false|0) DYNPERM_ENABLED=false ;;
+    *) echo "ERROR: DYNPERM_ENABLED must be true or false" >&2; exit 1 ;;
+esac
+DYNPERM_RHO_AND_TAG="$(python3 - "$DYNPERM_RHO" <<'PY'
+import math
+import sys
+
+rho = float(sys.argv[1])
+if not math.isfinite(rho) or not 0.0 <= rho <= 1.0:
+    raise SystemExit("ERROR: DYNPERM_RHO must be finite and in [0, 1]")
+canonical = format(rho, ".12g")
+print(f"{canonical} rho{canonical.replace('.', 'p')}")
+PY
+)"
+read -r DYNPERM_RHO DYNPERM_DOSE_TAG <<<"$DYNPERM_RHO_AND_TAG"
+export DYNPERM_ENABLED DYNPERM_RHO DYNPERM_DOSE_TAG
+if [ "$DYNPERM_ENABLED" = false ] && [ "$DYNPERM_RHO" != "0" ]; then
+    echo "ERROR: DYNPERM_RHO must be 0 when DYNPERM_ENABLED=false" >&2
+    exit 1
+fi
+if [ "$DYNPERM_ENABLED" = true ]; then
+    if [ "${TOTAL_TRAINING_STEPS:-60}" != "60" ]; then
+        echo "ERROR: formal DynPerm experiments are P60-only" >&2
+        exit 1
+    fi
+fi
+
 export BASE_MODEL_PATH=${BASE_MODEL_PATH:-/data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20}
 export EXPECTED_MODEL1_PATH=${EXPECTED_MODEL1_PATH:-$BASE_MODEL_PATH}
 export MODEL2_PATH=${MODEL2_PATH:-/data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/launches/20260720T091917Z/artifacts/b0-stage1/final_model}
@@ -46,6 +78,13 @@ export CAUSAL_ARTIFACT_ROOT=${CAUSAL_ARTIFACT_ROOT:-/data-2/model_weights/math_t
 export LOG_DIR=${LOG_DIR:-$CAUSAL_ARTIFACT_ROOT/logs}
 export WDL_MANIPULATION_RECEIPT=${WDL_MANIPULATION_RECEIPT:-$CAUSAL_ARTIFACT_ROOT/admission/manipulation_receipt.json}
 
+if [ "$DYNPERM_ENABLED" = true ]; then
+    # Apply the formal experiment identity after all legacy C/fixed-M1 defaults
+    # so the two DynPerm knobs cannot inherit a colliding project or cache root.
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/run_math_qwen3_1p7b_wdl_dynperm_common.sh"
+fi
+
 for required in "$BASE_MODEL_PATH" "$MODEL2_PATH" "$TRAIN_FILE" "$STAGE1_MODEL2_PROVENANCE_FILE"; do
     if [ ! -e "$required" ]; then
         echo "ERROR: required causal-P60 input missing: $required" >&2
@@ -69,4 +108,15 @@ if receipt.get("status") != "pass" or not all(receipt.get("checks", {}).values()
 print(f"Manipulation receipt PASS: {path}")
 PY
 
-exec bash "${SCRIPT_DIR}/run_s2_math_qwen3_1p7b_stage123_common.sh" "$@"
+exec bash "${SCRIPT_DIR}/run_s2_math_qwen3_1p7b_stage123_common.sh" "$@" \
+    "${DYNPERM_FORMAL_OVERRIDES[@]}" \
+    actor_rollout_ref.actor.weak_logit_permutation.enabled="$DYNPERM_ENABLED" \
+    actor_rollout_ref.actor.weak_logit_permutation.rho="$DYNPERM_RHO" \
+    actor_rollout_ref.actor.weak_logit_permutation.seed=42 \
+    actor_rollout_ref.actor.weak_logit_permutation.row_chunk_size=16 \
+    actor_rollout_ref.actor.weak_logit_permutation.audit_invariants=true \
+    actor_rollout_ref.actor.weak_logit_permutation.audit_frequency=1 \
+    actor_rollout_ref.actor.weak_logit_permutation.audit_rows=4 \
+    actor_rollout_ref.actor.weak_logit_permutation.entropy_atol=2.0e-6 \
+    actor_rollout_ref.actor.weak_logit_permutation.multiset_atol=0.0 \
+    actor_rollout_ref.actor.weak_logit_permutation.log_telemetry=true

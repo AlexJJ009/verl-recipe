@@ -7,6 +7,7 @@ export RUN_PREFIX=${RUN_PREFIX:-MATH-WDL-FIXED-M1-STAGE1-P60-QWEN3-1P7B}
 export FUSION_LAMBDA=0.8
 export FUSION_MODE=mixture
 export FREEZE_MODEL1=true
+export WDL_ARM_ID=fixed-m1-stage1
 export JOINT_VALIDATION_VIEWS="[model1,model2]"
 export TRACK_JOINT_SUBMODEL_LOSSES=true
 export BEST_CKPT_METRIC_KEY=val-core/model2/math7_macro/acc/mean@3

@@ -3,7 +3,7 @@ experiment_id: math_qwen3_1p7b_wdl_dynperm
 task: math
 status: prepared_not_launch_authorized
 launch_allowed: false
-scientific_baseline: C-joint
+scientific_baseline: Standard C and its fixed-Model1 factorial edge
 paths:
   model1: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20
   model2: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
@@ -37,11 +37,8 @@ training_contract:
     data_seed: 20260719
   validation_frequency: 5
   save_frequency: 5
-  final_step_options: [20, 30, 60]
-  protected_checkpoint_steps_by_horizon:
-    20: [20]
-    30: [20, 30]
-    60: [20, 40, 45, 50, 60]
+  final_step: 60
+  protected_checkpoint_steps: [20, 40, 45, 50, 60]
   validation_views: [model1, model2]
   track_counterfactual_submodel_losses: true
 reward_contract:
@@ -56,8 +53,11 @@ validation:
   confirmatory_n: 8
   primary_metric: val-core/model2/math7_macro/acc/mean@3
 dynperm_contract:
-  enabled: true
-  endpoints: [0.0, 1.0]
+  parameter_interface:
+    enabled: DYNPERM_ENABLED
+    rho: DYNPERM_RHO
+  enabled_for_this_batch: true
+  admitted_rho_range: [0.0, 1.0]
   seed: 42
   row_chunk_size: 16
   audit_invariants: true
@@ -67,29 +67,30 @@ dynperm_contract:
   multiset_atol: 0.0
   log_telemetry: true
 execution:
-  pilot_steps: [20, 30]
-  p60_conditional: true
+  horizon: 60
+  queue_order: [standard-c, fixed-m1-stage1]
   formal_runs_started: false
-  required_before_any_run: clean exact-parent-and-recipe candidate plus explicit exact-dose-and-horizon launch receipt
-  required_before_p60: valid and material P20/P30 pilot admission receipt
+  required_before_any_run: clean exact-parent-and-recipe candidate plus explicit P60 batch launch receipt
 engineering_evidence:
   job_id: 146
+  candidate_sha: 686f3ee1f190387581e38847cb0e75f055021caa
   result: PASS
   world_size: 8
   formal_experiment: false
+  boundary: ancestor core/FSDP engineering evidence only; formal P60 launch binds the current parent and recipe candidates separately
   receipt_sha256: 3c757ffe6eaed509019bc8fd1b338ed8ab8244803f1f7d32510d7b7fc1eb89a2
 runs:
-  - id: dynperm-rho0
+  - id: standard-c
     fusion_lambda: 0.8
     fusion_mode: mixture
     freeze_model1: false
     weak_logit_permutation_enabled: true
-    rho: 0.0
-    interpretation: exact no-op endpoint on the common code revision
-  - id: dynperm-rho1
+    rho_from: DYNPERM_RHO
+    interpretation: Standard experiment C with trainable Model1 and the configured DynPerm treatment
+  - id: fixed-m1-stage1
     fusion_lambda: 0.8
     fusion_mode: mixture
-    freeze_model1: false
+    freeze_model1: true
     weak_logit_permutation_enabled: true
-    rho: 1.0
-    interpretation: target-preserving full non-target weak-logit permutation
+    rho_from: DYNPERM_RHO
+    interpretation: matched fixed-Model1 factorial edge with the same configured DynPerm treatment
