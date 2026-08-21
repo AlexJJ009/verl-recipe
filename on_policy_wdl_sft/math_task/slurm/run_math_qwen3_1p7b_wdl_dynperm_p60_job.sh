@@ -9,19 +9,17 @@ bootstrap_job_id="${SLURM_JOB_ID:-unassigned-$$}"
 if [[ ! "$bootstrap_job_id" =~ ^[0-9]+$ ]]; then
     bootstrap_job_id="invalid-$$"
 fi
-bootstrap_root="/data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm/_slurm_bootstrap/${bootstrap_job_id}"
 bootstrap_relay_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/bootstrap/${bootstrap_job_id}"
 bootstrap_reason="pre-admission shell failure"
-mkdir -p "$bootstrap_root"
 
 bootstrap_cleanup() {
     local original_rc=$?
     local final_rc=$original_rc
-    local local_sha remote_sha
+    local bootstrap_receipt local_sha remote_sha
     trap - EXIT TERM INT
     set +e
-    if ! python3 - "$bootstrap_job_id" "${SLURMD_NODENAME:-unknown}" "$arm_id" \
-        "$original_rc" "$bootstrap_reason" <<'PY' >"${bootstrap_root}/bootstrap-terminal.json"
+    bootstrap_receipt="$(python3 - "$bootstrap_job_id" "${SLURMD_NODENAME:-unknown}" "$arm_id" \
+        "$original_rc" "$bootstrap_reason" <<'PY'
 import json
 import sys
 
@@ -35,16 +33,17 @@ print(json.dumps({
     "reason": reason,
 }, sort_keys=True))
 PY
-    then
+    )"
+    if [ -z "$bootstrap_receipt" ]; then
         final_rc=70
     fi
     if [[ "${DYNPERM_EVIDENCE_RELAY_HOST:-}" =~ ^[A-Za-z0-9._@:-]+$ ]] \
-        && [ -f "${bootstrap_root}/bootstrap-terminal.json" ]; then
-        local_sha="$(sha256sum "${bootstrap_root}/bootstrap-terminal.json" | awk '{print $1}')"
-        rsync --archive --mkpath --protect-args \
-            -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' \
-            "${bootstrap_root}/bootstrap-terminal.json" \
-            "${DYNPERM_EVIDENCE_RELAY_HOST}:${bootstrap_relay_root}/"
+        && [ -n "$bootstrap_receipt" ]; then
+        local_sha="$(printf '%s\n' "$bootstrap_receipt" | sha256sum | awk '{print $1}')"
+        printf '%s\n' "$bootstrap_receipt" | \
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+                "$DYNPERM_EVIDENCE_RELAY_HOST" \
+                "mkdir -p -- '${bootstrap_relay_root}' && cat > '${bootstrap_relay_root}/bootstrap-terminal.json'"
         remote_sha="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
             "$DYNPERM_EVIDENCE_RELAY_HOST" sha256sum -- \
             "${bootstrap_relay_root}/bootstrap-terminal.json" 2>/dev/null | awk '{print $1}')"
