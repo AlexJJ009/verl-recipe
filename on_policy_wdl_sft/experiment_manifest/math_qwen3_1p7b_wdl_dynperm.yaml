@@ -1,0 +1,95 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_wdl_dynperm
+task: math
+status: prepared_not_launch_authorized
+launch_allowed: false
+scientific_baseline: C-joint
+paths:
+  model1: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20
+  model2: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
+  model2_provenance: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model/model_input_provenance.json
+  dataset_receipt: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/dataset_receipt.json
+  train_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm
+  checkpoint_root: /data-1/checkpoints
+  manipulation_receipt: /data-2/model_weights/math_task/qwen3_1p7b_wdl_causal_p60/admission/manipulation_receipt.json
+identity:
+  model1_source_sha256: 18bcc83838081df2a2bbcffc74fb8b070b70a105116c7cdb6e9b00f3ad975f8c
+  model1_config_sha256: a4a451865e8d45a519133031f19cda7d347813159fde1756d63e2beaf67f2288
+  model1_weights_sha256: 9ef4bee31240d3bd8de17d5e7ea2d74b1b8b78b3797f56fe440b0170d53bc207
+  model2_provenance_sha256: c517333ac6b60c268e0ba2f2aacef51679d94592480a223c7b94b2bd945b8c45
+  model2_config_sha256: f676983c8278a7e9d12a81a31ac0982f464365856733788aa69c623c0a80c5c1
+  model2_weights_sha256: ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0
+  train_rows: 3840
+  train_sha256: 88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66
+training_contract:
+  beta: 0.0
+  loss_mode: wdl_sft
+  kl_enabled: false
+  rollout_source: model2
+  lr: 1.0e-6
+  lr_warmup_steps: 0
+  data_shuffle: false
+  randomness:
+    actor_fsdp_seed: 42
+    actor_data_loader_seed: 42
+    rollout_base_seed: 0
+    data_seed: 20260719
+  validation_frequency: 5
+  save_frequency: 5
+  final_step_options: [20, 30, 60]
+  protected_checkpoint_steps_by_horizon:
+    20: [20]
+    30: [20, 30]
+    60: [20, 40, 45, 50, 60]
+  validation_views: [model1, model2]
+  track_counterfactual_submodel_losses: true
+reward_contract:
+  path: recipe/joint_training/custom_reward_function_latex_verify.py
+  sha256: 6fc2364da021bc5d14e1e3e8788d52cd49a3036088cacbb96d4eb5535e4473e5
+  function: compute_score_latex_verify
+  missing_answer_tag_reward: -1.0
+validation:
+  n: 3
+  temperature: 0.2
+  top_p: 0.95
+  confirmatory_n: 8
+  primary_metric: val-core/model2/math7_macro/acc/mean@3
+dynperm_contract:
+  enabled: true
+  endpoints: [0.0, 1.0]
+  seed: 42
+  row_chunk_size: 16
+  audit_invariants: true
+  audit_frequency: 1
+  audit_rows: 4
+  entropy_atol: 2.0e-6
+  multiset_atol: 0.0
+  log_telemetry: true
+execution:
+  pilot_steps: [20, 30]
+  p60_conditional: true
+  formal_runs_started: false
+  required_before_any_run: clean exact-parent-and-recipe candidate plus explicit exact-dose-and-horizon launch receipt
+  required_before_p60: valid and material P20/P30 pilot admission receipt
+engineering_evidence:
+  job_id: 146
+  result: PASS
+  world_size: 8
+  formal_experiment: false
+  receipt_sha256: 3c757ffe6eaed509019bc8fd1b338ed8ab8244803f1f7d32510d7b7fc1eb89a2
+runs:
+  - id: dynperm-rho0
+    fusion_lambda: 0.8
+    fusion_mode: mixture
+    freeze_model1: false
+    weak_logit_permutation_enabled: true
+    rho: 0.0
+    interpretation: exact no-op endpoint on the common code revision
+  - id: dynperm-rho1
+    fusion_lambda: 0.8
+    fusion_mode: mixture
+    freeze_model1: false
+    weak_logit_permutation_enabled: true
+    rho: 1.0
+    interpretation: target-preserving full non-target weak-logit permutation
