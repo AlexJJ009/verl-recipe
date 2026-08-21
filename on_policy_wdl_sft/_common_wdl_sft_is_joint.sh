@@ -185,6 +185,24 @@ refresh_joint_remote_code() {
 }
 refresh_joint_remote_code
 
+# Populate Transformers' dynamic-module cache before Ray starts one loader per
+# GPU. Concurrent first-time cache creation is racy and can expose a partially
+# imported module that appears to lack QwenJointConfig.
+python3 - "$MODEL_PATH" <<'PY'
+import sys
+
+from transformers import AutoConfig
+
+model_path = sys.argv[1]
+config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+if type(config).__name__ != "QwenJointConfig":
+    raise SystemExit(
+        "ERROR: joint remote-code prewarm loaded unexpected config class: "
+        f"{type(config).__name__}"
+    )
+print(f"Joint remote-code cache prewarm PASS: {type(config).__name__}")
+PY
+
 python3 - "$MODEL_PATH" "$FUSION_LAMBDA" "$FUSION_MODE" "$FREEZE_MODEL1" <<'PY'
 import json
 import sys
