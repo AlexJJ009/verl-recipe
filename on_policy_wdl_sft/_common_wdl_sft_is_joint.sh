@@ -30,7 +30,16 @@ echo "WDL_SFT_BETA    : $WDL_SFT_BETA"
 echo "LR              : $LR"
 
 export PYTHONUNBUFFERED=1
-export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+
+# vLLM's sleep-mode memory pool is incompatible with expandable segments at
+# process startup. When cache release is enabled, VERL toggles expandable
+# segments at the safe phase boundaries instead.
+if [ "${ROLLOUT_FREE_CACHE_ENGINE:-False}" = "True" ]; then
+    unset PYTORCH_CUDA_ALLOC_CONF
+    unset PYTORCH_ALLOC_CONF
+else
+    export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+fi
 
 # ===================== Cache, Temp, Runtime ==================================
 # verl-harness images may set HF_HOME=/root/.cache/huggingface. For local
