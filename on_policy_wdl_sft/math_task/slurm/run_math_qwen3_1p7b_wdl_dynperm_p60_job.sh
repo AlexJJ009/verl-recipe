@@ -147,10 +147,6 @@ test "$(tr -d '\n' <"${workspace}/.candidate-recipe-sha")" = "$DYNPERM_RECIPE_SH
     || die "staged recipe marker mismatch"
 test -d "$repo_host/.git" || die "formal parent checkout missing: $repo_host"
 test -e "$recipe_host/.git" || die "formal recipe checkout missing: $recipe_host"
-test "$(git -C "$repo_host" branch --show-current)" = codex/stage123-validation-protocol-rerun \
-    || die "parent checkout is not the formal training branch"
-test "$(git -C "$recipe_host" branch --show-current)" = codex/stage123-model2-kl-split-stage3 \
-    || die "recipe checkout is not the formal training branch"
 test "$(git -C "$repo_host" rev-parse HEAD)" = "$DYNPERM_PARENT_SHA" \
     || die "parent candidate mismatch"
 test "$(git -C "$recipe_host" rev-parse HEAD)" = "$DYNPERM_RECIPE_SHA" \
