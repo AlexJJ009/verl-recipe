@@ -192,6 +192,7 @@ python3 - "$MODEL_PATH" <<'PY'
 import sys
 
 from transformers import AutoConfig
+from transformers.dynamic_module_utils import get_class_from_dynamic_module
 
 model_path = sys.argv[1]
 config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
@@ -201,6 +202,17 @@ if type(config).__name__ != "QwenJointConfig":
         f"{type(config).__name__}"
     )
 print(f"Joint remote-code cache prewarm PASS: {type(config).__name__}")
+
+model_class_ref = getattr(config, "auto_map", {}).get("AutoModelForCausalLM")
+if not model_class_ref:
+    raise SystemExit("ERROR: joint config lacks AutoModelForCausalLM remote-code mapping")
+model_class = get_class_from_dynamic_module(model_class_ref, model_path)
+if model_class.__name__ != "QwenJointForCausalLM":
+    raise SystemExit(
+        "ERROR: joint remote-code prewarm loaded unexpected model class: "
+        f"{model_class.__name__}"
+    )
+print(f"Joint remote-code model cache prewarm PASS: {model_class.__name__}")
 PY
 
 python3 - "$MODEL_PATH" "$FUSION_LAMBDA" "$FUSION_MODE" "$FREEZE_MODEL1" <<'PY'
