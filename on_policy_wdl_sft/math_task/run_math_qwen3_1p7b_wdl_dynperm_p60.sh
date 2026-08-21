@@ -10,7 +10,7 @@ if [ "$#" -ne 0 ]; then
     exit 1
 fi
 : "${DYNPERM_ENABLED:?set DYNPERM_ENABLED=true}"
-: "${DYNPERM_RHO:?set DYNPERM_RHO in [0, 1]}"
+: "${DYNPERM_RHO:?set DYNPERM_RHO to 0, 0.25, 0.5, or 1}"
 
 # Fixed-Model1 is intentionally first. Model1 update state remains owned by
 # the two static arm wrappers and is not a third DynPerm treatment variable.

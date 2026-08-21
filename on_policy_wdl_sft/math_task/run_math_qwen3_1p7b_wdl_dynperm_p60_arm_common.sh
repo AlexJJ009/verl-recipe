@@ -24,11 +24,23 @@ case "$arm_id" in
 esac
 
 : "${DYNPERM_ENABLED:?set DYNPERM_ENABLED=true}"
-: "${DYNPERM_RHO:?set DYNPERM_RHO in [0, 1]}"
+: "${DYNPERM_RHO:?set DYNPERM_RHO to 0, 0.25, 0.5, or 1}"
 case "${DYNPERM_ENABLED,,}" in
     true|1) export DYNPERM_ENABLED=true ;;
     *) echo "ERROR: the DynPerm P60 launcher requires DYNPERM_ENABLED=true" >&2; exit 1 ;;
 esac
+DYNPERM_RHO="$(python3 - "$DYNPERM_RHO" <<'PY'
+import math
+import sys
+
+rho = float(sys.argv[1])
+allowed = {0.0: "0", 0.25: "0.25", 0.5: "0.5", 1.0: "1"}
+if not math.isfinite(rho) or rho not in allowed:
+    raise SystemExit("formal DynPerm P60 rho must be one of 0, 0.25, 0.5, or 1")
+print(allowed[rho])
+PY
+)"
+export DYNPERM_RHO
 export TOTAL_TRAINING_STEPS=60
 
 if [ "${DRY_RUN:-0}" != "1" ] && [ -z "${TMUX:-}" ] && [ -z "${SLURM_JOB_ID:-}" ]; then

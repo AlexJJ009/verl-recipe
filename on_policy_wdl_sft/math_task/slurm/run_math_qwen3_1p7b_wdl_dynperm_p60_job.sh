@@ -110,6 +110,10 @@ print(f"{canonical} rho{canonical.replace('.', 'p')}")
 PY
 )"
 read -r DYNPERM_RHO dose_tag <<<"$rho_and_tag"
+case "$DYNPERM_RHO" in
+    0|0.25|0.5|1) ;;
+    *) die "formal DynPerm P60 rho must be one of 0, 0.25, 0.5, or 1" ;;
+esac
 export DYNPERM_RHO
 
 repo_host=/data-1/code/verl
