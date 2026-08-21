@@ -63,9 +63,11 @@ test -z "$(git -C "$RECIPE_ROOT" status --porcelain)"
 : "${DYNPERM_NODE_ROOT_MAP:?set the semicolon-separated Slurm node-root map after staging}"
 : "${DYNPERM_STAGE_REL:?set the candidate-bound workspace/jobs stage path}"
 : "${DYNPERM_ALLOWED_NODES:?set the comma-separated Slurm nodes admitted for this submission}"
+initial_release_count="${DYNPERM_INITIAL_RELEASE_COUNT:-8}"
 [[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]]
 [[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]]
 [[ "$DYNPERM_ALLOWED_NODES" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]]
+[[ "$initial_release_count" =~ ^[1-8]$ ]]
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
     "$DYNPERM_EVIDENCE_RELAY_HOST" true
 
@@ -217,18 +219,25 @@ for arm_index in "${!ARM_IDS[@]}"; do
         fi
         submitted_job_ids+=("$job_id")
         relay_job_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/${job_id}"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\tallowed_nodes=%s\t%s:%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tallowed_nodes=%s\tinitial_release_count=%s\t%s:%s\n' \
             "$job_id" "$arm_id" "$rho" "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" \
-            "$allowed_node_list" "$DYNPERM_EVIDENCE_RELAY_HOST" "$relay_job_root" \
+            "$allowed_node_list" "$initial_release_count" \
+            "$DYNPERM_EVIDENCE_RELAY_HOST" "$relay_job_root" \
             >>"${submission_root}/jobs.tsv"
         echo "SUBMITTED job=${job_id} arm=${arm_id} rho=${rho} nice=${nice_value}"
     done
 done
-job_id_list="$(IFS=,; echo "${submitted_job_ids[*]}")"
-if ! scontrol release "$job_id_list"; then
+released_job_ids=("${submitted_job_ids[@]:0:initial_release_count}")
+held_job_ids=("${submitted_job_ids[@]:initial_release_count}")
+released_job_id_list="$(IFS=,; echo "${released_job_ids[*]}")"
+if ! scontrol release "$released_job_id_list"; then
     rollback_held_jobs
     exit 1
 fi
-printf '%s\n' "$job_id_list" >"${submission_root}/released-job-ids.txt"
+printf '%s\n' "$initial_release_count" >"${submission_root}/initial-release-count.txt"
+printf '%s\n' "$released_job_id_list" >"${submission_root}/released-job-ids.txt"
+if [ "${#held_job_ids[@]}" -gt 0 ]; then
+    printf '%s\n' "$(IFS=,; echo "${held_job_ids[*]}")" >"${submission_root}/held-job-ids.txt"
+fi
 trap - EXIT
 echo "Submission receipt: ${submission_root}/jobs.tsv"
