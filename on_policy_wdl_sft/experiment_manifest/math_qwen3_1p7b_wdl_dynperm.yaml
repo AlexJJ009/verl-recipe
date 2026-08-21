@@ -68,9 +68,18 @@ dynperm_contract:
   log_telemetry: true
 execution:
   horizon: 60
-  queue_order: [standard-c, fixed-m1-stage1]
+  design: 2x4 factorial over Model1 update state and rho
+  rho_values: [0.0, 1.0, 0.25, 0.5]
+  arm_priority: [fixed-m1-stage1, standard-c]
+  queue_order: [fixed-m1-stage1, standard-c]
+  formal_job_count: 8
+  slurm_partition: l40s
+  slurm_node_count: 3
+  allocation: one exclusive 8xL40S node per run
+  scheduling: submit all eight jobs; fixed-Model1 jobs have higher Slurm priority
+  early_readout: inspect checkpoints on each continuous P60 trajectory; no separate P20/P30 jobs
   formal_runs_started: false
-  required_before_any_run: clean exact-parent-and-recipe candidate plus explicit P60 batch launch receipt
+  required_before_any_run: clean exact-parent-and-recipe candidate, exact container image, and explicit rho-bound P60 launch receipt
 engineering_evidence:
   job_id: 146
   candidate_sha: 686f3ee1f190387581e38847cb0e75f055021caa
@@ -94,3 +103,13 @@ runs:
     weak_logit_permutation_enabled: true
     rho_from: DYNPERM_RHO
     interpretation: matched fixed-Model1 factorial edge with the same configured DynPerm treatment
+analysis_contract:
+  primary_order:
+    - fixed-Model1 rho endpoint contrast (rho 0 versus 1)
+    - fixed-Model1 dose response (rho 0, 0.25, 0.5, 1)
+    - Standard C rho endpoint and dose response
+    - Model1-update-state by rho interaction
+  rho_zero_role: enabled no-op control on the same code revision and seeds
+  endpoint_hypothesis: degradation as rho increases supports token-assignment dependence
+  interaction_hypothesis: a stronger rho effect in trainable Standard C supports co-adaptive token assignment
+  non_claim: a flat curve does not prove Model1 is replaceable; it only rejects this token-assignment intervention under the frozen contract

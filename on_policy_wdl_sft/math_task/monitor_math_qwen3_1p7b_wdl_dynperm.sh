@@ -18,7 +18,7 @@ PY
 )"
 
 WANDB_PROJECT=OnPolicyWDLSFT-Math-1P7B-DynPerm-P60
-ARMS=(standard-c fixed-m1-stage1)
+ARMS=(fixed-m1-stage1 standard-c)
 
 for arm in "${ARMS[@]}"; do
     expected_gradient=nonzero

@@ -4,6 +4,7 @@
 : "${WDL_ARM_ID:?WDL_ARM_ID must identify standard-c or fixed-m1-stage1}"
 if [ "${STAGE2_DRY_RUN:-0}" != "1" ]; then
     : "${DYNPERM_LAUNCH_RECEIPT:?formal DynPerm P60 requires DYNPERM_LAUNCH_RECEIPT}"
+    : "${DYNPERM_IMAGE_ID:?formal DynPerm P60 requires the exact container image id}"
 fi
 
 case "$WDL_ARM_ID" in
@@ -177,7 +178,7 @@ if [ "${STAGE2_DRY_RUN:-0}" != "1" ]; then
     fi
     PARENT_SHA="$(git -C "$PARENT_ROOT" rev-parse HEAD)"
     RECIPE_SHA="$(git -C "$RECIPE_ROOT" rev-parse HEAD)"
-    python3 - "$DYNPERM_LAUNCH_RECEIPT" "$DYNPERM_RHO" "$WDL_ARM_ID" "$PARENT_SHA" "$RECIPE_SHA" <<'PY'
+    python3 - "$DYNPERM_LAUNCH_RECEIPT" "$DYNPERM_RHO" "$WDL_ARM_ID" "$PARENT_SHA" "$RECIPE_SHA" "$DYNPERM_IMAGE_ID" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -187,6 +188,7 @@ rho = float(sys.argv[2])
 arm_id = sys.argv[3]
 parent_sha = sys.argv[4]
 recipe_sha = sys.argv[5]
+image_id = sys.argv[6]
 if not path.is_file():
     raise SystemExit(f"ERROR: launch receipt missing: {path}")
 receipt = json.loads(path.read_text())
@@ -197,6 +199,7 @@ expected = {
     "max_training_steps": 60,
     "parent_candidate_sha": parent_sha,
     "recipe_candidate_sha": recipe_sha,
+    "image_id": image_id,
 }
 for key, value in expected.items():
     if receipt.get(key) != value:
