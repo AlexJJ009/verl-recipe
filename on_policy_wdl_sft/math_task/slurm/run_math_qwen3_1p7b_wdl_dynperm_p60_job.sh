@@ -4,15 +4,74 @@
 # only scientific treatment inputs remain DYNPERM_ENABLED and DYNPERM_RHO.
 set -euo pipefail
 
+arm_id="${1:-unassigned}"
+bootstrap_job_id="${SLURM_JOB_ID:-unassigned-$$}"
+if [[ ! "$bootstrap_job_id" =~ ^[0-9]+$ ]]; then
+    bootstrap_job_id="invalid-$$"
+fi
+bootstrap_root="/data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm/_slurm_bootstrap/${bootstrap_job_id}"
+bootstrap_relay_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/bootstrap/${bootstrap_job_id}"
+bootstrap_reason="pre-admission shell failure"
+mkdir -p "$bootstrap_root"
+
+bootstrap_cleanup() {
+    local original_rc=$?
+    local final_rc=$original_rc
+    local local_sha remote_sha
+    trap - EXIT TERM INT
+    set +e
+    if ! python3 - "$bootstrap_job_id" "${SLURMD_NODENAME:-unknown}" "$arm_id" \
+        "$original_rc" "$bootstrap_reason" <<'PY' >"${bootstrap_root}/bootstrap-terminal.json"
+import json
+import sys
+
+job_id, node, arm, exit_code, reason = sys.argv[1:]
+print(json.dumps({
+    "job_id": job_id,
+    "node": node,
+    "arm": arm,
+    "phase": "pre-admission",
+    "original_exit_code": int(exit_code),
+    "reason": reason,
+}, sort_keys=True))
+PY
+    then
+        final_rc=70
+    fi
+    if [[ "${DYNPERM_EVIDENCE_RELAY_HOST:-}" =~ ^[A-Za-z0-9._@:-]+$ ]] \
+        && [ -f "${bootstrap_root}/bootstrap-terminal.json" ]; then
+        local_sha="$(sha256sum "${bootstrap_root}/bootstrap-terminal.json" | awk '{print $1}')"
+        rsync --archive --mkpath --protect-args \
+            -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10' \
+            "${bootstrap_root}/bootstrap-terminal.json" \
+            "${DYNPERM_EVIDENCE_RELAY_HOST}:${bootstrap_relay_root}/"
+        remote_sha="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
+            "$DYNPERM_EVIDENCE_RELAY_HOST" sha256sum -- \
+            "${bootstrap_relay_root}/bootstrap-terminal.json" 2>/dev/null | awk '{print $1}')"
+        [ -n "$local_sha" ] && [ "$remote_sha" = "$local_sha" ] || final_rc=70
+    else
+        final_rc=70
+    fi
+    exit "$final_rc"
+}
+trap bootstrap_cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
 die() {
+    bootstrap_reason="$*"
     echo "DynPerm P60 Slurm admission failed: $*" >&2
     exit 64
+}
+
+require_env() {
+    local name=$1
+    [ -n "${!name:-}" ] || die "$name is required"
 }
 
 if [ "$#" -ne 1 ]; then
     die "one static arm id is required"
 fi
-arm_id="$1"
 case "$arm_id" in
     fixed-m1-stage1)
         arm_entry=run_math_qwen3_1p7b_wdl_dynperm_fixed_m1_p60.sh
@@ -25,16 +84,12 @@ case "$arm_id" in
     *) die "unsupported arm: $arm_id" ;;
 esac
 
-: "${SLURM_JOB_ID:?must run inside Slurm}"
-: "${SLURMD_NODENAME:?Slurm node identity required}"
-: "${CUDA_VISIBLE_DEVICES:?Slurm GPU allocation required}"
-: "${DYNPERM_ENABLED:?required}"
-: "${DYNPERM_RHO:?required}"
-: "${DYNPERM_PARENT_SHA:?exact parent candidate required}"
-: "${DYNPERM_RECIPE_SHA:?exact recipe candidate required}"
-: "${DYNPERM_IMAGE_ID:?exact container image id required}"
-: "${DYNPERM_LAUNCH_RECEIPT:?candidate-bound launch receipt required}"
-: "${DYNPERM_EVIDENCE_RELAY_HOST:?controller evidence relay host required}"
+for required_name in \
+    SLURM_JOB_ID SLURMD_NODENAME CUDA_VISIBLE_DEVICES DYNPERM_ENABLED \
+    DYNPERM_RHO DYNPERM_PARENT_SHA DYNPERM_RECIPE_SHA DYNPERM_IMAGE_ID \
+    DYNPERM_LAUNCH_RECEIPT DYNPERM_EVIDENCE_RELAY_HOST; do
+    require_env "$required_name"
+done
 
 case "${DYNPERM_ENABLED,,}" in
     true|1) export DYNPERM_ENABLED=true ;;
@@ -158,6 +213,7 @@ cleanup() {
     fi
     exit "$rc"
 }
+trap - EXIT TERM INT
 trap cleanup EXIT TERM INT
 
 printf '{"job_id":"%s","node":"%s","arm":"%s","rho":%s,"parent_sha":"%s","recipe_sha":"%s","image_id":"%s","launch_receipt":"%s","node_local_job_root":"%s","relay_job_root":"%s"}\n' \
