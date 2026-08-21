@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Submit the frozen 2x4 DynPerm matrix to the three-node L40S partition.
+# Submit the frozen 2x4 DynPerm matrix to an explicitly allowed subset of the
+# L40S partition.
 # Default behavior is a non-mutating plan preview. Real submission additionally
 # requires DYNPERM_SUBMIT_AUTHORIZED=1 and four candidate-bound launch receipts.
 set -euo pipefail
@@ -58,14 +59,26 @@ test "$(git -C "$RECIPE_ROOT" branch --show-current)" = codex/stage123-model2-kl
 test "$(git -C "$REPO_ROOT" rev-parse HEAD:recipe)" = "$RECIPE_SHA"
 test -z "$(git -C "$REPO_ROOT" status --porcelain)"
 test -z "$(git -C "$RECIPE_ROOT" status --porcelain)"
-test "$(sinfo -N -h -p l40s -o '%N' | sort -u | wc -l)" -eq 3
 : "${DYNPERM_EVIDENCE_RELAY_HOST:?set the controller SSH relay only after formal launch authorization}"
 : "${DYNPERM_NODE_ROOT_MAP:?set the semicolon-separated Slurm node-root map after staging}"
 : "${DYNPERM_STAGE_REL:?set the candidate-bound workspace/jobs stage path}"
+: "${DYNPERM_ALLOWED_NODES:?set the comma-separated Slurm nodes admitted for this submission}"
 [[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]]
 [[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]]
+[[ "$DYNPERM_ALLOWED_NODES" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]]
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
     "$DYNPERM_EVIDENCE_RELAY_HOST" true
+
+IFS=',' read -r -a slurm_nodes <<<"$DYNPERM_ALLOWED_NODES"
+allowed_node_list="$(IFS=,; echo "${slurm_nodes[*]}")"
+test "$allowed_node_list" = "$DYNPERM_ALLOWED_NODES"
+mapfile -t partition_nodes < <(sinfo -N -h -p l40s -o '%N' | sort -u)
+declare -A seen_allowed_nodes=()
+for node in "${slurm_nodes[@]}"; do
+    [ -z "${seen_allowed_nodes[$node]:-}" ]
+    seen_allowed_nodes[$node]=1
+    printf '%s\n' "${partition_nodes[@]}" | grep -Fx -- "$node" >/dev/null
+done
 
 node_root_for() {
     local wanted=$1 entry found=""
@@ -123,9 +136,9 @@ for rho, raw_path in zip(rhos, paths, strict=True):
 print("DynPerm four-dose launch receipt set PASS")
 PY
 
-# Exercise the real worker-to-controller rsync path on every Slurm node before
-# reserving GPUs. The resulting tiny hostname files are durable relay evidence.
-mapfile -t slurm_nodes < <(sinfo -N -h -p l40s -o '%N' | sort -u)
+# Exercise the real worker-to-controller rsync path on every admitted Slurm
+# node before reserving GPUs. The resulting tiny hostname files are durable
+# relay evidence.
 relay_preflight_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/preflight/$(basename "$submission_root")"
 for node in "${slurm_nodes[@]}"; do
     node_addr="$(scontrol show node "$node" -o | tr ' ' '\n' | sed -n 's/^NodeAddr=//p')"
@@ -195,7 +208,8 @@ for arm_index in "${!ARM_IDS[@]}"; do
         dose_tag="$(canonical_tag "$rho")"
         launch_receipt="${RECEIPT_ROOT}/p60-${dose_tag}.json"
         job_name="DP-${dose_tag}-${arm_id}"
-        if ! job_id="$(sbatch --parsable --hold --nice="$nice_value" --job-name="$job_name" \
+        if ! job_id="$(sbatch --parsable --hold --nodelist="$allowed_node_list" \
+            --nice="$nice_value" --job-name="$job_name" \
             --export="ALL,DYNPERM_ENABLED=true,DYNPERM_RHO=${rho},DYNPERM_PARENT_SHA=${PARENT_SHA},DYNPERM_RECIPE_SHA=${RECIPE_SHA},DYNPERM_IMAGE_ID=${IMAGE_ID},DYNPERM_LAUNCH_RECEIPT=${launch_receipt},DYNPERM_EVIDENCE_RELAY_HOST=${DYNPERM_EVIDENCE_RELAY_HOST},DYNPERM_NODE_ROOT_MAP=${DYNPERM_NODE_ROOT_MAP},DYNPERM_STAGE_REL=${DYNPERM_STAGE_REL}" \
             "$sbatch_file")"; then
             rollback_held_jobs
@@ -203,9 +217,9 @@ for arm_index in "${!ARM_IDS[@]}"; do
         fi
         submitted_job_ids+=("$job_id")
         relay_job_root="/data-1/code/_artifacts/verl-v0.7/dynperm-formal-p60/${PARENT_SHA}/${job_id}"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s:%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\tallowed_nodes=%s\t%s:%s\n' \
             "$job_id" "$arm_id" "$rho" "$PARENT_SHA" "$RECIPE_SHA" "$IMAGE_ID" \
-            "$DYNPERM_EVIDENCE_RELAY_HOST" "$relay_job_root" \
+            "$allowed_node_list" "$DYNPERM_EVIDENCE_RELAY_HOST" "$relay_job_root" \
             >>"${submission_root}/jobs.tsv"
         echo "SUBMITTED job=${job_id} arm=${arm_id} rho=${rho} nice=${nice_value}"
     done
