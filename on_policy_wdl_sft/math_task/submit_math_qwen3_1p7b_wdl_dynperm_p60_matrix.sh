@@ -63,7 +63,7 @@ test -z "$(git -C "$RECIPE_ROOT" status --porcelain)"
 : "${DYNPERM_NODE_ROOT_MAP:?set the semicolon-separated Slurm node-root map after staging}"
 : "${DYNPERM_STAGE_REL:?set the candidate-bound workspace/jobs stage path}"
 : "${DYNPERM_ALLOWED_NODES:?set the comma-separated Slurm nodes admitted for this submission}"
-initial_release_count="${DYNPERM_INITIAL_RELEASE_COUNT:-8}"
+initial_release_count="${DYNPERM_INITIAL_RELEASE_COUNT:-1}"
 [[ "$DYNPERM_EVIDENCE_RELAY_HOST" =~ ^[A-Za-z0-9._@:-]+$ ]]
 [[ "$DYNPERM_STAGE_REL" =~ ^workspace/jobs/[A-Za-z0-9._-]+$ ]]
 [[ "$DYNPERM_ALLOWED_NODES" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]]
