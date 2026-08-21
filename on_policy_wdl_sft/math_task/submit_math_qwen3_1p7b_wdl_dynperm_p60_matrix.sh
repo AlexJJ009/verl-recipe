@@ -22,7 +22,7 @@ ARM_SBATCH=(
 ARM_NICE=(0 1000)
 PARENT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 RECIPE_SHA="$(git -C "$RECIPE_ROOT" rev-parse HEAD)"
-IMAGE_ID="$(docker image inspect verl-harness:latest --format '{{.Id}}')"
+IMAGE_ID="$(python3 "$REPO_ROOT/scripts/l40s/resolve_image_config_digest.py" verl-harness:latest)"
 RECEIPT_ROOT=/data-2/model_weights/math_task/qwen3_1p7b_wdl_dynperm/admission
 
 canonical_tag() {
@@ -162,7 +162,7 @@ test "$(git -C "$repo" rev-parse HEAD:recipe)" = "$recipe_sha"
 test -z "$(git -C "$repo" status --porcelain)"
 test -z "$(git -C "$repo/recipe" status --porcelain)"
 test -r "$repo/recipe/on_policy_wdl_sft/math_task/slurm/run_math_qwen3_1p7b_wdl_dynperm_p60_job.sh"
-test "$(docker image inspect verl-harness:latest --format '{{.Id}}')" = "$image_id"
+test "$(python3 "$repo/scripts/l40s/resolve_image_config_digest.py" verl-harness:latest)" = "$image_id"
 test -f "${data1}/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet"
 test -d "${data1}/dataset/math/qwen3_1p7b_math7_validation_v1"
 test -f "${data1}/code/_artifacts/verl-v0.7/linear-gon-34-dynperm-mvp/slurm-job-146/runtime-output/gpu_fsdp_smoke_receipt.json"

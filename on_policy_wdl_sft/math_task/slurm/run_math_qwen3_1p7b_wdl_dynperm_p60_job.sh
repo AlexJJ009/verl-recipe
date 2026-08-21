@@ -156,7 +156,7 @@ test "$(git -C "$repo_host" rev-parse HEAD:recipe)" = "$DYNPERM_RECIPE_SHA" \
 test -z "$(git -C "$repo_host" status --porcelain)" || die "parent checkout is dirty"
 test -z "$(git -C "$recipe_host" status --porcelain)" || die "recipe checkout is dirty"
 
-image_id="$(docker image inspect verl-harness:latest --format '{{.Id}}')" \
+image_id="$(python3 "$repo_host/scripts/l40s/resolve_image_config_digest.py" verl-harness:latest)" \
     || die "verl-harness:latest is unavailable"
 test "$image_id" = "$DYNPERM_IMAGE_ID" || die "container image identity mismatch"
 
@@ -251,7 +251,7 @@ relay_files admission.json || die "controller evidence relay admission failed"
 
 export REPO_HOST="$repo_host"
 export REPO_CONTAINER=/workspace/verl
-export DOCKER_IMAGE="$DYNPERM_IMAGE_ID"
+export DOCKER_IMAGE=verl-harness:latest
 export DOCKER_CONTAINER_NAME="$container_name"
 export DATA1_HOST="$data1_host"
 export DATA2_HOST="$data2_host"
