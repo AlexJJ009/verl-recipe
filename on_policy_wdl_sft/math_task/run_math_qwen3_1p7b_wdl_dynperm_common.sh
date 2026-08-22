@@ -70,12 +70,10 @@ export GENERATION_MICRO_BATCH_SIZE=32
 export LOG_PROB_MICRO_BATCH_SIZE=8
 export REF_LOG_PROB_MICRO_BATCH_SIZE=1
 export ROLLOUT_GPU_MEMORY_UTILIZATION=0.55
-export ROLLOUT_FREE_CACHE_ENGINE=True
-export ROLLOUT_ENABLE_SLEEP_MODE=True
-# vLLM sleep level 2 fails to remap weights on the cluster's L40S runtime.
-# layered_summon pins the existing ServerAdapter to level 1 for non-LoRA runs,
-# releasing the KV cache while leaving rollout weights resident.
-export ROLLOUT_LAYERED_SUMMON=True
+# Both vLLM sleep levels fail in CUDA cuMem wake_up on the cluster's L40S
+# runtime. Keep the reduced rollout allocation, but disable sleep transitions.
+export ROLLOUT_FREE_CACHE_ENGINE=False
+export ROLLOUT_ENABLE_SLEEP_MODE=False
 export ACTOR_CALCULATE_ENTROPY=False
 export CALCULATE_ENTROPY=False
 export ROLLOUT_TP_SIZE=1
@@ -138,7 +136,6 @@ DYNPERM_FORMAL_OVERRIDES=(
     actor_rollout_ref.model.path="$MODEL_PATH"
     actor_rollout_ref.model.joint_training_rollout_source=model2
     actor_rollout_ref.rollout.n=8
-    actor_rollout_ref.rollout.layered_summon=true
     +actor_rollout_ref.rollout.seed=0
     actor_rollout_ref.rollout.temperature=1.0
     actor_rollout_ref.rollout.top_p=1.0
