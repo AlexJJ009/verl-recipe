@@ -69,7 +69,7 @@ export ACTOR_PPO_MAX_TOKEN_LEN=4596
 export GENERATION_MICRO_BATCH_SIZE=32
 export LOG_PROB_MICRO_BATCH_SIZE=8
 export REF_LOG_PROB_MICRO_BATCH_SIZE=1
-export ROLLOUT_GPU_MEMORY_UTILIZATION=0.55
+export ROLLOUT_GPU_MEMORY_UTILIZATION=${ROLLOUT_GPU_MEMORY_UTILIZATION:-0.55}
 # Both vLLM sleep levels fail in CUDA cuMem wake_up on the cluster's L40S
 # runtime. Keep the reduced rollout allocation, but disable sleep transitions.
 export ROLLOUT_FREE_CACHE_ENGINE=False
