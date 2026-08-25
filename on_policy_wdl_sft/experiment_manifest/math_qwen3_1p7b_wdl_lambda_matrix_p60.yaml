@@ -1,0 +1,76 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_wdl_lambda_matrix_p60
+task: math
+status: ready_for_candidate_bound_launch
+scope: matched lambda mechanism controls plus narrow C search around lambda=0.8
+launch_allowed: true
+completed_references:
+  - {id: lambda04-c, fusion_lambda: 0.4, job_id: 232, status: diagnostic_complete_release_blocked}
+  - {id: lambda05-c, fusion_lambda: 0.5, job_id: 233, status: diagnostic_complete_release_blocked}
+  - {id: lambda08-c, fusion_lambda: 0.8, status: released_reference}
+paths:
+  model1: /data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20
+  model2: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
+  model2_provenance: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model/model_input_provenance.json
+  train_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_wdl_lambda_matrix
+identity:
+  model1_config_sha256: a4a451865e8d45a519133031f19cda7d347813159fde1756d63e2beaf67f2288
+  model1_weights_sha256: 9ef4bee31240d3bd8de17d5e7ea2d74b1b8b78b3797f56fe440b0170d53bc207
+  model2_config_sha256: f676983c8278a7e9d12a81a31ac0982f464365856733788aa69c623c0a80c5c1
+  model2_weights_sha256: ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0
+  model2_provenance_sha256: c517333ac6b60c268e0ba2f2aacef51679d94592480a223c7b94b2bd945b8c45
+  train_rows: 3840
+  train_sha256: 88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66
+training_contract:
+  beta: 0.0
+  loss_mode: wdl_sft
+  kl_enabled: false
+  rollout_source: model2
+  final_step: 60
+  lr: 1.0e-6
+  lr_warmup_steps: 0
+  prompt_batch_size: 64
+  rollout_n: 8
+  max_prompt_length: 500
+  max_response_length: 4096
+  data_shuffle: false
+  actor_fsdp_seed: 42
+  actor_data_loader_seed: 42
+  rollout_seed: 0
+  data_seed: 20260719
+  validation_frequency: 5
+  save_frequency: 5
+  protected_checkpoint_steps: [20, 40, 45, 50, 55, 60]
+  validation_n: 3
+  validation_temperature: 0.2
+  validation_top_p: 0.95
+  validation_views: [model1, model2]
+  rollout_gpu_memory_utilization: 0.55
+runs:
+  - {id: lambda04-fixed, fusion_lambda: 0.4, fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
+  - {id: lambda05-fixed, fusion_lambda: 0.5, fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
+  - {id: lambda04-d0, fusion_lambda: 0.4, fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
+  - {id: lambda05-d0, fusion_lambda: 0.5, fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
+  - {id: lambda07-c, fusion_lambda: 0.7, fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
+  - {id: lambda09-c, fusion_lambda: 0.9, fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
+hypotheses:
+  adaptive_model1:
+    comparison: C(lambda) versus fixed-M1(lambda)
+    falsifier: fixed-M1 preserves the same early acceleration and collapse trajectory
+  static_weak_guidance:
+    comparison: fixed-M1(lambda) versus D0(lambda)
+    falsifier: fixed-M1 is indistinguishable from D0 under common offline evaluation
+  scale_temperature:
+    comparison: D0(lambda=0.4/0.5) trajectories versus D0(lambda=0.8)
+    falsifier: D0 remains stable while matched C collapses
+  search:
+    comparison: stable C(lambda=0.7/0.9) versus C(lambda=0.8)
+    promotion_gate: sustained online gain at two adjacent checkpoints followed by common n=256 and second training seed
+stop_rules:
+  - do not search below lambda=0.4
+  - stop broad search if neither lambda=0.7 nor lambda=0.9 stably exceeds lambda=0.8
+  - add D0/fixed controls for lambda=0.7/0.9 only after a C candidate passes the promotion gate
+deferred:
+  - gradient-normalized C lambda=0.5 pending a separately frozen update-normalization contract
+  - common n=256 P50 dual-view diagnostic evaluation
