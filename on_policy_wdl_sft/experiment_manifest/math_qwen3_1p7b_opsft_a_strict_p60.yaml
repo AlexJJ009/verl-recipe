@@ -1,0 +1,52 @@
+schema_version: 1
+experiment_id: math_qwen3_1p7b_opsft_a_strict_p60
+task: math
+status: ready_for_candidate_bound_launch
+scope: strict-scorer rerun of the single-model On-Policy SFT A anchor
+launch_allowed: true
+reason: historical A used the permissive scorer and is not a valid common anchor for strict C/D0/fixed-M1
+paths:
+  model2: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
+  model2_provenance: /data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model/model_input_provenance.json
+  train_file: /data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet
+  reward: recipe/joint_training/custom_reward_function_latex_verify.py
+  artifact_root: /data-2/model_weights/math_task/qwen3_1p7b_opsft_a_strict_p60
+identity:
+  model2_config_sha256: f676983c8278a7e9d12a81a31ac0982f464365856733788aa69c623c0a80c5c1
+  model2_weights_sha256: ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0
+  model2_provenance_sha256: c517333ac6b60c268e0ba2f2aacef51679d94592480a223c7b94b2bd945b8c45
+  train_rows: 3840
+  train_sha256: 88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66
+  reward_sha256: 6fc2364da021bc5d14e1e3e8788d52cd49a3036088cacbb96d4eb5535e4473e5
+training_contract:
+  joint_training: false
+  fusion_lambda: null
+  beta: 0.0
+  loss_mode: wdl_sft
+  rollout_calculate_log_probs: false
+  rollout_is: null
+  kl_enabled: false
+  final_step: 60
+  lr: 1.0e-6
+  lr_warmup_steps: 0
+  prompt_batch_size: 64
+  rollout_n: 8
+  ppo_mini_batch_size: 512
+  max_prompt_length: 500
+  max_response_length: 4096
+  data_shuffle: false
+  actor_fsdp_seed: 42
+  actor_data_loader_seed: 42
+  rollout_seed: 0
+  data_seed: 20260719
+  validation_frequency: 5
+  save_frequency: 5
+  protected_checkpoint_steps: [20, 40, 45, 50, 55, 60]
+  validation_n: 3
+  validation_temperature: 0.2
+  validation_top_p: 0.95
+  primary_metric: val-core/math7_macro/acc/mean@3
+comparison_boundary:
+  valid_after_completion: strict A versus strict C/D0/fixed-M1 under the common P60 contract
+  invalid: comparison to the historical permissive-scorer A as if only method differed
+  offline_gate: common n=256 evaluation is required before replacing final A conclusions
