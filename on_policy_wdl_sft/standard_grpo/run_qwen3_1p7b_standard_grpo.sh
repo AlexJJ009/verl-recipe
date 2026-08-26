@@ -62,8 +62,13 @@ export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-False}
 # and the frozen task dataset owns its preparation/data seed.
 export TRAINING_SEED=${TRAINING_SEED:-42}
 export ROLLOUT_SEED=${ROLLOUT_SEED:-0}
-GRPO_EXPECTED_ACTOR_SEED=${GRPO_EXPECTED_ACTOR_SEED:-42}
-GRPO_EXPECTED_ROLLOUT_SEED=${GRPO_EXPECTED_ROLLOUT_SEED:-0}
+GRPO_SEED_REPLICATE=${GRPO_SEED_REPLICATE:-1}
+case "${GRPO_SEED_REPLICATE}" in
+  1) GRPO_EXPECTED_ACTOR_SEED=42; GRPO_EXPECTED_ROLLOUT_SEED=0 ;;
+  2) GRPO_EXPECTED_ACTOR_SEED=43; GRPO_EXPECTED_ROLLOUT_SEED=1 ;;
+  3) GRPO_EXPECTED_ACTOR_SEED=44; GRPO_EXPECTED_ROLLOUT_SEED=2 ;;
+  *) echo "ERROR: GRPO_SEED_REPLICATE must be 1, 2, or 3" >&2; exit 2 ;;
+esac
 export RESUME_MODE=${RESUME_MODE:-disable}
 GRPO_ADMISSION_CHECKER=${GRPO_ADMISSION_CHECKER:-"${SCRIPT_DIR}/../../../scripts/grpo_retrain_admission.py"}
 GRPO_EXPECTED_IMAGE_DIGEST=${GRPO_EXPECTED_IMAGE_DIGEST:-sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708}
@@ -295,7 +300,7 @@ if [ "${GRPO_CONFIG_ONLY:-0}" = 1 ]; then
     "rollout_n=${ROLLOUT_N}" "responses_per_step=$((TRAIN_PROMPT_BSZ * ROLLOUT_N))" \
     "ppo_mini_batch_size=${TRAIN_PROMPT_MINI_BSZ}" "learning_rate=${LR}" \
     "ppo_epochs=${PPO_EPOCHS}" "actor_seed=${TRAINING_SEED}" \
-    "rollout_seed=${ROLLOUT_SEED}" "data_seed=${DATA_SEED}" \
+    "rollout_seed=${ROLLOUT_SEED}" "seed_replicate=${GRPO_SEED_REPLICATE}" "data_seed=${DATA_SEED}" \
     "actor_shuffle=${ACTOR_SHUFFLE}" \
     "resume_mode=${RESUME_MODE}" "total_epochs=${TOTAL_EPOCHS}" \
     "expected_filtered_train_rows=${GRPO_EXPECTED_FILTERED_TRAIN_ROWS}" \
@@ -417,8 +422,7 @@ python3 "${GRPO_ADMISSION_CHECKER}" \
   --expected-image-digest "${GRPO_EXPECTED_IMAGE_DIGEST}" \
   --actor-seed "${TRAINING_SEED}" \
   --rollout-seed "${ROLLOUT_SEED}" \
-  --expected-actor-seed "${GRPO_EXPECTED_ACTOR_SEED}" \
-  --expected-rollout-seed "${GRPO_EXPECTED_ROLLOUT_SEED}" \
+  --seed-replicate "${GRPO_SEED_REPLICATE}" \
   --data-seed "${DATA_SEED}" \
   --data-shuffle "${DATA_SHUFFLE}" \
   --train-prompt-bsz "${TRAIN_PROMPT_BSZ}" \
