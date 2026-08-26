@@ -87,5 +87,4 @@ exec bash "${SCRIPT_DIR}/run_s1_math_qwen3_1p7b_stage123_common.sh" \
     data.seed=20260719 \
     data.shuffle=False \
     actor_rollout_ref.actor.fsdp_config.seed=42 \
-    actor_rollout_ref.actor.data_loader_seed=42 \
-    +actor_rollout_ref.rollout.seed=0
+    actor_rollout_ref.actor.data_loader_seed=42
