@@ -62,6 +62,8 @@ export ACTOR_SHUFFLE=${ACTOR_SHUFFLE:-False}
 # and the frozen task dataset owns its preparation/data seed.
 export TRAINING_SEED=${TRAINING_SEED:-42}
 export ROLLOUT_SEED=${ROLLOUT_SEED:-0}
+GRPO_EXPECTED_ACTOR_SEED=${GRPO_EXPECTED_ACTOR_SEED:-42}
+GRPO_EXPECTED_ROLLOUT_SEED=${GRPO_EXPECTED_ROLLOUT_SEED:-0}
 export RESUME_MODE=${RESUME_MODE:-disable}
 GRPO_ADMISSION_CHECKER=${GRPO_ADMISSION_CHECKER:-"${SCRIPT_DIR}/../../../scripts/grpo_retrain_admission.py"}
 GRPO_EXPECTED_IMAGE_DIGEST=${GRPO_EXPECTED_IMAGE_DIGEST:-sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708}
@@ -199,8 +201,8 @@ require_equal SAVE_FREQ "${SAVE_FREQ}" 5
 require_equal PPO_EPOCHS "${PPO_EPOCHS}" 1
 require_equal ACTOR_SHUFFLE "${ACTOR_SHUFFLE}" False
 require_equal VAL_DO_SAMPLE "${VAL_DO_SAMPLE}" True
-require_equal TRAINING_SEED "${TRAINING_SEED}" 42
-require_equal ROLLOUT_SEED "${ROLLOUT_SEED}" 0
+require_equal TRAINING_SEED "${TRAINING_SEED}" "${GRPO_EXPECTED_ACTOR_SEED}"
+require_equal ROLLOUT_SEED "${ROLLOUT_SEED}" "${GRPO_EXPECTED_ROLLOUT_SEED}"
 require_equal DATA_SEED "${DATA_SEED}" "${GRPO_EXPECTED_DATA_SEED}"
 require_equal RESUME_MODE "${RESUME_MODE}" disable
 if [ "${TASK}" = math ]; then
@@ -415,6 +417,8 @@ python3 "${GRPO_ADMISSION_CHECKER}" \
   --expected-image-digest "${GRPO_EXPECTED_IMAGE_DIGEST}" \
   --actor-seed "${TRAINING_SEED}" \
   --rollout-seed "${ROLLOUT_SEED}" \
+  --expected-actor-seed "${GRPO_EXPECTED_ACTOR_SEED}" \
+  --expected-rollout-seed "${GRPO_EXPECTED_ROLLOUT_SEED}" \
   --data-seed "${DATA_SEED}" \
   --data-shuffle "${DATA_SHUFFLE}" \
   --train-prompt-bsz "${TRAIN_PROMPT_BSZ}" \

@@ -12,7 +12,7 @@ fi
 # Experiment A is the single-model On-Policy SFT anchor.  It has no fusion
 # lambda.  The initial Model2 tensors and ordered data stream are the same as
 # the causal-P60 C/D0 matrix; the treatment is the single-model objective.
-export RUN_PREFIX=MATH-A-STRICT-SCORER-P60-QWEN3-1P7B
+export RUN_PREFIX=${RUN_PREFIX:-MATH-A-STRICT-SCORER-P60-QWEN3-1P7B}
 export INIT_MODEL_PATH=/data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
 export TRAIN_FILE=/data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet
 export TOTAL_TRAINING_STEPS=60
@@ -20,10 +20,10 @@ export WDL_SFT_BETA=0.0
 export LOSS_MODE=wdl_sft
 export LR=1e-6
 export LR_WARMUP_STEPS=0
-export DATA_SEED=20260719
+export DATA_SEED=${DATA_SEED:-20260719}
 export DATA_SHUFFLE=False
-export TRAINING_SEED=42
-export ROLLOUT_SEED=0
+export TRAINING_SEED=${TRAINING_SEED:-42}
+export ROLLOUT_SEED=${ROLLOUT_SEED:-0}
 export JOINT_TRAINING=False
 export ROLLOUT_CALCULATE_LOG_PROBS=False
 export ROLLOUT_IS=null
@@ -73,8 +73,8 @@ export CHECKPOINT_SAVE_CONTENTS="[model,optimizer,extra]"
 
 export CUSTOM_REWARD_FN_PATH="${SCRIPT_DIR}/../../joint_training/custom_reward_function_latex_verify.py"
 export CUSTOM_REWARD_FN_NAME=compute_score_latex_verify
-export WANDB_PROJECT=OnPolicyWDLSFT-Math-1P7B-Strict-A-P60
-export STRICT_A_ARTIFACT_ROOT=/data-2/model_weights/math_task/qwen3_1p7b_opsft_a_strict_p60
+export WANDB_PROJECT=${WANDB_PROJECT:-OnPolicyWDLSFT-Math-1P7B-Strict-A-P60}
+export STRICT_A_ARTIFACT_ROOT=${STRICT_A_ARTIFACT_ROOT:-/data-2/model_weights/math_task/qwen3_1p7b_opsft_a_strict_p60}
 export LOG_DIR="${STRICT_A_ARTIFACT_ROOT}/logs"
 export RESUME_MODE=disable
 
@@ -84,7 +84,7 @@ python3 "${SCRIPT_DIR}/../../../scripts/check_math_reward_contract.py" \
 
 exec bash "${SCRIPT_DIR}/run_s1_math_qwen3_1p7b_stage123_common.sh" \
     hydra.run.dir="${LOG_DIR}/hydra/${SLURM_JOB_ID:-manual}" \
-    data.seed=20260719 \
+    data.seed="${DATA_SEED}" \
     data.shuffle=False \
-    actor_rollout_ref.actor.fsdp_config.seed=42 \
-    actor_rollout_ref.actor.data_loader_seed=42
+    actor_rollout_ref.actor.fsdp_config.seed="${TRAINING_SEED}" \
+    actor_rollout_ref.actor.data_loader_seed="${TRAINING_SEED}"
