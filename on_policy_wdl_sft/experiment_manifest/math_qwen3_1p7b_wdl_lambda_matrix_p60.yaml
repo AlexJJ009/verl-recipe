@@ -1,8 +1,8 @@
 schema_version: 1
-experiment_id: math_qwen3_1p7b_wdl_lambda_matrix_p60
+experiment_id: math_qwen3_1p7b_wdl_lambda_followup_p60
 task: math
 status: ready_for_candidate_bound_launch
-scope: matched lambda mechanism controls plus narrow C search around lambda=0.8
+scope: matched lambda 0.7/0.9 controls plus minimal C low-lambda learning-rate test
 launch_allowed: true
 completed_references:
   - {id: lambda04-c, fusion_lambda: 0.4, job_id: 232, status: diagnostic_complete_release_blocked}
@@ -28,7 +28,7 @@ training_contract:
   kl_enabled: false
   rollout_source: model2
   final_step: 60
-  lr: 1.0e-6
+  lr: run-specific allowlist
   lr_warmup_steps: 0
   prompt_batch_size: 64
   rollout_n: 8
@@ -48,12 +48,12 @@ training_contract:
   validation_views: [model1, model2]
   rollout_gpu_memory_utilization: 0.55
 runs:
-  - {id: lambda04-fixed, fusion_lambda: 0.4, fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
-  - {id: lambda05-fixed, fusion_lambda: 0.5, fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
-  - {id: lambda04-d0, fusion_lambda: 0.4, fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
-  - {id: lambda05-d0, fusion_lambda: 0.5, fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
-  - {id: lambda07-c, fusion_lambda: 0.7, fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
-  - {id: lambda09-c, fusion_lambda: 0.9, fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
+  - {id: lambda07-fixed-lr1e6, arm: fixed-m1, fusion_lambda: 0.7, lr: "1e-6", fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
+  - {id: lambda09-fixed-lr1e6, arm: fixed-m1, fusion_lambda: 0.9, lr: "1e-6", fusion_mode: mixture, freeze_model1: true, expected_model1_gradient: zero}
+  - {id: lambda07-d0-lr1e6, arm: d0, fusion_lambda: 0.7, lr: "1e-6", fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
+  - {id: lambda09-d0-lr1e6, arm: d0, fusion_lambda: 0.9, lr: "1e-6", fusion_mode: strong_scaled, freeze_model1: false, expected_model1_gradient: zero}
+  - {id: lambda05-c-lr5e7, arm: standard-c, fusion_lambda: 0.5, lr: "5e-7", fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
+  - {id: lambda08-c-lr5e7, arm: standard-c, fusion_lambda: 0.8, lr: "5e-7", fusion_mode: mixture, freeze_model1: false, expected_model1_gradient: nonzero}
 hypotheses:
   adaptive_model1:
     comparison: C(lambda) versus fixed-M1(lambda)
@@ -62,15 +62,15 @@ hypotheses:
     comparison: fixed-M1(lambda) versus D0(lambda)
     falsifier: fixed-M1 is indistinguishable from D0 under common offline evaluation
   scale_temperature:
-    comparison: D0(lambda=0.4/0.5) trajectories versus D0(lambda=0.8)
-    falsifier: D0 remains stable while matched C collapses
-  search:
-    comparison: stable C(lambda=0.7/0.9) versus C(lambda=0.8)
-    promotion_gate: sustained online gain at two adjacent checkpoints followed by common n=256 and second training seed
+    comparison: D0(lambda=0.7/0.9) versus the completed C and fixed-M1 controls at the same lambda
+    falsifier: D0 reproduces the full C ordering without weak logits
+  low_lambda_learning_rate:
+    comparison: C(lambda=0.5/0.8, lr=5e-7) versus completed lr=1e-6 anchors
+    falsifier: lower lr only delays learning or preserves the same terminal collapse
 stop_rules:
-  - do not search below lambda=0.4
-  - stop broad search if neither lambda=0.7 nor lambda=0.9 stably exceeds lambda=0.8
-  - add D0/fixed controls for lambda=0.7/0.9 only after a C candidate passes the promotion gate
+  - do not add another static lambda from this batch
+  - do not expand the learning-rate grid unless lambda=0.5 at 5e-7 retains its early peak and improves terminal stability
+  - require common offline evaluation before calling a performance winner
 deferred:
-  - gradient-normalized C lambda=0.5 pending a separately frozen update-normalization contract
-  - common n=256 P50 dual-view diagnostic evaluation
+  - second training seed after the within-seed lambda mechanism matrix
+  - dynamic lambda pending a deterministic resume-safe scheduler implementation

@@ -9,20 +9,30 @@ if [ "$#" -ne 0 ]; then
 fi
 : "${LAMBDA_ARM:?set LAMBDA_ARM to standard-c, fixed-m1, or d0}"
 : "${FUSION_LAMBDA:?set FUSION_LAMBDA to the arm-authorized value}"
+: "${TRAINING_LR:?set TRAINING_LR to the run-authorized value}"
 
 case "$FUSION_LAMBDA" in
-    0.4) lambda_tag=lambda04 ;;
     0.5) lambda_tag=lambda05 ;;
     0.7) lambda_tag=lambda07 ;;
+    0.8) lambda_tag=lambda08 ;;
     0.9) lambda_tag=lambda09 ;;
     *)
-        echo "ERROR: formal lambda matrix permits only 0.4, 0.5, 0.7, or 0.9" >&2
+        echo "ERROR: formal lambda follow-up permits only fusion lambda 0.5, 0.7, 0.8, or 0.9" >&2
         exit 64
         ;;
 esac
 
-case "$LAMBDA_ARM:$FUSION_LAMBDA" in
-    fixed-m1:0.4|fixed-m1:0.5)
+case "$TRAINING_LR" in
+    1e-6) lr_tag=lr1e6 ;;
+    5e-7) lr_tag=lr5e7 ;;
+    *)
+        echo "ERROR: formal lambda follow-up permits only TRAINING_LR=1e-6 or 5e-7" >&2
+        exit 64
+        ;;
+esac
+
+case "$LAMBDA_ARM:$FUSION_LAMBDA:$TRAINING_LR" in
+    fixed-m1:0.7:1e-6|fixed-m1:0.9:1e-6)
         arm_tag=FIXED-M1
         artifact_arm=fixed-m1
         expected_model1_gradient=zero
@@ -30,7 +40,7 @@ case "$LAMBDA_ARM:$FUSION_LAMBDA" in
         export FREEZE_MODEL1=true
         export WDL_ARM_ID=fixed-m1-stage1
         ;;
-    d0:0.4|d0:0.5)
+    d0:0.7:1e-6|d0:0.9:1e-6)
         arm_tag=D0
         artifact_arm=d0
         expected_model1_gradient=zero
@@ -38,7 +48,7 @@ case "$LAMBDA_ARM:$FUSION_LAMBDA" in
         export FREEZE_MODEL1=false
         export WDL_ARM_ID=d0
         ;;
-    standard-c:0.7|standard-c:0.9)
+    standard-c:0.5:5e-7|standard-c:0.8:5e-7)
         arm_tag=C
         artifact_arm=standard-c
         expected_model1_gradient=nonzero
@@ -46,24 +56,20 @@ case "$LAMBDA_ARM:$FUSION_LAMBDA" in
         export FREEZE_MODEL1=false
         export WDL_ARM_ID=standard-c
         ;;
-    standard-c:0.4|standard-c:0.5)
-        echo "ERROR: C lambda=0.4/0.5 already completed in Jobs 232/233; refusing duplicate training" >&2
-        exit 64
-        ;;
     *)
-        echo "ERROR: unauthorized lambda matrix pair LAMBDA_ARM=$LAMBDA_ARM FUSION_LAMBDA=$FUSION_LAMBDA" >&2
+        echo "ERROR: unauthorized lambda follow-up triple LAMBDA_ARM=$LAMBDA_ARM FUSION_LAMBDA=$FUSION_LAMBDA TRAINING_LR=$TRAINING_LR" >&2
         exit 64
         ;;
 esac
 
 export FUSION_LAMBDA
 export LAMBDA_EXPECTED_MODEL1_GRADIENT="$expected_model1_gradient"
-export RUN_PREFIX="MATH-WDL-${lambda_tag^^}-ARM-${arm_tag}-P60-QWEN3-1P7B"
+export RUN_PREFIX="MATH-WDL-${lambda_tag^^}-ARM-${arm_tag}-${lr_tag^^}-P60-QWEN3-1P7B"
 export DYNPERM_ENABLED=false
 export DYNPERM_RHO=0
 
 # Everything below is pinned to the admitted Math causal-P60 contract. The
-# scientific treatments are exactly (arm, FUSION_LAMBDA).
+# scientific treatments are exactly (arm, FUSION_LAMBDA, TRAINING_LR).
 export BASE_MODEL_PATH=/data-2/model_weights/math_task/qwen3_1p7b_cold_start_cotmask_v3/candidates/step_20
 export EXPECTED_MODEL1_PATH="$BASE_MODEL_PATH"
 export MODEL2_PATH=/data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model
@@ -78,7 +84,7 @@ export TRAIN_FILE=/data-1/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_c
 export TOTAL_TRAINING_STEPS=60
 export WDL_SFT_BETA=0.0
 export LOSS_MODE=wdl_sft
-export LR=1e-6
+export LR="$TRAINING_LR"
 export LR_WARMUP_STEPS=0
 export DATA_SEED=20260719
 export DATA_SHUFFLE=False
@@ -124,8 +130,8 @@ export VAL_TOP_P=0.95
 export VAL_DO_SAMPLE=True
 export VAL_BEFORE_TRAIN=True
 
-export WANDB_PROJECT=OnPolicyWDLSFT-Math-1P7B-Lambda-Matrix-P60
-export CAUSAL_ARTIFACT_ROOT="/data-2/model_weights/math_task/qwen3_1p7b_wdl_lambda_matrix/${lambda_tag}/${artifact_arm}-p60"
+export WANDB_PROJECT=OnPolicyWDLSFT-Math-1P7B-Lambda-Followup-P60
+export CAUSAL_ARTIFACT_ROOT="/data-2/model_weights/math_task/qwen3_1p7b_wdl_lambda_followup/${lambda_tag}/${artifact_arm}-${lr_tag}-p60"
 export LOG_DIR="${CAUSAL_ARTIFACT_ROOT}/logs"
 export WDL_MANIPULATION_RECEIPT=/data-2/model_weights/math_task/qwen3_1p7b_wdl_causal_p60/admission/manipulation_receipt.json
 
