@@ -438,6 +438,7 @@ if [ "${GRPO_PREFLIGHT_ONLY:-0}" = 1 ]; then
 fi
 
 common_overrides=(
+  "hydra.run.dir=${LOG_DIR}/hydra/${SLURM_JOB_ID:-manual}"
   "data.shuffle=${DATA_SHUFFLE}"
   "+data.apply_chat_template_kwargs.enable_thinking=${ENABLE_THINKING}"
   "actor_rollout_ref.actor.kl_loss_type=${KL_LOSS_TYPE}"
