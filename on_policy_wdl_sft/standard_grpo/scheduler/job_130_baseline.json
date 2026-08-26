@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "linear_issue": "GON-40",
+  "selection": {
+    "job_id": 130,
+    "scheduler": "slurm",
+    "host_class": "l40s_8x46gb",
+    "pipeline": "math_stage1_to_standard_grpo",
+    "local_terminal_step": 160,
+    "effective_terminal_step": 200,
+    "selected_by": "latest successful qualifying Slurm job",
+    "excluded_candidates": [
+      {
+        "job_id": 127,
+        "reason": "failed at step 0 on a transient vLLM rendezvous port collision"
+      },
+      {
+        "job_id": 128,
+        "reason": "Cold Start to GRPO, not Stage1 to GRPO"
+      },
+      {
+        "job_id": 129,
+        "reason": "C-P60 to GRPO hybrid, not Stage1 to standard GRPO"
+      }
+    ]
+  },
+  "source_identity": {
+    "root_repository": "AlexJJ009/verl-v0.7",
+    "root_commit": "a0fd023d0cc4448c0f949241959ae37be4f4d72b",
+    "recipe_repository": "AlexJJ009/verl-recipe",
+    "recipe_commit": "ccb4f7ec99e7bf39091a77dafcedcd61bb889f6f",
+    "scheduler_snapshot_digest_prefix": "4e89474f",
+    "runtime_image_digest": "sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708"
+  },
+  "entry": {
+    "path": "on_policy_wdl_sft/standard_grpo/run_math_stage1_grpo.sh",
+    "git_blob": "ab6471bc96297317707289daea1dfb4ab2f58615",
+    "sha256": "459712073eada4eb7f68b1c51917d03402984f2daf921c6c7c767ae2eabf9d82",
+    "common_path": "on_policy_wdl_sft/standard_grpo/run_qwen3_1p7b_standard_grpo.sh",
+    "common_git_blob": "59e39e9147ddaf8784c1e6e8cafefc78e07a6acf",
+    "common_sha256": "843f5120ea7dd6e9914b92dc4d11ee0ca51acec215c02376608acdc369daa599",
+    "trainer_boundary": "python3 -m verl.trainer.main_ppo"
+  },
+  "effective_launch": {
+    "command": [
+      "bash",
+      "recipe/on_policy_wdl_sft/standard_grpo/run_math_stage1_grpo.sh"
+    ],
+    "required_environment": {
+      "GRPO_SCHEDULER_MANAGED": "1",
+      "GRPO_LAUNCH_ALLOWED": "1",
+      "GRPO_ROOT_COMMIT": "a0fd023d0cc4448c0f949241959ae37be4f4d72b",
+      "GRPO_RECIPE_COMMIT": "ccb4f7ec99e7bf39091a77dafcedcd61bb889f6f",
+      "GRPO_SNAPSHOT_DIGEST_PREFIX": "4e89474f",
+      "TOTAL_TRAINING_STEPS": "160",
+      "TOTAL_EPOCHS": "3",
+      "STAGE1_MODEL_PATH": "/data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model"
+    },
+    "verbatim_slurm_submission_available": false
+  },
+  "p0": {
+    "model": {
+      "path": "/data-2/model_weights/math_task/qwen3_1p7b_stage123_cotmask_v3/restored_from_causal_p60_joint_20260812/final_model",
+      "weights_sha256": "ff8ff12d311bcc862247bd1d13f4380ec53f8af87095b183cf393147222d94b0",
+      "source_joint_model2_weights_sha256": "a327d9975f9f95d36505fc80fcaf689fe3f13a9a80bd72a74d436e5106a5c850"
+    },
+    "data": {
+      "path": "/data-2/dataset/math/qwen3_1p7b_stage123_seed20260719/stage1_control_stage2_then_stage3.parquet",
+      "sha256": "88d3accf25f54933b5776bfb0a4c07f5719a25199abc0ed800ccfc68eae15d66",
+      "raw_rows": 3840,
+      "filtered_rows": 3792,
+      "steps_per_epoch": 59,
+      "shuffle": false
+    },
+    "scorer": {
+      "path": "joint_training/custom_reward_function_latex_verify.py",
+      "function": "compute_score_latex_verify",
+      "sha256": "6fc2364da021bc5d14e1e3e8788d52cd49a3036088cacbb96d4eb5535e4473e5"
+    },
+    "optimization": {
+      "learning_rate": "1e-6",
+      "lr_warmup_steps": 0,
+      "total_training_steps": 160,
+      "total_epochs": 3,
+      "prompt_batch_size": 64,
+      "rollout_n": 8,
+      "ppo_mini_batch_size_prompt_groups": 64,
+      "ppo_epochs": 1,
+      "loss_mode": "vanilla",
+      "loss_aggregation": "seq-mean-token-mean",
+      "normalize_advantage_by_group_std": true,
+      "clip_ratio_low": 0.2,
+      "clip_ratio_high": 0.2,
+      "actor_gradient_clip": 1.0,
+      "weight_decay": 0.1,
+      "use_kl_in_reward": false,
+      "use_actor_kl_loss": true,
+      "actor_kl_coefficient": 0.001,
+      "actor_kl_type": "low_var_kl",
+      "rollout_is": null,
+      "resume_mode": "disable"
+    },
+    "randomness": {
+      "actor_seed": 42,
+      "rollout_seed": 0,
+      "data_seed": 20260719,
+      "actor_shuffle": false
+    },
+    "sequence_and_sampling": {
+      "max_prompt_length": 500,
+      "max_response_length": 4096,
+      "max_model_length": 4596,
+      "enable_thinking": true,
+      "temperature": 1.0,
+      "top_p": 1.0,
+      "top_k": -1,
+      "do_sample": true
+    },
+    "validation_and_checkpoint": {
+      "validation_suite": "Math-7",
+      "validation_n": 3,
+      "validation_temperature": 0.2,
+      "validation_top_p": 0.95,
+      "validation_frequency": 5,
+      "checkpoint_frequency": 5,
+      "protected_steps": [20],
+      "best_metric": "val-core/math7_macro/acc/mean@3"
+    }
+  },
+  "p1": {
+    "gpus": 8,
+    "gpu_model": "NVIDIA L40S 46GB",
+    "rollout_tensor_parallel_size": 1,
+    "fsdp_size": -1,
+    "gradient_checkpointing": true,
+    "actor_param_offload": false,
+    "actor_optimizer_offload": false,
+    "reference_param_offload": true,
+    "attention": {
+      "training": "flash_attention_2",
+      "rollout": "FLASHINFER"
+    },
+    "rollout_gpu_memory_utilization": 0.55,
+    "rollout_agent_workers": 4,
+    "precision": "runtime/Hydra resolved config; not independently preserved in the repository evidence"
+  },
+  "evidence": {
+    "training_result": {
+      "status": "successful_process_exit_release_event_pending",
+      "terminal_math7_mean_at_3_percent": 68.420,
+      "peak_math7_mean_at_3_percent": 68.999,
+      "peak_local_step": 155,
+      "terminal_checkpoint": "global_step_160 under the external Job 130 run namespace",
+      "metrics": "complete through local P160",
+      "validation": "complete through local P160"
+    },
+    "repository_sources": [
+      {
+        "repository": "AlexJJ009/verl-v0.7",
+        "commit": "d5a8b3bca9f018c8f40bfa53184cc738ec4caf79",
+        "path": "docs/joint_training/reports/qwen3_1p7b_math_stage123_matrix_results_20260723.md",
+        "claim": "Job 130 reached local P160/effective P200; normal exit, terminal checkpoint, complete metrics and validation"
+      },
+      {
+        "repository": "AlexJJ009/verl-v0.7",
+        "commit": "8bec1d453b594a770e927fc3858eeb0afe18faff",
+        "path": "docs/joint_training/guides/training_script_index.md",
+        "claim": "Jobs 128-130 bind root, recipe and snapshot identities; Job 130 replaced failed Job 127"
+      }
+    ],
+    "historical_runtime_lane": {
+      "available_in_this_checkout": false,
+      "slurm_accounting": "not mounted; sacct is unavailable on the A800 development instance",
+      "raw_log_path": "not recoverable from repository evidence",
+      "exact_checkpoint_path": "not recoverable from repository evidence",
+      "boundary": "Do not claim verbatim Slurm command, raw-log inspection, or direct checkpoint inspection from this checkout."
+    }
+  }
+}
