@@ -89,6 +89,13 @@ class PueueAdapterTests(unittest.TestCase):
                 capture_output=True,
                 check=True,
             ).stdout.strip()
+            root_candidate = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=VERL_ROOT,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
             result = subprocess.run(
                 [
                     "bash",
@@ -97,6 +104,7 @@ class PueueAdapterTests(unittest.TestCase):
                     str(root / "output"),
                     str(root / "receipts"),
                     str(env_file),
+                    root_candidate,
                     candidate,
                     "0" * 64,
                 ],
@@ -121,6 +129,9 @@ class PueueAdapterTests(unittest.TestCase):
                     str(root / "output"),
                     str(root / "receipts"),
                     str(env_file),
+                    subprocess.run(
+                        ["git", "rev-parse", "HEAD"], cwd=VERL_ROOT, text=True, capture_output=True, check=True
+                    ).stdout.strip(),
                     "0" * 40,
                     "0" * 64,
                 ],
@@ -141,6 +152,15 @@ class PueueAdapterTests(unittest.TestCase):
                 check=True,
             )
             (checkout / "verl").mkdir()
+            (checkout / "verl" / "__init__.py").write_text("", encoding="utf-8")
+            subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
+            subprocess.run(["git", "-C", str(checkout), "config", "user.email", "test@example.com"], check=True)
+            subprocess.run(["git", "-C", str(checkout), "config", "user.name", "Test"], check=True)
+            subprocess.run(["git", "-C", str(checkout), "add", "verl", "recipe"], check=True)
+            subprocess.run(["git", "-C", str(checkout), "commit", "--quiet", "-m", "test fixture"], check=True)
+            root_candidate = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=checkout, text=True, capture_output=True, check=True
+            ).stdout.strip()
             candidate = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
                 cwd=checkout / "recipe",
@@ -160,6 +180,7 @@ class PueueAdapterTests(unittest.TestCase):
                     str(root / "output"),
                     str(root / "receipts"),
                     str(env_file),
+                    root_candidate,
                     candidate,
                     hashlib.sha256(env_file.read_bytes()).hexdigest(),
                 ],
@@ -203,6 +224,8 @@ class PueueAdapterTests(unittest.TestCase):
                     str(VALIDATE),
                     "--receipt",
                     str(receipt_file),
+                    "--root-candidate",
+                    "2" * 40,
                     "--recipe-candidate",
                     candidate,
                     "--runtime-env-file",

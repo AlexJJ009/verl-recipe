@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[[ $# -eq 6 ]] || {
-    echo "ERROR: worker expects repo, output, receipt, runtime-env, candidate and digest" >&2
+[[ $# -eq 7 ]] || {
+    echo "ERROR: worker expects repo, output, receipt, runtime-env, root candidate, recipe candidate and digest" >&2
     exit 64
 }
 repo_root=$(realpath -m -- "$1")
 output_root=$(realpath -m -- "$2")
 receipt_root=$(realpath -m -- "$3")
 runtime_env_file=$(realpath -m -- "$4")
-expected_recipe_candidate=$5
-expected_runtime_env_sha256=$6
+expected_root_candidate=$5
+expected_recipe_candidate=$6
+expected_runtime_env_sha256=$7
 
 : "${PUEUE_TASK_ID:?Pueue native task identity is required}"
 [[ "$PUEUE_TASK_ID" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid PUEUE_TASK_ID" >&2; exit 64; }
 [[ -f "$runtime_env_file" ]] || { echo "ERROR: runtime environment file missing" >&2; exit 66; }
+[[ "$expected_root_candidate" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: invalid root candidate SHA" >&2; exit 64; }
 [[ "$expected_recipe_candidate" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: invalid recipe candidate SHA" >&2; exit 64; }
 [[ "$expected_runtime_env_sha256" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: invalid runtime env SHA256" >&2; exit 64; }
 
+actual_root_candidate=$(git -C "$repo_root" rev-parse HEAD)
+[[ "$actual_root_candidate" == "$expected_root_candidate" ]] || {
+    echo "ERROR: queued root checkout drifted from the admitted candidate" >&2
+    exit 78
+}
+root_checkout_changes=$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all)
+[[ -z "$root_checkout_changes" ]] || {
+    echo "ERROR: queued root checkout has tracked, staged or untracked changes" >&2
+    exit 78
+}
 actual_recipe_candidate=$(git -C "$repo_root/recipe" rev-parse HEAD)
 [[ "$actual_recipe_candidate" == "$expected_recipe_candidate" ]] || {
     echo "ERROR: queued recipe checkout drifted from the admitted candidate" >&2
@@ -26,6 +38,11 @@ actual_recipe_candidate=$(git -C "$repo_root/recipe" rev-parse HEAD)
 checkout_changes=$(git -C "$repo_root/recipe" status --porcelain=v1 --untracked-files=all)
 [[ -z "$checkout_changes" ]] || {
     echo "ERROR: queued recipe checkout has tracked, staged or untracked changes" >&2
+    exit 78
+}
+gitlink_candidate=$(git -C "$repo_root" ls-tree HEAD recipe | awk '{print $3}')
+[[ "$gitlink_candidate" == "$actual_recipe_candidate" ]] || {
+    echo "ERROR: queued Recipe checkout no longer matches the root gitlink" >&2
     exit 78
 }
 umask 077

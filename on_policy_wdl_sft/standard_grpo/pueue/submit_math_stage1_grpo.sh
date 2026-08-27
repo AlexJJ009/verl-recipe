@@ -55,23 +55,33 @@ python3 "${SCHEDULER_DIR}/verify_scheduler_audit.py" >/dev/null
 python3 "${SCRIPT_DIR}/verify_pueue_adapter.py" >/dev/null
 
 label=${PUEUE_GRPO_LABEL:-gon-36-math-stage1-grpo}
+root_candidate=$(git -C "$repo_root" rev-parse HEAD)
 recipe_candidate=$(git -C "$RECIPE_ROOT" rev-parse HEAD)
+[[ -z "$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all)" ]] || {
+    echo "ERROR: root checkout must remain clean at submission" >&2
+    exit 78
+}
+[[ "$(git -C "$repo_root" ls-tree HEAD recipe | awk '{print $3}')" == "$recipe_candidate" ]] || {
+    echo "ERROR: reviewed Recipe checkout no longer matches the root gitlink" >&2
+    exit 78
+}
 runtime_env_sha256=__ADMITTED_RUNTIME_ENV_SHA256__
 worker_runner='set -euo pipefail
 repo_root=$1
-candidate=$2
-worker_path=$3
-shift 3
-git -C "$repo_root/recipe" cat-file -e "${candidate}:${worker_path}"
-git -C "$repo_root/recipe" show "${candidate}:${worker_path}" | bash -s -- "$@"'
+root_candidate=$2
+recipe_candidate=$3
+worker_path=$4
+shift 4
+git -C "$repo_root/recipe" cat-file -e "${recipe_candidate}:${worker_path}"
+git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
 
 build_pueue_command() {
     local task_command
     task_command=(
         bash -c "$worker_runner" gon36-candidate-worker
-        "$repo_root" "$recipe_candidate" "$WORKER_GIT_PATH"
+        "$repo_root" "$root_candidate" "$recipe_candidate" "$WORKER_GIT_PATH"
         "$repo_root" "$output_root" "$receipt_root" "$runtime_env_file"
-        "$recipe_candidate" "$runtime_env_sha256"
+        "$root_candidate" "$recipe_candidate" "$runtime_env_sha256"
     )
     pueue_command=(
         pueue add
@@ -103,6 +113,7 @@ assert_absolute_external PUEUE_GRPO_A800_ADMISSION_RECEIPT "$admission_receipt"
 
 runtime_env_sha256=$(python3 "${SCRIPT_DIR}/validate_a800_admission.py" \
     --receipt "$admission_receipt" \
+    --root-candidate "$root_candidate" \
     --recipe-candidate "$recipe_candidate" \
     --runtime-env-file "$runtime_env_file" \
     --output-root "$output_root" \
@@ -115,7 +126,7 @@ mkdir -p "$output_root" "$receipt_root"
 task_id=$("${pueue_command[@]}")
 [[ "$task_id" =~ ^[0-9]+$ ]] || { echo "ERROR: pueue returned invalid task ID: ${task_id}" >&2; exit 70; }
 
-python3 - "$receipt_root/submission-${task_id}.json" "$task_id" "$recipe_candidate" "$admission_receipt" <<'PY'
+python3 - "$receipt_root/submission-${task_id}.json" "$task_id" "$root_candidate" "$recipe_candidate" "$admission_receipt" <<'PY'
 import json
 import os
 import sys
@@ -131,8 +142,9 @@ payload = {
     "scheduler": "pueue",
     "group": "gpu8",
     "task_id": int(sys.argv[2]),
-    "recipe_candidate_sha": sys.argv[3],
-    "a800_admission_receipt": sys.argv[4],
+    "root_candidate_sha": sys.argv[3],
+    "recipe_candidate_sha": sys.argv[4],
+    "a800_admission_receipt": sys.argv[5],
     "submitted_at": datetime.now(timezone.utc).isoformat(),
 }
 target.parent.mkdir(parents=True, exist_ok=True)

@@ -75,14 +75,19 @@ def main() -> None:
         fail("submitter must use Pueue group gpu8")
     if "--print-task-id" not in sources[submit.name] or "PUEUE_TASK_ID" not in sources[worker.name]:
         fail("adapter must preserve the Pueue native task ID")
-    immutable_worker_runner = 'git -C "$repo_root/recipe" show "${candidate}:${worker_path}" | bash -s -- "$@"'
+    immutable_worker_runner = 'git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
     if immutable_worker_runner not in sources[submit.name]:
         fail("submitter must execute worker bytes from the admitted candidate Git object")
     required_worker_guards = (
+        'actual_root_candidate=$(git -C "$repo_root" rev-parse HEAD)',
+        '[[ "$actual_root_candidate" == "$expected_root_candidate" ]]',
+        'git -C "$repo_root" status --porcelain=v1 --untracked-files=all',
         'actual_recipe_candidate=$(git -C "$repo_root/recipe" rev-parse HEAD)',
         '[[ "$actual_recipe_candidate" == "$expected_recipe_candidate" ]]',
         'git -C "$repo_root/recipe" status --porcelain=v1 --untracked-files=all',
         '[[ -z "$checkout_changes" ]]',
+        'gitlink_candidate=$(git -C "$repo_root" ls-tree HEAD recipe',
+        '[[ "$gitlink_candidate" == "$actual_recipe_candidate" ]]',
         'runtime_env_snapshot=$(mktemp "/tmp/gon36-runtime-${PUEUE_TASK_ID}.XXXXXX")',
         'source "$runtime_env_snapshot"',
     )

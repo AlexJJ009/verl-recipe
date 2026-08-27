@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 EXPECTED_IMAGE = "sha256:d380888dc8a10796c7f841e341bd775c2d6500ede539f4ea16bb7bf0de92665d"
+EXPECTED_LAUNCHER_SHA256 = "0fac6c447d2ec8244bc8fccc49b2a8a0dbeaf132335512def7bb4df807b4c460"
 BASELINE = Path(__file__).resolve().parents[1] / "scheduler" / "job_130_baseline.json"
 
 
@@ -28,6 +29,7 @@ def fail(message: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument("--root-candidate", required=True)
     parser.add_argument("--recipe-candidate", required=True)
     parser.add_argument("--runtime-env-file", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
@@ -40,11 +42,13 @@ def main() -> None:
     expected = {
         "schema_version": 1,
         "batch_id": "GON-35",
+        "root_candidate_sha": args.root_candidate,
         "recipe_candidate_sha": args.recipe_candidate,
         "scheduler": "pueue",
         "group": "gpu8",
         "group_concurrency": 1,
         "host_launcher": "verl-dev-run --a800-dev-profile",
+        "host_launcher_sha256": EXPECTED_LAUNCHER_SHA256,
         "image_digest": EXPECTED_IMAGE,
         "p0_config_match": True,
         "p1_review_complete": True,
@@ -63,7 +67,15 @@ def main() -> None:
     }
     if mismatches:
         fail(f"A800 admission mismatch: {json.dumps(mismatches, sort_keys=True)}")
-    for key in ("p0_config_evidence_sha256", "p1_review_evidence_sha256"):
+    if receipt.get("ci_admission_mode") not in {"full_ci_pass", "base_relative_parity"}:
+        fail("A800 admission has an unsupported ci_admission_mode")
+    for key in (
+        "p0_config_evidence_sha256",
+        "p1_review_evidence_sha256",
+        "ci_admission_evidence_sha256",
+        "independent_review_evidence_sha256",
+        "source_snapshot_sha256",
+    ):
         if not re.fullmatch(r"[0-9a-f]{64}", str(receipt.get(key, ""))):
             fail(f"A800 admission is missing a valid {key}")
     if args.print_runtime_env_sha256:
