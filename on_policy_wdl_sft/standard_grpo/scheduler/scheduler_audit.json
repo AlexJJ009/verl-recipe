@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "linear_issue": "GON-37",
+  "baseline": "job_130_baseline.json",
+  "verdict": "adapter_contract_ready_runtime_qualification_deferred",
+  "call_chains": {
+    "slurm_job_130": [
+      "historical sbatch invocation (not preserved in the repository evidence)",
+      "Slurm allocation: Job 130 on one 8xL40S node",
+      "historical L40S host/container boundary",
+      "bash recipe/on_policy_wdl_sft/standard_grpo/run_math_stage1_grpo.sh",
+      "bash recipe/on_policy_wdl_sft/standard_grpo/run_qwen3_1p7b_standard_grpo.sh",
+      "source recipe/on_policy_wdl_sft/ablation_single_model/_common_ablation.sh",
+      "python3 -m verl.trainer.main_ppo"
+    ],
+    "planned_a800_pueue": [
+      "pueue add --group gpu8 --print-task-id",
+      "pueued gpu8 worker (concurrency 1, configured outside this repository)",
+      "PUEUE_TASK_ID native task identity",
+      "verl-dev-run --a800-dev-profile --repo <GON-35 admitted checkout>",
+      "bash recipe/on_policy_wdl_sft/standard_grpo/run_math_stage1_grpo.sh",
+      "bash recipe/on_policy_wdl_sft/standard_grpo/run_qwen3_1p7b_standard_grpo.sh",
+      "source recipe/on_policy_wdl_sft/ablation_single_model/_common_ablation.sh",
+      "python3 -m verl.trainer.main_ppo"
+    ]
+  },
+  "common_boundary": {
+    "entry_path": "on_policy_wdl_sft/standard_grpo/run_math_stage1_grpo.sh",
+    "entry_git_blob": "ab6471bc96297317707289daea1dfb4ab2f58615",
+    "common_path": "on_policy_wdl_sft/standard_grpo/run_qwen3_1p7b_standard_grpo.sh",
+    "common_git_blob": "59e39e9147ddaf8784c1e6e8cafefc78e07a6acf",
+    "required_invocations": 1
+  },
+  "p0": {
+    "decision": "must_match_exactly",
+    "source": "job_130_baseline.json#/p0",
+    "enforcement": [
+      "Pueue adapter must not assign scientific variables",
+      "both paths invoke the same immutable entry blob exactly once",
+      "GRPO_CONFIG_ONLY output must match every key except approved P2 values",
+      "model, data and scorer paths remain P0 identities and require hash-bound A800 admission"
+    ],
+    "config_only_keys": [
+      "task",
+      "pipeline",
+      "custom_reward_fn_path",
+      "custom_reward_fn_name",
+      "init_model_path",
+      "train_file",
+      "total_training_steps",
+      "train_prompt_bsz",
+      "rollout_n",
+      "responses_per_step",
+      "ppo_mini_batch_size",
+      "learning_rate",
+      "ppo_epochs",
+      "actor_seed",
+      "rollout_seed",
+      "data_seed",
+      "actor_shuffle",
+      "resume_mode",
+      "total_epochs",
+      "expected_filtered_train_rows",
+      "expected_dataloader_steps_per_epoch",
+      "actor_grad_clip",
+      "loss_mode",
+      "loss_agg_mode",
+      "norm_adv_by_std_in_grpo",
+      "use_kl_in_reward",
+      "use_kl_loss",
+      "kl_loss_coef",
+      "kl_loss_type",
+      "ref_log_prob_micro_batch_size",
+      "ref_log_prob_max_token_len_per_gpu",
+      "rollout_is",
+      "enable_thinking",
+      "data_shuffle",
+      "protected_ckpt_steps",
+      "protected_ckpt_strip_optimizer",
+      "best_ckpt_metric_key"
+    ]
+  },
+  "p1": [
+    {
+      "field": "gpu_count",
+      "slurm": "8",
+      "pueue_a800": "8",
+      "decision": "must_match; GON-35 gpu8 qualification supplies runtime evidence"
+    },
+    {
+      "field": "gpu_model_and_cuda",
+      "slurm": "8x NVIDIA L40S 46GB; historical CUDA/image bound by Job 130 receipt",
+      "pueue_a800": "8x NVIDIA A800-SXM4-80GB; new A800 CUDA/image receipt required",
+      "decision": "approved hardware/runtime adaptation only; no scientific change; full submission remains fail-closed until GON-35 qualifies it"
+    },
+    {
+      "field": "container_image",
+      "slurm": "sha256:c9d525a1f4b33267bd00be60fe00693338253537cac78151e4c55a6d3a7e5708",
+      "pueue_a800": "ghcr.io/alexjj009/verl-harness@sha256:d380888dc8a10796c7f841e341bd775c2d6500ede539f4ea16bb7bf0de92665d",
+      "decision": "explicitly different and PRD-approved; GON-35 must bind the exact new digest"
+    },
+    {
+      "field": "tensor_parallelism",
+      "slurm": "1",
+      "pueue_a800": "1",
+      "decision": "must match through unchanged entry"
+    },
+    {
+      "field": "precision",
+      "slurm": "Hydra/runtime resolved default",
+      "pueue_a800": "must equal the frozen resolved default",
+      "decision": "A800 config receipt must record and compare it before submission; adapter cannot override it"
+    },
+    {
+      "field": "gradient_checkpointing",
+      "slurm": "true",
+      "pueue_a800": "true",
+      "decision": "must match through unchanged entry"
+    },
+    {
+      "field": "offload",
+      "slurm": "actor=false optimizer=false reference=true",
+      "pueue_a800": "actor=false optimizer=false reference=true",
+      "decision": "must match; adapter cannot assign offload variables"
+    },
+    {
+      "field": "attention_backends",
+      "slurm": "FSDP flash_attention_2; vLLM FLASHINFER",
+      "pueue_a800": "FSDP flash_attention_2; vLLM FLASHINFER",
+      "decision": "must match; verl-dev-run owns the FLASHINFER runtime export"
+    },
+    {
+      "field": "rollout_memory_and_workers",
+      "slurm": "gpu_memory_utilization=0.55; workers=4",
+      "pueue_a800": "gpu_memory_utilization=0.55; workers=4",
+      "decision": "must match through unchanged entry"
+    },
+    {
+      "field": "nccl",
+      "slurm": "NCCL_IBEXT_DISABLE=1; NCCL_NVLS_ENABLE=1; NCCL_TIMEOUT=3600",
+      "pueue_a800": "same unchanged-entry defaults unless the admitted A800 runtime receipt explicitly rejects them",
+      "decision": "any override is a new P1 review event and blocks submission until recorded"
+    }
+  ],
+  "p2": [
+    {
+      "field": "scheduler_identity",
+      "slurm": "SLURM_JOB_ID=130",
+      "pueue_a800": "PUEUE_TASK_ID",
+      "decision": "allowed; keep native scheduler identity"
+    },
+    {
+      "field": "queue",
+      "slurm": "historical Slurm partition/allocation",
+      "pueue_a800": "gpu8 group, concurrency 1",
+      "decision": "allowed; GON-35 owns daemon/group configuration"
+    },
+    {
+      "field": "host_container_boundary",
+      "slurm": "historical L40S container boundary",
+      "pueue_a800": "verl-dev-run --a800-dev-profile",
+      "decision": "allowed; no nested Docker or L40S launcher"
+    },
+    {
+      "field": "host_paths",
+      "slurm": "/data-1 and /data-2 L40S mounts",
+      "pueue_a800": "/data_storage/yl_test/lgx host roots mapped by verl-dev-run to /data-1 and /data-2",
+      "decision": "allowed; container-visible P0 paths and hashes must still match"
+    },
+    {
+      "field": "outputs_logs_receipts",
+      "slurm": "historical external Job 130 namespace",
+      "pueue_a800": "repository-external operation roots supplied by GON-35",
+      "decision": "allowed; repository-local mutable state is forbidden"
+    },
+    {
+      "field": "run_metadata",
+      "slurm": "Job 130 hostname/timestamps/run namespace",
+      "pueue_a800": "Pueue task ID, A800 hostname/timestamps/run namespace",
+      "decision": "allowed and documented in external receipt"
+    }
+  ],
+  "historical_lane": {
+    "config_only_directly_rerun": false,
+    "reason": "The A800 checkout has neither sacct nor the historical L40S snapshot, raw log or checkpoint mounts.",
+    "allowed_claim": "The frozen Job 130 recipe blob can be rerun locally in GRPO_CONFIG_ONLY mode and checked against its source-backed manifest.",
+    "forbidden_claim": "Do not claim a fresh historical Slurm config-only execution or bitwise training equivalence."
+  },
+  "submission_gate": {
+    "adapter_dry_run_allowed": true,
+    "full_gpu_submission_allowed": false,
+    "unlock_owner": "GON-35",
+    "required_external_evidence": [
+      "gpu8 concurrency-one qualification",
+      "A800 verl-dev-run doctor and runtime-profile receipt",
+      "A800 image digest d380888d...",
+      "hash-bound model/data/scorer receipt",
+      "complete A800 config-only output with P0 exact and reviewed P1 values",
+      "repository-external output/log/checkpoint/receipt roots"
+    ]
+  }
+}
