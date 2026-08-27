@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 EXPECTED_IMAGE = "sha256:d380888dc8a10796c7f841e341bd775c2d6500ede539f4ea16bb7bf0de92665d"
-EXPECTED_LAUNCHER_SHA256 = "0fac6c447d2ec8244bc8fccc49b2a8a0dbeaf132335512def7bb4df807b4c460"
+EXPECTED_LAUNCHER_SHA256 = "58ad5632d4d8ad9a9568e0df81fe5fa000a526793e0865036efe047f9b977c55"
 BASELINE = Path(__file__).resolve().parents[1] / "scheduler" / "job_130_baseline.json"
 
 
@@ -39,6 +39,9 @@ def main() -> None:
     receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     p0 = baseline["p0"]
+    launcher = Path("/data_storage/yl_test/lgx/home/.local/bin/verl-dev-run")
+    if not launcher.is_file() or digest(launcher) != EXPECTED_LAUNCHER_SHA256:
+        fail("installed A800 launcher bytes differ from the admitted checksum")
     expected = {
         "schema_version": 1,
         "batch_id": "GON-35",
@@ -78,6 +81,9 @@ def main() -> None:
     ):
         if not re.fullmatch(r"[0-9a-f]{64}", str(receipt.get(key, ""))):
             fail(f"A800 admission is missing a valid {key}")
+    source_snapshot = args.receipt_root / "source-snapshot.json"
+    if not source_snapshot.is_file() or digest(source_snapshot) != receipt["source_snapshot_sha256"]:
+        fail("A800 source snapshot bytes differ from the admitted checksum")
     if args.print_runtime_env_sha256:
         print(expected["runtime_env_sha256"])
     else:
