@@ -125,13 +125,16 @@ relay_files() {
 
 record_gate() {
     local status=$1 checkpoint=${2:-} metrics=${3:-} observed=${4:-0}
+    local -a artifact_args=()
     [ -n "$run_name" ] || return 0
     [[ "$run_name" =~ ^[A-Z0-9._-]+$ ]] || return 1
+    [ -z "$checkpoint" ] || artifact_args+=(--checkpoint "$checkpoint")
+    [ -z "$metrics" ] || artifact_args+=(--metrics "$metrics")
     ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
         "$LAMBDA_MATRIX_EVIDENCE_RELAY_HOST" \
         python3 /data-1/code/verl/scripts/training_result_release_gate.py record \
         --run-name "$run_name" --family "$family" --status "$status" \
-        --source slurm:lambda-matrix --checkpoint "$checkpoint" --metrics "$metrics" \
+        --source slurm:lambda-matrix "${artifact_args[@]}" \
         --final-step 60 --observed-step "$observed"
     if [ "$status" = success_complete ]; then
         ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 \
