@@ -50,6 +50,7 @@ class PueueAdapterTests(unittest.TestCase):
         self.assertIn("DRY_RUN pueue add --group gpu8", result.stdout)
         self.assertIn("--print-task-id", result.stdout)
         self.assertIn("worker_math_stage1_grpo.sh", result.stdout)
+        self.assertIn("bash\\ -c", result.stdout)
 
     def test_missing_output_root_fails_before_queue(self) -> None:
         with tempfile.TemporaryDirectory(prefix="gon-41-") as directory:

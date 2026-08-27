@@ -76,13 +76,14 @@ git -C "$repo_root/recipe" cat-file -e "${recipe_candidate}:${worker_path}"
 git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
 
 build_pueue_command() {
-    local task_command
+    local task_command task_command_shell
     task_command=(
         bash -c "$worker_runner" gon36-candidate-worker
         "$repo_root" "$root_candidate" "$recipe_candidate" "$WORKER_GIT_PATH"
         "$repo_root" "$output_root" "$receipt_root" "$runtime_env_file"
         "$root_candidate" "$recipe_candidate" "$runtime_env_sha256"
     )
+    printf -v task_command_shell '%q ' "${task_command[@]}"
     pueue_command=(
         pueue add
         --group gpu8
@@ -90,7 +91,7 @@ build_pueue_command() {
         --working-directory "$repo_root"
         --print-task-id
         --
-        "${task_command[@]}"
+        "$task_command_shell"
     )
 }
 build_pueue_command

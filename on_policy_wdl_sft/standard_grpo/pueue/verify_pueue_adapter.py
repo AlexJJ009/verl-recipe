@@ -73,6 +73,10 @@ def main() -> None:
         fail("worker must invoke verl-dev-run exactly once")
     if "pueue add" not in sources[submit.name] or "--group gpu8" not in sources[submit.name]:
         fail("submitter must use Pueue group gpu8")
+    if "printf -v task_command_shell '%q '" not in sources[submit.name]:
+        fail("submitter must shell-quote the complete Pueue command")
+    if '"$task_command_shell"' not in sources[submit.name]:
+        fail("Pueue must receive the pre-quoted command as one argument")
     if "--print-task-id" not in sources[submit.name] or "PUEUE_TASK_ID" not in sources[worker.name]:
         fail("adapter must preserve the Pueue native task ID")
     immutable_worker_runner = 'git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
