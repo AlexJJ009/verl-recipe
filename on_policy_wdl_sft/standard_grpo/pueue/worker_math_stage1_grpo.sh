@@ -13,8 +13,13 @@ expected_root_candidate=$5
 expected_recipe_candidate=$6
 expected_runtime_env_sha256=$7
 
-: "${PUEUE_TASK_ID:?Pueue native task identity is required}"
-[[ "$PUEUE_TASK_ID" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid PUEUE_TASK_ID" >&2; exit 64; }
+native_task_id=${PUEUE_TASK_ID:-}
+if [[ -z "$native_task_id" ]]; then
+    native_task_id_file="${receipt_root}/native-task-id"
+    [[ -f "$native_task_id_file" ]] || { echo "ERROR: Pueue native task identity is required" >&2; exit 66; }
+    IFS= read -r native_task_id < "$native_task_id_file"
+fi
+[[ "$native_task_id" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid Pueue native task identity" >&2; exit 64; }
 [[ -f "$runtime_env_file" ]] || { echo "ERROR: runtime environment file missing" >&2; exit 66; }
 [[ "$expected_root_candidate" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: invalid root candidate SHA" >&2; exit 64; }
 [[ "$expected_recipe_candidate" =~ ^[0-9a-f]{40}$ ]] || { echo "ERROR: invalid recipe candidate SHA" >&2; exit 64; }
@@ -46,7 +51,7 @@ gitlink_candidate=$(git -C "$repo_root" ls-tree HEAD recipe | awk '{print $3}')
     exit 78
 }
 umask 077
-runtime_env_snapshot=$(mktemp "/tmp/gon36-runtime-${PUEUE_TASK_ID}.XXXXXX")
+runtime_env_snapshot=$(mktemp "/tmp/gon36-runtime-${native_task_id}.XXXXXX")
 cleanup_runtime_env_snapshot() {
     rm -f -- "$runtime_env_snapshot"
 }
@@ -78,13 +83,13 @@ set +a
 cleanup_runtime_env_snapshot
 trap - EXIT
 
-export PUEUE_GRPO_NATIVE_TASK_ID="$PUEUE_TASK_ID"
+export PUEUE_GRPO_NATIVE_TASK_ID="$native_task_id"
 export GRPO_SCHEDULER_MANAGED=1
 export GRPO_LAUNCH_ALLOWED=1
 export BASE_CKPT_DIR="${output_root}/checkpoints"
 export LOG_DIR="${output_root}/logs"
 export WANDB_DIR="${output_root}/wandb"
-export GRPO_ADMISSION_RECEIPT="${receipt_root}/runtime-${PUEUE_TASK_ID}.json"
+export GRPO_ADMISSION_RECEIPT="${receipt_root}/runtime-${native_task_id}.json"
 mkdir -p "$BASE_CKPT_DIR" "$LOG_DIR" "$WANDB_DIR" "$receipt_root"
 
 command -v verl-dev-run >/dev/null 2>&1 || { echo "ERROR: verl-dev-run is not installed" >&2; exit 69; }

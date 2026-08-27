@@ -82,6 +82,7 @@ build_pueue_command() {
         --group gpu8
         --label "$label"
         --working-directory "$repo_root"
+        --stashed
         --print-task-id
         --
         "$task_command_shell"
@@ -119,6 +120,32 @@ command -v pueue >/dev/null 2>&1 || { echo "ERROR: pueue is not installed" >&2; 
 mkdir -p "$output_root" "$receipt_root"
 task_id=$("${pueue_command[@]}")
 [[ "$task_id" =~ ^[0-9]+$ ]] || { echo "ERROR: pueue returned invalid task ID: ${task_id}" >&2; exit 70; }
+task_started=0
+cleanup_stashed_task() {
+    if [[ "$task_started" = 0 ]]; then
+        pueue remove "$task_id" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup_stashed_task EXIT
+
+python3 - "$receipt_root/native-task-id" "$task_id" <<'PY'
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+target = Path(sys.argv[1])
+target.parent.mkdir(parents=True, exist_ok=True)
+fd, temporary = tempfile.mkstemp(prefix=target.name + ".", dir=target.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(sys.argv[2] + "\n")
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, target)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PY
 
 python3 - "$receipt_root/submission-${task_id}.json" "$task_id" "$root_candidate" "$recipe_candidate" "$admission_receipt" <<'PY'
 import json
@@ -152,4 +179,7 @@ finally:
     if os.path.exists(temporary):
         os.unlink(temporary)
 PY
+pueue start "$task_id" >/dev/null
+task_started=1
+trap - EXIT
 printf '%s\n' "$task_id"

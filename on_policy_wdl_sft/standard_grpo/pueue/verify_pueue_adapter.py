@@ -77,8 +77,12 @@ def main() -> None:
         fail("submitter must shell-quote the complete Pueue command")
     if '"$task_command_shell"' not in sources[submit.name]:
         fail("Pueue must receive the pre-quoted command as one argument")
-    if "--print-task-id" not in sources[submit.name] or "PUEUE_TASK_ID" not in sources[worker.name]:
+    if "--print-task-id" not in sources[submit.name] or "native_task_id" not in sources[worker.name]:
         fail("adapter must preserve the Pueue native task ID")
+    if "--stashed" not in sources[submit.name] or 'pueue start "$task_id"' not in sources[submit.name]:
+        fail("submitter must publish the native task ID before starting the task")
+    if '"$receipt_root/native-task-id"' not in sources[submit.name]:
+        fail("submitter must persist the native task ID outside the repositories")
     immutable_worker_runner = 'git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
     if immutable_worker_runner not in sources[submit.name]:
         fail("submitter must execute worker bytes from the admitted candidate Git object")
@@ -94,7 +98,8 @@ def main() -> None:
         '[[ -z "$checkout_changes" ]]',
         'gitlink_candidate=$(git -C "$repo_root" ls-tree HEAD recipe',
         '[[ "$gitlink_candidate" == "$actual_recipe_candidate" ]]',
-        'runtime_env_snapshot=$(mktemp "/tmp/gon36-runtime-${PUEUE_TASK_ID}.XXXXXX")',
+        'native_task_id_file="${receipt_root}/native-task-id"',
+        'runtime_env_snapshot=$(mktemp "/tmp/gon36-runtime-${native_task_id}.XXXXXX")',
         'source "$runtime_env_snapshot"',
     )
     for guard in required_worker_guards:

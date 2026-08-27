@@ -49,6 +49,7 @@ class PueueAdapterTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("DRY_RUN pueue add --group gpu8", result.stdout)
         self.assertIn("--print-task-id", result.stdout)
+        self.assertIn("--stashed", result.stdout)
         self.assertIn("worker_math_stage1_grpo.sh", result.stdout)
         self.assertIn("bash\\ -c", result.stdout)
 
@@ -116,6 +117,41 @@ class PueueAdapterTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("runtime environment changed after admission", result.stderr)
+
+    def test_worker_reads_native_task_id_published_before_start(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="gon-41-worker-") as directory:
+            root = Path(directory)
+            env_file = root / "runtime.env"
+            env_file.write_text("WANDB_MODE=offline\n", encoding="utf-8")
+            receipt_root = root / "receipts"
+            receipt_root.mkdir()
+            (receipt_root / "native-task-id").write_text("42\n", encoding="utf-8")
+            candidate = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=RECIPE_ROOT, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            root_candidate = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=VERL_ROOT, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(WORKER),
+                    str(VERL_ROOT),
+                    str(root / "output"),
+                    str(receipt_root),
+                    str(env_file),
+                    root_candidate,
+                    candidate,
+                    "0" * 64,
+                ],
+                env={"PATH": os.environ["PATH"]},
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("runtime environment changed after admission", result.stderr)
+        self.assertNotIn("native task identity is required", result.stderr)
 
     def test_worker_rejects_recipe_candidate_drift(self) -> None:
         with tempfile.TemporaryDirectory(prefix="gon-41-worker-") as directory:
