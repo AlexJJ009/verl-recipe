@@ -66,14 +66,7 @@ recipe_candidate=$(git -C "$RECIPE_ROOT" rev-parse HEAD)
     exit 78
 }
 runtime_env_sha256=__ADMITTED_RUNTIME_ENV_SHA256__
-worker_runner='set -euo pipefail
-repo_root=$1
-root_candidate=$2
-recipe_candidate=$3
-worker_path=$4
-shift 4
-git -C "$repo_root/recipe" cat-file -e "${recipe_candidate}:${worker_path}"
-git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
+worker_runner='set -euo pipefail; repo_root=$1; root_candidate=$2; recipe_candidate=$3; worker_path=$4; shift 4; git -C "$repo_root/recipe" cat-file -e "${recipe_candidate}:${worker_path}"; git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
 
 build_pueue_command() {
     local task_command task_command_shell

@@ -82,6 +82,8 @@ def main() -> None:
     immutable_worker_runner = 'git -C "$repo_root/recipe" show "${recipe_candidate}:${worker_path}" | bash -s -- "$@"'
     if immutable_worker_runner not in sources[submit.name]:
         fail("submitter must execute worker bytes from the admitted candidate Git object")
+    if "worker_runner='set -euo pipefail;" not in sources[submit.name]:
+        fail("worker runner must stay single-line for Pueue's POSIX shell boundary")
     required_worker_guards = (
         'actual_root_candidate=$(git -C "$repo_root" rev-parse HEAD)',
         '[[ "$actual_root_candidate" == "$expected_root_candidate" ]]',
